@@ -22,7 +22,7 @@ every pond package your app already uses.
 
 ```ts
 import { TimeSeriesChart, prepareChart, type SeriesConfig } from '@tidal-ts/chart';
-import { snapshotToTimeSeries, type DeriveSpec } from '@tidal-ts/core';
+import { deriveId, snapshotToTimeSeries, type DeriveSpec } from '@tidal-ts/core';
 
 // 1. Your adapter turns your wire format into pond TimeSeries.
 const price = snapshotToTimeSeries(snapshot);

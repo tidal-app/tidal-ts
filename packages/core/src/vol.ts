@@ -6,7 +6,7 @@ import { BAR_INTERVAL_MS, type BarInterval } from './types.js';
  * data shape.
  *
  * A vol series is `time`-keyed with two ATM columns per standard tenor —
- * `iv{tenor}` (implied) and `hv{tenor}` (the producer's second ATM family; see
+ * `iv{tenor}` (implied) and `hv{tenor}` (the feed's second ATM family; see
  * {@link impliedCol} for why it is not named for a meaning) — the term
  * structure. A "metric" is a column and a tenor is just another column, so
  * several tenors plot as independent series (compare tenors / read the curve); a
@@ -62,14 +62,14 @@ export const DEFAULT_VOL_TENOR = 21;
  * the chart series id (instance identity), so these must be stable +
  * collision-free.
  *
- * **Both are ATM implied vol.** They are the producer's `atmCenI_{t}d` and
- * `atmCenH_{t}d`, and the `I`/`H` names which **expected-earnings-move estimate
- * was censored out** of the curve — `iEMove` (a fit) versus `hEMove` (a sample of
- * past moves) — not implied versus historical. `docs/datasources.md` carries the
- * four lines of evidence: a shared `_st`/`_lt`/`_decay` curve parameterisation,
- * the pairing with the two EMove column families, realized vol living in its own
- * dataset (`HistoricalVolatilitiesHist`, keyed by `windowType`), and the two
- * columns coinciding exactly wherever `nEarnCnt` is 0.
+ * **Both are ATM implied vol.** The feed publishes two ATM implied curves that
+ * differ only in which **expected-earnings-move estimate was censored out** of
+ * the curve — a fitted estimate (`iEMove`) versus a sample of past moves
+ * (`hEMove`) — not implied versus historical. Four lines of evidence, recorded
+ * in the application this package came from: a shared curve parameterisation,
+ * the pairing with the two expected-move column families, realized vol living
+ * in its own dataset, and the two columns coinciding exactly wherever the
+ * earnings count is 0.
  *
  * That matters here because `hvCol` was `historicalCol` and surfaced as
  * **"Realized Vol"** until 2026-08-24 — so the default chart drew two implied
@@ -92,14 +92,14 @@ export const DEFAULT_VOL_TENOR = 21;
  * comparison.)
  *
  * Names, therefore: `iv` keeps its meaning, and `hv` is a neutral abbreviation of
- * the producer's field rather than a claim about it — `@tidal/core` does not adopt
- * `atmCenH` itself, which is a vendor field, and this package is
- * extraction-bound. The user-facing label is `ATM Vol (h-censored)`.
+ * the feed's own field rather than a claim about it — this package does not
+ * adopt the vendor's column name, and the name it does use asserts nothing.
+ * The user-facing label is `ATM Vol (h-censored)`.
  */
 export const impliedCol = (tenor: number): string => `iv${tenor}`;
 
 /**
- * `hv{t}` — the producer's `atmCenH_{t}d`, and **not historical or realized vol**
+ * `hv{t}` — the feed's second ATM implied curve, and **not historical or realized vol**
  * despite the letter.
  *
  * It is ATM *implied* vol under the other earnings-censoring basis; see
@@ -115,8 +115,8 @@ export const impliedCol = (tenor: number): string => `iv${tenor}`;
 export const hvCol = (tenor: number): string => `hv${tenor}`;
 
 /**
- * **Realized** vol at a tenor — `rv{t}` / `rvCen{t}`, from the producer's own
- * `HistoricalVolatilitiesHist`, and the first realized series on this feed that is
+ * **Realized** vol at a tenor — `rv{t}` / `rvCen{t}`, from the feed's own
+ * realized-volatility dataset, and the first realized series on this feed that is
  * not derived client-side.
  *
  * These are trailing windows, already annualized and rooted at the source. That
@@ -158,7 +158,7 @@ export const skewCol = (tenor: number): string => `skew${tenor}`;
 
 /** Columns of a vol series — `time`, the two ATM term structures (`iv{t}` +
  *  `hv{t}`, percent — see {@link impliedCol} for what each one is and is not),
- *  plus the daily variance + expected-move scalars from `TickerHistoryDaily`:
+ *  plus the daily variance + expected-move scalars a daily history row carries:
  *  `ccVar`/`hlVar` (close-close / high-low variance, raw decimals) and
  *  `hEMove`/`iEMove` (historical / implied expected move, percent). Built from
  *  {@link VOL_TENORS} so the term structure is the schema, not a fixed handful

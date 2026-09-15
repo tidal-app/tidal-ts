@@ -875,7 +875,7 @@ describe('series.addPair (TDL-PAIR)', () => {
       op: 'ratio',
     }); // missing leg
     // Cross-source: iv63 reads `vol`, price reads `price` — the fold runs per
-    // series, so the pair can't be computed (needs the join step; TDL_PAIRS_PLAN).
+    // series, so the pair can't be computed (needs the join step; Tidal's pairs plan).
     actor.send({
       type: 'series.addPair',
       a: { metricId: leg('iv63') },
@@ -2373,6 +2373,24 @@ describe("the palette is the host's (TerminalInput.palette)", () => {
     actor.send({ type: 'series.add', catalogId: 'iv21' });
     const vol = ctx().rows[0]!.configs;
     expect(vol.map((c) => c.color).sort()).toEqual(['blue', 'red']);
+  });
+
+  it("with no palette, a SPLIT pair's legs keep the pair's colour on the split path too", () => {
+    // The same default on the other path that hands out colours: splitting a
+    // joined pair into a leg group. With nothing to draw from, leg B keeps the
+    // pair's ink rather than a colour the machine invented.
+    const { actor, ctx, leg } = start(initialRows(), []);
+    actor.send({
+      type: 'series.addPair',
+      a: { metricId: leg('iv63') },
+      b: { metricId: leg('iv42') },
+      op: 'none',
+    });
+    const members = ctx()
+      .rows.flatMap((r) => r.configs)
+      .filter((c) => c.group);
+    expect(members).toHaveLength(2);
+    expect(new Set(members.map((m) => m.color)).size).toBe(1);
   });
 
   it("with no palette, a copy keeps the original's colour rather than inventing one", () => {

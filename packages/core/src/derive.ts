@@ -31,8 +31,8 @@ import {
  * This module remains the thin, pure seam Tidal renders against — React-free,
  * extraction-ready — but it now *configures* an engine rather than being one.
  *
- * Design of record: `docs/notes/indicator-integration-2026-07.md`; the
- * adoption program: `docs/plans/TDL_PAIRS_PLAN.md`. Consumer positions filed
+ * Design of record: Tidal's indicator-integration note; the adoption program:
+ * Tidal's pairs plan. Consumer positions filed
  * on pond#543 (2026-08-16).
  */
 
@@ -512,7 +512,7 @@ export function usesCompare(spec: DeriveSpec): boolean {
 // Composition writes a spec; the control panel has to read one back. A pair's
 // parts are not seated configs — they exist only as structure inside the pair's
 // own spec — so the Pair node's sub-rows are projected from the spec rather than
-// looked up (TDL_PAIRS_PLAN, "the control panel expresses the tree").
+// looked up (Tidal's pairs plan, "the control panel expresses the tree").
 
 /** One study wrapping a part, as read off the spec. */
 export interface PartStudy {
@@ -658,7 +658,7 @@ export interface DeriveSkip {
  * and each lands in `skipped` exactly once (the engine reports a failing spec
  * per pass — plan + selector — so entries dedupe on the spec's id). Since
  * 0.62.0 nothing is pre-filtered: broken specs flow through and report, which
- * is what the chip UI reads (TDL_PAIRS_PLAN, the ghost-spread debt).
+ * is what the chip UI reads (Tidal's pairs plan, the ghost-spread debt).
  * Duplicate specs in the set are one node by content-addressing. Pure +
  * deterministic (memo-friendly).
  *

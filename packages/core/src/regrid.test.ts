@@ -90,7 +90,7 @@ describe('holdVolAcrossGrid', () => {
   });
 
   it('lets a later row win when a day is restated', () => {
-    // `TickerHistory3` restates `ccVar`, and a restatement arrives as a second row
+    // A daily-history feed restates `ccVar`, and a restatement arrives as a second row
     // for the same day. The newer value is the one to hold.
     const coarse = volSeries([d('2026-05-18'), d('2026-05-18')], { iv21: [23, 24.5] });
     const out = holdVolAcrossGrid(coarse, [min('2026-05-18', 14)]);

@@ -73,7 +73,7 @@ export interface ChartSettings {
    *
    * Deliberately an open map rather than a named pair. The other sections here are
    * fixed presentation categories, but *which annotations exist* is the app's
-   * catalog to decide, and `@tidal/ui` cannot import it (dependency direction).
+   * catalog to decide, and this package cannot import it (dependency direction).
    * The dialog is handed the options as a prop for the same reason.
    */
   annotations: Record<string, AnnotationOverride>;

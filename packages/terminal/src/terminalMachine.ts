@@ -73,12 +73,12 @@ import {
 import { axisForAdd, canAddUnit, type AxisMember } from './axisPolicy.js';
 
 /**
- * The terminal machine (XState migration, slice 2 — see docs/state-architecture.md).
+ * The terminal machine (XState migration, slice 2 — see Tidal's state-architecture note).
  * The **headless product**: it owns the control-panel *configuration* — rows of
  * series, the current selection, the controls-popover flag, and the preset slots
  * — and **never touches data**. Its event union is the host-control API; its
  * snapshot (via the module's selector hooks) is the read API. This is the
- * extraction candidate, so it imports only `@tidal/ui` types + its own
+ * extraction candidate, so it imports only `@tidal-ts/chart` types + its own
  * `axisPolicy` — never the socket / auth / data layers, never app config
  * directly (the series catalog arrives as `input`).
  *
@@ -141,7 +141,7 @@ export interface PresetStorage {
 
 export const PRESET_SLOTS = 5;
 
-/** Max viewport rows (`control-panel.md` §Rows: 1–3, capped at 3 for now). */
+/** Max viewport rows (the control-panel spec: 1–3, capped at 3 for now). */
 export const MAX_ROWS = 3;
 
 /** Committed height (px) a freshly added row gets — a **fixed** strip, not a flex
@@ -911,7 +911,7 @@ const boundLeg = (leg: PairLeg, input: PairLegInput): { graph: DeriveInput; labe
   if (input.entity === 'compare') {
     graph = underCompare(graph);
     // Role-bound legs print the ROLE, never a ticker — a ticker in a chip is
-    // reserved for a PINNED leg (the binding-legibility rule, TDL_PAIRS_PLAN).
+    // reserved for a PINNED leg (the binding-legibility rule, Tidal's pairs plan).
     label = `${label} (cmp)`;
   }
   return { graph, label };
@@ -933,6 +933,10 @@ const pairSpec = (a: PairLeg, aIn: PairLegInput, b: PairLeg, bIn: PairLegInput, 
  *  axis panel). Unit rules still matter for that re-link: a diff of like units
  *  reads in that unit; a ratio/log-ratio is unitless. Purple default so a
  *  spread reads distinctly from studies (amber); the user recolours. */
+/** The spread's colour when the host supplies no palette — a plain CSS colour
+ *  (a soft violet) any `resolveColor` passes through unchanged. */
+export const DEFAULT_SPREAD_COLOR = '#8b7cf6';
+
 function pairConfig(
   a: PairLeg,
   aIn: PairLegInput,
@@ -941,6 +945,12 @@ function pairConfig(
   op: PairOp,
   id: string,
   unitOf: (column: string) => string,
+  /** The host's colour keys, and the colours already drawn — the spread takes
+   *  the first key not in use, else the palette's first, else
+   *  {@link DEFAULT_SPREAD_COLOR}: a config needs SOME colour, and a host that
+   *  supplies no palette gets a plain CSS one its resolver passes through. */
+  palette: readonly string[] = [],
+  taken: readonly string[] = [],
 ): SeriesConfig {
   const la = boundLeg(a, aIn);
   const lb = boundLeg(b, bIn);
@@ -948,7 +958,7 @@ function pairConfig(
   return {
     id,
     label: PAIR_LABEL[op](la.label, lb.label),
-    color: 'purple',
+    color: palette.find((k) => !taken.includes(k)) ?? palette[0] ?? DEFAULT_SPREAD_COLOR,
     axis: 'R',
     axisGroup: id, // its own scale — the key IS its id, so the axis id is stable
     style: 'line',
@@ -969,7 +979,7 @@ function pairConfig(
  * `boundLeg` writes, read back the other way: the metric's catalog name, its
  * studies in application order, and `(cmp)` for a compare-bound leg (never a
  * ticker; a ticker in a label is reserved for a pinned leg — the
- * binding-legibility rule in TDL_PAIRS_PLAN).
+ * binding-legibility rule in Tidal's pairs plan).
  */
 function partLabel(scope: EditScope, part: PairPart): string {
   const studied = part.studies.reduce(
@@ -1036,6 +1046,8 @@ function planAddGroup(
     join,
     mintId(context.cfgSeq),
     unitOfColumn(context),
+    context.palette,
+    row.configs.map((c) => c.color),
   );
   return planSplit(context, pair, row.configs, context.cfgSeq + 1, true);
 }
@@ -1329,7 +1341,7 @@ function respecParam(study: SeriesConfig, name: string, value: number): SeriesCo
  * dependents away*: change an SMA's period and the EMA laid on it silently
  * vanished, as did any spread using it as a leg. Now the whole subtree can be
  * rewritten in place, which is what the control tree looks like it does and
- * what a pair's leg edits will need (TDL_PAIRS_PLAN).
+ * what a pair's leg edits will need (Tidal's pairs plan).
  *
  * Returns the new `{derive, column, label}` per changed config — the root
  * included — or **null if the result would be incoherent**: two configs on one
@@ -1726,7 +1738,7 @@ export const terminalMachine = setup({
         : rowForSource(context.rows, entry.source);
       return !!row && canAddUnit(members(row.configs), entry.unit);
     },
-    // Row cap (control-panel.md: 1–3). The UI also gates on "current bottom has
+    // Row cap (the control-panel spec: 1–3). The UI also gates on "current bottom has
     // content"; this is the hard invariant.
     canAddRow: ({ context }) => context.rows.length < MAX_ROWS,
     // A study may be added if its target exists and the exact spec isn't already
@@ -1775,7 +1787,7 @@ export const terminalMachine = setup({
     // A pair may be added if both legs exist, differ, and read the SAME data
     // source — the derive fold runs per series, so both columns must live on
     // one series (cross-source/cross-entity pairs need the join step; see
-    // TDL_PAIRS_PLAN). The spread arrives UNLINKED (its own axis), so there is
+    // Tidal's pairs plan). The spread arrives UNLINKED (its own axis), so there is
     // no unit gate — only a target row must exist and the exact spec must not
     // already be on the chart.
     canAddPair: ({ context, event }) => {
@@ -1946,6 +1958,8 @@ export const terminalMachine = setup({
           event.op as PairOp, // 'none' returned above
           mintId(context.cfgSeq),
           unitOfColumn(context),
+          context.palette,
+          flatConfigs(context.rows).map((c) => c.color),
         );
         // In front of leg A when it is seated — the spread is the signal and
         // must read over its legs (a study's insertion rule). An UNSEATED leg
@@ -2133,7 +2147,7 @@ export const terminalMachine = setup({
             .filter((c) => !doomed.has(c.id))
             .map((c) => (c.group && orphaned.has(c.group.id) ? { ...c, group: undefined } : c)),
         }));
-        // Removing a row's last metric removes the row (control-panel.md: no empty
+        // Removing a row's last metric removes the row (the control-panel spec: no empty
         // rows) — keep at least one.
         const host = context.rows.find((r) => r.configs.some((c) => c.id === event.id));
         const hostNow = host && mapped.find((r) => r.id === host.id);
@@ -2201,7 +2215,7 @@ export const terminalMachine = setup({
           if (r.id === to.id) return { ...r, configs: [...placed, ...r.configs] };
           return r;
         });
-        // An emptied source row goes away (control-panel.md: no empty rows) —
+        // An emptied source row goes away (the control-panel spec: no empty rows) —
         // keep at least one.
         const emptied = mapped.find((r) => r.id === from.id && r.configs.length === 0);
         return emptied && mapped.length > 1 ? mapped.filter((r) => r.id !== from.id) : mapped;

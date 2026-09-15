@@ -27,7 +27,7 @@ importers:
   packages/chart:
     dependencies:
       '@tidal-ts/core':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../core
     devDependencies:
       '@pond-ts/charts':
@@ -76,10 +76,10 @@ importers:
   packages/terminal:
     dependencies:
       '@tidal-ts/chart':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../chart
       '@tidal-ts/core':
-        specifier: workspace:^
+        specifier: workspace:*
         version: link:../core
     devDependencies:
       '@pond-ts/charts':

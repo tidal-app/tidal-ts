@@ -17,7 +17,7 @@ import type { Column, SeriesSchema, TimeSeries } from 'pond-ts';
  * reaches the product. That is the leverage, and it is also the hazard — which
  * is why {@link adoptable} is narrow and says why for each exclusion.
  *
- * Plan of record: `docs/plans/TDL_STUDIES_PLAN.md` (TDL-STUDYCAT).
+ * Plan of record: Tidal's studies plan.
  */
 
 /**

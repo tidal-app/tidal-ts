@@ -77,7 +77,7 @@ export function configColumns(c: {
 }
 
 // The aggregation window for `bar`/`candle` + the study `DeriveSpec` are owned by
-// `@tidal/core` (where the windowing + derive seam live) — imported for
+// `@tidal-ts/core` (where the windowing + derive seam live) — imported for
 // `SeriesConfig` below and re-exported so UI code has one import site for the
 // series vocabulary.
 import {
@@ -129,7 +129,7 @@ export interface SeriesConfig {
    *  (`deriveId(derive)`), which changes whenever the spec does. */
   column: string;
   label: string;
-  /** A curated palette **key** (`'blue'`; see `seriesPalette.ts`) or a raw custom
+  /** A curated palette **key** (`'blue'`, resolved by the host's palette) or a raw custom
    *  CSS color from the controls' escape hatch. DOM resolves it via
    *  `seriesStrokeVar`, the canvas via `chartTheme.resolveSeriesColor`. */
   color: string;
@@ -175,7 +175,7 @@ export interface SeriesConfig {
   family?: string;
   tenor?: number;
   /** Which censor variant this series reads, when its metric takes that
-   *  parameter (`'i'` / `'h'` / `'on'` / `'off'` — the host's `CENSOR_PARAMS`).
+   *  parameter (`'i'` / `'h'` / `'on'` / `'off'` — the host's censor vocabulary).
    *  Shown on the params sub-line beside the tenor, and editable there.
    *
    *  The `column` is the truth and this follows it; it is carried on the config
@@ -490,7 +490,7 @@ export function barZeroLock(
  * - `pinned` — fixed to one named symbol whatever the bar says; the chip is
  *   **grey-filled**, the heaviest of the three because it is the one binding
  *   that does NOT follow the workspace (the binding-legibility rule in
- *   TDL_PAIRS_PLAN: a ticker that doesn't track the bar must be visible).
+ *   Tidal's pairs plan: a ticker that doesn't track the bar must be visible).
  */
 export interface SeriesBinding {
   kind: 'primary' | 'compare' | 'pinned';

@@ -161,7 +161,7 @@ describe('mergeChartSettings', () => {
   });
 
   // The annotations section is an OPEN map — its keys are the app's catalog ids,
-  // which `@tidal/ui` cannot enumerate. So it is validated by value, not by key,
+  // which this package cannot enumerate. So it is validated by value, not by key,
   // and the absence of a field is meaningful rather than a hole to fill.
   describe('the annotations section', () => {
     it('defaults to empty, which means "every annotation as shipped"', () => {

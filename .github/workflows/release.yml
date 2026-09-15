@@ -17,6 +17,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: The tag names the version every package carries, and sits on main
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          for p in packages/*/package.json; do
+            v=$(node -p "require('./$p').version")
+            [ "$v" = "$tag" ] || { echo "$p is $v, tag is $tag" >&2; exit 1; }
+          done
+          git fetch origin main --quiet
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "tag is not on main" >&2; exit 1; }
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:

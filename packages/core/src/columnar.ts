@@ -4,7 +4,7 @@ import { TimeSeries } from 'pond-ts';
  * Adapter for a **columnar** time-series wire envelope → a pond `TimeSeries`.
  * A market-data backend streams pond-ts
  * struct-of-arrays payloads (a `Replace` snapshot, then `Merge` appends for
- * streaming dsets); this turns the decoded snapshot into the same `TimeSeries`
+ * streaming datasets); this turns the decoded snapshot into the same `TimeSeries`
  * carrier the chart layer already renders, and rowifies appends for the live
  * path.
  *
@@ -13,7 +13,7 @@ import { TimeSeries } from 'pond-ts';
  * constraints shape this module (logged in `CHARTS_FRICTION.md`, raised with the
  * pond agent):
  *   1. `fromColumns` accepts **time-key + numeric** columns only — the wire's
- *      `ticker`/`ekey` string columns are partition metadata, not plottable, so
+ *      `ticker`/key string columns are partition metadata, not plottable, so
  *      they're dropped here rather than fed in (they'd throw).
  *   2. `LiveSeries` has no columnar push in 0.41, so appends must be transposed
  *      to rows ({@link appendToRows}) before `pushMany`.
@@ -58,7 +58,7 @@ export interface PondAppend {
 type FromColumnsInput = Parameters<typeof TimeSeries.fromColumns>[0];
 
 /** The time-key + numeric columns, time first — the projection pond can ingest.
- *  Throws if there's no time column (every dset leads with one). */
+ *  Throws if there's no time column (every dataset leads with one). */
 function plottableColumns(schema: WireColumnSpec[]): WireColumnSpec[] {
   const time = schema.find((c) => c.kind === 'time');
   if (!time) throw new Error('columnar payload has no time column');

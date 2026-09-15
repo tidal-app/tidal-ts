@@ -78,7 +78,7 @@ import {
  *  sources (vol `%`, price `$`), so the chart works in the erased schema and each
  *  config names its `column`. Callers build the {@link TimeSeriesChartProps.sources} map
  *  in this type — cast their specific `TimeSeries` in (schema erasure, like
- *  `@tidal/core`'s aggregate output). */
+ *  `@tidal-ts/core`'s aggregate output). */
 
 /** Fallback for a series too short to infer sessions from (< 2 points): collapse
  *  weekends and nothing else. Built once — the container rebuilds the scale if the
@@ -267,7 +267,7 @@ export interface TimeSeriesChartProps {
    *
    * Cannot be inferred here: the held series is re-keyed onto the fine grid, so its
    * KEYS are minutes and only its values are daily. The service knows, because it
-   * did the fallback (`TickerHistory.volGrain`).
+   * did the fallback (the daily history's vol grain).
    */
   coarseSources?: readonly string[];
   /** Series ids to de-emphasize (drawn with reduced alpha) — the chart's "dim the
@@ -848,7 +848,7 @@ function TimeSeriesChartInner({
   // is shared, so its live spans must be too.
   //
   // `sources` IS that union now: a comparison is no longer a parallel map, it is
-  // `cmp_`-prefixed columns joined onto the primary (`@tidal/core`'s
+  // `cmp_`-prefixed columns joined onto the primary (`@tidal-ts/core`'s
   // `joinUnderPrefix`). One caveat rides along — that join is a left EXACT-KEY
   // join, so a minute only the comparison printed is dropped there, before this
   // ever sees it. Aligned daily grids (a fixture + a daily feed) match exactly;

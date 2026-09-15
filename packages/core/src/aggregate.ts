@@ -21,7 +21,7 @@ import type { Segment } from './sessions.js';
  * `UTC` boundaries, which match our UTC-midnight daily bars. A **fixed-duration**
  * window (`'1m'` / `'5m'` / `'1h'`) is instead subdivided inside each session.
  *
- * Kept pure + React-free in `@tidal/core` so it can move to `@pond-ts/finance`.
+ * Kept pure + React-free in `@tidal-ts/core` so it can move to `@pond-ts/finance`.
  */
 
 /** The window a bar/box bins into.

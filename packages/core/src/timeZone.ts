@@ -43,7 +43,7 @@ export interface TimeZoneChoice {
  * The zones the control offers.
  *
  * Deliberately short. TradingView lists 80-odd because it serves every market;
- * this is the set the desk actually trades, plus the two that are about the
+ * this is the set of markets this was built for, plus the two that are about the
  * READER rather than the market. `Local` resolves at render time — it is a
  * preference ("wherever I am"), not a zone, which is why it is stored as the
  * literal `local` and not as whatever it resolved to when it was picked.

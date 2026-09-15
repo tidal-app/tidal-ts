@@ -41,11 +41,11 @@ describe('snapshotToTimeSeries', () => {
 
   it('drops non-numeric (string) columns — fromColumns is time+numeric only', () => {
     const row = snapshotToTimeSeries(TICKER_HISTORY).toObjects()[0] as Record<string, unknown>;
-    expect('ticker' in row).toBe(false); // the ticker/ekey echo is partition metadata, not a series
+    expect('ticker' in row).toBe(false); // the ticker/key echo is partition metadata, not a series
     expect('open' in row).toBe(true);
   });
 
-  it('handles an empty snapshot (LiveAtmStream subscribe → count 0)', () => {
+  it('handles an empty snapshot (a live-stream subscribe → count 0)', () => {
     const empty: PondSnapshot = {
       name: 'AAPL:NMS:EQT:2026-07-17',
       count: 0,
@@ -69,11 +69,10 @@ describe('snapshotToTimeSeries', () => {
   });
 });
 
-// LiveAtmStream append — the doc's second wire example: one tick, an `ekey`
-// string column plus numerics.
+// A live-stream append: one tick, a string key column plus numerics.
 const LIVE_SCHEMA: WireColumnSpec[] = [
   { name: 'time', kind: 'time', required: true },
-  { name: 'ekey', kind: 'string', required: true },
+  { name: 'key', kind: 'string', required: true },
   { name: 'atmVol', kind: 'number', required: true },
   { name: 'atmEMA', kind: 'number', required: true },
   { name: 'uPrc', kind: 'number', required: true },
@@ -86,7 +85,7 @@ const APPEND: PondAppend = {
   count: 1,
   columns: {
     time: [1752192000123],
-    ekey: ['AAPL:NMS:EQT:2026-07-17'],
+    key: ['AAPL:NMS:EQT:2026-07-17'],
     atmVol: [0.2841],
     atmEMA: [0.2836],
     uPrc: [212.13],
@@ -96,7 +95,7 @@ const APPEND: PondAppend = {
 };
 
 describe('appendToRows', () => {
-  it('transposes a columnar append to rows in numeric-schema order (time first, ekey dropped)', () => {
+  it('transposes a columnar append to rows in numeric-schema order (time first, key dropped)', () => {
     expect(appendToRows(APPEND, LIVE_SCHEMA)).toEqual([
       [1752192000123, 0.2841, 0.2836, 212.13, 0.0, 0.0524],
     ]);

@@ -1,7 +1,7 @@
 /**
  * The **chart entry** — the surface that becomes `@tidal-ts/chart` (TDL-LIB).
  *
- * Rules, enforced by `boundary.test.ts`: this folder imports only `@tidal/core`,
+ * Rules, enforced by `boundary.test.ts`: this folder imports only `@tidal-ts/core`,
  * the pond family, React and itself. No CSS, no provider, no token names, no
  * control-panel or shell code. A host hands the chart its theme, its colour
  * resolver and its settings as props; this entry decides nothing about where

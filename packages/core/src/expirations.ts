@@ -7,8 +7,8 @@
  * calendar, and `TDL-CALAXIS` already put the calendar in the terminal's hands,
  * so this is free where a data load would not be.
  *
- * `control-panel.md` Appendix A proposed sourcing expirations from
- * `expiryCount` / `nEarnCnt_{tenor}d` instead. That is a **count of listed
+ * An early design proposed sourcing expirations from a per-row listed-expiry
+ * count instead. That is a **count of listed
  * expiries per row**, not a date: it rises when a new expiry gets listed and
  * falls when one rolls off, so recovering the expiration dates from it means
  * inferring events from a noisy difference — and the column is not in our load
@@ -58,8 +58,7 @@
  * 2015 on and one day before it prior to that. Anything reconciling an actual
  * pre-2015 expiration must not read these as settlement dates.
  *
- * **Not cross-checked against the producer.** No expiry-bearing dataset is loaded
- * — `expiryCount` is not in our table and `OptionRootHist` is not imported — so
+ * **Not cross-checked against the feed.** No expiry-bearing dataset is loaded, so
  * these dates are derived from the rule and validated against the trading
  * calendar, not reconciled against the exchange's own expiry list.
  */

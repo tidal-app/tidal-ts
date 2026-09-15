@@ -59,7 +59,7 @@ export function holdVolAcrossGrid(
   if (times.length === 0 || coarse.length === 0) return coarse;
 
   // Row index per source day. Later rows win: a day appearing twice is a
-  // restatement (`TickerHistory3` does restate `ccVar`), and the newer value is
+  // restatement (a daily-history feed does restate `ccVar`), and the newer value is
   // the one to hold.
   const key = coarse.keyColumn() as unknown as { at(i: number): number | undefined };
   const rowOfDay = new Map<number, number>();
