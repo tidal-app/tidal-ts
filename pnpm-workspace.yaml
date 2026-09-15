@@ -1,0 +1,7 @@
+packages:
+  - 'packages/*'
+
+# pnpm 11 blocks dependency build scripts unless listed. esbuild's postinstall
+# fetches its platform binary; nothing else here needs to run one.
+allowBuilds:
+  esbuild: true
