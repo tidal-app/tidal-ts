@@ -1,0 +1,32 @@
+{
+  "name": "tidal-ts-monorepo",
+  "private": true,
+  "license": "MIT",
+  "description": "tidal-ts — a financial time-series charting library on the pond-ts constellation",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tidal-app/tidal-ts.git"
+  },
+  "packageManager": "pnpm@11.0.9",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test && vitest run --config vitest.root.config.ts",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "vocabulary": "bash scripts/check-vocabulary.sh",
+    "verify": "pnpm run format:check && pnpm run vocabulary && pnpm run typecheck && pnpm run test && pnpm run build",
+    "release:dry": "pnpm run verify && pnpm -r publish --dry-run --access public --no-git-checks",
+    "release": "pnpm run verify && pnpm -r publish --access public"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.2",
+    "prettier": "^3.4.2",
+    "turbo": "^2.3.3",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}
