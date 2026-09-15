@@ -1,0 +1,58 @@
+{
+  "name": "@tidal-ts/chart",
+  "version": "0.1.0",
+  "private": false,
+  "description": "TimeSeriesChart \u2014 a multi-row time-series chart on @pond-ts/charts, plus the series and settings vocabulary and the prepare step. Theme, colours and settings arrive as props.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tidal-app/tidal-ts.git",
+    "directory": "packages/chart"
+  },
+  "homepage": "https://github.com/tidal-app/tidal-ts#readme",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "!dist/**/*.test.*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "prepack": "pnpm run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@pond-ts/charts": "^0.69.0",
+    "@pond-ts/financial": "^0.69.0",
+    "pond-ts": "^0.69.0",
+    "react": "^18.2.0 || ^19.0.0"
+  },
+  "dependencies": {
+    "@tidal-ts/core": "workspace:^"
+  },
+  "devDependencies": {
+    "@pond-ts/financial": "^0.69.0",
+    "@pond-ts/process": "0.69.0",
+    "pond-ts": "^0.69.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "@pond-ts/charts": "^0.69.0",
+    "@types/react": "^18.3.18",
+    "react": "^18.3.1"
+  }
+}
