@@ -41,4 +41,5 @@ configuration statechart). Dependency direction is one-way: `terminal → chart
 Meaningful changes land via PR with a fresh adversarial agent review before
 merge (post findings on the PR, respond, then Peter merges). Identify as
 "tidal agent" when posting. Commits carry the `Co-Authored-By` trailer.
-Releases: bump every package together, CHANGELOG entry, tag `vX.Y.Z`.
+Releases: bump every package together, CHANGELOG entry, tag `vX.Y.Z` — and a
+NEW package's first version is published by hand (RELEASING.md).

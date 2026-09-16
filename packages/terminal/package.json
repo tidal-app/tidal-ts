@@ -1,0 +1,60 @@
+{
+  "name": "@tidal-ts/terminal",
+  "version": "0.1.0",
+  "private": false,
+  "description": "The terminal machine \u2014 an XState v5 statechart that owns a chart's configuration (rows, series, studies, pairs, axes, presets) and never its data.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tidal-app/tidal-ts.git",
+    "directory": "packages/terminal"
+  },
+  "homepage": "https://github.com/tidal-app/tidal-ts#readme",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "!dist/**/*.test.*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "prepack": "pnpm run build"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@xstate/react": "^6.0.0",
+    "react": "^18.2.0 || ^19.0.0",
+    "xstate": "^5.28.0"
+  },
+  "dependencies": {
+    "@tidal-ts/chart": "workspace:*",
+    "@tidal-ts/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@pond-ts/financial": "^0.69.0",
+    "@pond-ts/process": "0.69.0",
+    "pond-ts": "^0.69.0",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8",
+    "@pond-ts/charts": "^0.69.0",
+    "@types/react": "^18.3.18",
+    "react": "^18.3.1",
+    "@xstate/react": "^6.1.0",
+    "xstate": "^5.32.4"
+  }
+}

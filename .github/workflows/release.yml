@@ -2,11 +2,18 @@ name: Release
 
 # Publishes every package at the version in its package.json when a `v*` tag is
 # pushed. The whole family releases together on ONE version (like pond-ts).
-# Needs the `NPM_TOKEN` repository secret (an npm automation token for the
-# @tidal-ts scope).
+#
+# Credentials: none stored. Publishing uses npm's **trusted publishing** (OIDC):
+# each package on npmjs.com names this repo + this workflow as its trusted
+# publisher, and npm mints a short-lived token per run. That link can only be
+# made on a package that already EXISTS, so a brand-new package's first version
+# is published by hand — see RELEASING.md. A version already on the registry is
+# skipped rather than failed, so the tag for a hand-published version can still
+# be pushed for the record.
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -17,6 +24,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: The tag names the version every package carries, and sits on main
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          for p in packages/*/package.json; do
+            v=$(node -p "require('./$p').version")
+            [ "$v" = "$tag" ] || { echo "$p is $v, tag is $tag" >&2; exit 1; }
+          done
+          git fetch origin main --quiet
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || { echo "tag is not on main" >&2; exit 1; }
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -25,7 +43,14 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
       - run: pnpm run verify
-      - name: Publish
-        run: pnpm -r publish --access public --no-git-checks --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish what the registry does not have yet (dependency order)
+        run: |
+          for pkg in core chart terminal; do
+            name=$(node -p "require('./packages/$pkg/package.json').name")
+            version=$(node -p "require('./packages/$pkg/package.json').version")
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version is already on the registry — skipping"
+              continue
+            fi
+            pnpm --filter "$name" publish --access public --no-git-checks --provenance
+          done
