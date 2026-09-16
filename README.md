@@ -65,9 +65,11 @@ recorded in Tidal's friction log and relayed upstream from there.
 
 ## Releasing
 
-All packages ship on one version. Bump every `packages/*/package.json` together,
-add a CHANGELOG entry, tag `vX.Y.Z` and push the tag — the Release workflow
-publishes with provenance (needs the `NPM_TOKEN` secret). `pnpm release:dry`
-rehearses locally.
+All packages ship on one version. See [RELEASING.md](RELEASING.md) — in short:
+bump every `packages/*/package.json` together, add a CHANGELOG entry, tag
+`vX.Y.Z` and push the tag; the Release workflow publishes with provenance
+through npm trusted publishing (no stored token). **A new package's first
+version is published by hand**, because the trusted-publisher link can only be
+made on a package that already exists.
 
 MIT.
