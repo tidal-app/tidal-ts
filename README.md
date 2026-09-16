@@ -63,6 +63,11 @@ the configs, and no provider or stylesheet of any kind. If a story ever needs a
 provider to render, the package has grown a dependency on its host — which is
 the bug `boundary.test.ts` exists to prevent.
 
+The **Consumer pane** story is the one to read if you are embedding this: a
+fixed curve vocabulary with a hard cap, one coloured y-axis column per active
+curve, a couple of derived curves, and a control surface the pane owns. It is
+the opposite of an open-ended terminal, and it is what the chart is for.
+
 `pnpm verify` includes a **vocabulary gate**: this is a public repo, and the
 stack of the company its first consumers work for is never named in it. Say
 what the library needs; keep the measurements; drop the names.
