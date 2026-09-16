@@ -17,6 +17,9 @@ All packages ship on **one version**, together, like the pond-ts family.
    sits on `main`, runs verify, and publishes each package that the registry
    does not already have — in dependency order (core, chart, terminal), with
    provenance, through **npm trusted publishing**. No token is stored anywhere.
+   (pnpm packs — it rewrites `workspace:*` — and the npm CLI publishes: it is
+   the reference client for trusted publishing, and pnpm 11's own OIDC exchange
+   was refused by the registry on the first attempt.)
 
 ## A NEW package's first version is published by hand
 

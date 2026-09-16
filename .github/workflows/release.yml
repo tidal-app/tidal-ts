@@ -43,8 +43,15 @@ jobs:
           registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
       - run: pnpm run verify
+      # The npm CLI is the reference client for trusted publishing; pnpm 11's own
+      # OIDC exchange was refused by the registry ("OIDC permission denied for this
+      # action") against a trusted-publisher entry that matched to the letter
+      # (2026-09-16, v0.1.1's first run). So: pnpm PACKS (it rewrites `workspace:*`
+      # to the concrete version, which `npm pack` would not), npm PUBLISHES.
+      - run: npm install --global npm@11
       - name: Publish what the registry does not have yet (dependency order)
         run: |
+          out="$RUNNER_TEMP/tarballs"; mkdir -p "$out"
           for pkg in core chart terminal; do
             name=$(node -p "require('./packages/$pkg/package.json').name")
             version=$(node -p "require('./packages/$pkg/package.json').version")
@@ -52,5 +59,6 @@ jobs:
               echo "$name@$version is already on the registry — skipping"
               continue
             fi
-            pnpm --filter "$name" publish --access public --no-git-checks --provenance
+            tarball=$(pnpm --filter "$name" pack --pack-destination "$out" | tail -1)
+            npm publish "$tarball" --access public --provenance
           done
