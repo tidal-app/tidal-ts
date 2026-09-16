@@ -40,9 +40,15 @@ pnpm -r publish --access public --no-git-checks
 `pnpm -r publish` walks the workspace in dependency order and rewrites every
 `workspace:*` to the concrete version. Then, on npmjs.com, for **each** new
 package: _Settings → Publishing access → Trusted publisher → GitHub Actions_,
-with organisation `tidal-app`, repository `tidal-ts`, workflow `release.yml`.
-Optionally set publishing access to "require trusted publishing" so a leaked
-token could never publish.
+with organisation `tidal-app`, repository `tidal-ts`, workflow `release.yml`,
+no environment — **and under Allowed actions, enable `npm publish`.** Since
+2026-09-03 a new trusted publisher allows only the staged flow (`npm stage
+publish`) by default; direct publishing is an opt-in, and without it the
+workflow fails with `403 … OIDC permission denied for this action` against an
+entry that otherwise matches to the letter. (This cost v0.1.1 three runs: the
+client and a placeholder `NODE_AUTH_TOKEN` were suspected first.) Optionally set
+publishing access to "require trusted publishing" so a leaked token could never
+publish.
 
 Finally tag the commit and push the tag. The workflow sees each version is
 already on the registry and skips it — the tag is the record, and the workflow
