@@ -2,7 +2,7 @@
   "name": "tidal-ts-monorepo",
   "private": true,
   "license": "MIT",
-  "description": "tidal-ts — a financial time-series charting library on the pond-ts constellation",
+  "description": "tidal-ts \u2014 a financial time-series charting library on the pond-ts constellation",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/tidal-app/tidal-ts.git"
@@ -20,7 +20,8 @@
     "vocabulary": "bash scripts/check-vocabulary.sh",
     "verify": "pnpm run format:check && pnpm run vocabulary && pnpm run typecheck && pnpm run test && pnpm run build",
     "release:dry": "pnpm run verify && pnpm -r publish --dry-run --access public --no-git-checks",
-    "release": "pnpm run verify && pnpm -r publish --access public"
+    "release": "pnpm run verify && pnpm -r publish --access public",
+    "storybook": "pnpm --filter @tidal-ts/chart storybook"
   },
   "devDependencies": {
     "@types/node": "^22.20.2",

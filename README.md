@@ -54,7 +54,14 @@ Node 22, pnpm 11.
 ```
 pnpm install
 pnpm verify      # format · vocabulary gate · typecheck · test · build
+pnpm storybook   # the chart's workshop, on :6009
 ```
+
+The workshop hosts the chart the way a **consumer** does: a literal
+`ChartTheme` (`packages/chart/.storybook/demoTheme.ts`), colours written into
+the configs, and no provider or stylesheet of any kind. If a story ever needs a
+provider to render, the package has grown a dependency on its host — which is
+the bug `boundary.test.ts` exists to prevent.
 
 `pnpm verify` includes a **vocabulary gate**: this is a public repo, and the
 stack of the company its first consumers work for is never named in it. Say

@@ -2,6 +2,13 @@
 
 All packages release together on one version.
 
+## Unreleased
+
+- `@tidal-ts/chart` has a **workshop**: Storybook on `:6009`, hosting the chart
+  from a literal `ChartTheme` with no provider and no stylesheet. Not published
+  (the packages ship `dist` only) — it is where a consumer can see what the
+  chart needs from a host.
+
 ## 0.1.2 — 2026-09-16
 
 - `@tidal-ts/terminal` takes **`spreadColor`** (`TerminalInput` /
