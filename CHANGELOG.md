@@ -2,6 +2,17 @@
 
 All packages release together on one version.
 
+## 0.1.2 — 2026-09-16
+
+- `@tidal-ts/terminal` takes **`spreadColor`** (`TerminalInput` /
+  `TerminalProviderProps`): what a new spread draws in. 0.1.1 gave a spread the
+  first free palette key, which in a palette whose hues MEAN something lands on
+  a reserved one — the first consumer's amber is its comparison colour. A
+  spread is a different kind of line from its legs and only the host knows what
+  its palette reserves, so the host names it; absent, the 0.1.1 behaviour
+  stands.
+- `@tidal-ts/core`, `@tidal-ts/chart`: version bump only.
+
 ## 0.1.1 — 2026-09-16
 
 First release through npm trusted publishing (OIDC, no stored token).

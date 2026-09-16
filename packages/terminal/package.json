@@ -1,6 +1,6 @@
 {
   "name": "@tidal-ts/terminal",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": false,
   "description": "The terminal machine \u2014 an XState v5 statechart that owns a chart's configuration (rows, series, studies, pairs, axes, presets) and never its data.",
   "license": "MIT",

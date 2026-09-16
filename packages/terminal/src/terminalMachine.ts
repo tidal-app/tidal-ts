@@ -223,6 +223,8 @@ const rowSeqAfter = (rows: readonly RowState[]): number =>
 interface TerminalContext {
   /** The host's colour keys for new series, in hand-out order. */
   palette: readonly string[];
+  /** What a new spread draws in, when the host reserves a colour for one. */
+  spreadColor: string | undefined;
   rows: RowState[];
   /** Per-axis range state, keyed by axis id (`configAxisId` — `rowId:side` for a
    *  shared axis, `rowId:side:configId` for an unlinked series' own axis). No
@@ -354,6 +356,12 @@ export interface TerminalInput {
   /** The colour keys the host hands a new series, in order — see
    *  `TerminalProviderProps.palette`. Default: none (a leg keeps its pair's). */
   palette?: readonly string[];
+  /** What a new SPREAD draws in, when the host reserves a colour for one (a
+   *  palette key its chart resolves, or a CSS colour). A spread is a different
+   *  KIND of line from the series it is built from, and a palette that means
+   *  something — a hue reserved for comparison, say — cannot express that by
+   *  position. Absent ⇒ the first free palette key. */
+  spreadColor?: string;
 }
 
 // --- pure helpers (shared with selectors; exported for tests) ----------------
@@ -931,10 +939,13 @@ const pairSpec = (a: PairLeg, aIn: PairLegInput, b: PairLeg, bIn: PairLegInput, 
  *  construction (oscillates about 0 or 1), so it starts on its own scale and
  *  binds no side's unit — one re-link click away from sharing if wanted (the
  *  axis panel). Unit rules still matter for that re-link: a diff of like units
- *  reads in that unit; a ratio/log-ratio is unitless. Purple default so a
- *  spread reads distinctly from studies (amber); the user recolours. */
-/** The spread's colour when the host supplies no palette — a plain CSS colour
- *  (a soft violet) any `resolveColor` passes through unchanged. */
+ *  reads in that unit; a ratio/log-ratio is unitless. Its colour is the host's
+ *  {@link TerminalInput.spreadColor} when set — a spread should read
+ *  distinctly from the series it is built from, and only the host knows what
+ *  its palette reserves for what; the user recolours either way. */
+/** The spread's colour when the host names neither a `spreadColor` nor a
+ *  palette — a plain CSS colour (a soft violet) any `resolveColor` passes
+ *  through unchanged. */
 export const DEFAULT_SPREAD_COLOR = '#8b7cf6';
 
 function pairConfig(
@@ -945,12 +956,14 @@ function pairConfig(
   op: PairOp,
   id: string,
   unitOf: (column: string) => string,
-  /** The host's colour keys, and the colours already drawn — the spread takes
-   *  the first key not in use, else the palette's first, else
-   *  {@link DEFAULT_SPREAD_COLOR}: a config needs SOME colour, and a host that
-   *  supplies no palette gets a plain CSS one its resolver passes through. */
+  /** What the host reserves for a spread, if anything; else its colour keys and
+   *  the colours already drawn — the spread takes `spreadColor`, else the first
+   *  key not in use, else the palette's first, else {@link DEFAULT_SPREAD_COLOR}.
+   *  A config needs SOME colour, and a host that names neither gets a plain CSS
+   *  one its resolver passes through. */
   palette: readonly string[] = [],
   taken: readonly string[] = [],
+  spreadColor?: string,
 ): SeriesConfig {
   const la = boundLeg(a, aIn);
   const lb = boundLeg(b, bIn);
@@ -958,7 +971,8 @@ function pairConfig(
   return {
     id,
     label: PAIR_LABEL[op](la.label, lb.label),
-    color: palette.find((k) => !taken.includes(k)) ?? palette[0] ?? DEFAULT_SPREAD_COLOR,
+    color:
+      spreadColor ?? palette.find((k) => !taken.includes(k)) ?? palette[0] ?? DEFAULT_SPREAD_COLOR,
     axis: 'R',
     axisGroup: id, // its own scale — the key IS its id, so the axis id is stable
     style: 'line',
@@ -1048,6 +1062,7 @@ function planAddGroup(
     unitOfColumn(context),
     context.palette,
     row.configs.map((c) => c.color),
+    context.spreadColor,
   );
   return planSplit(context, pair, row.configs, context.cfgSeq + 1, true);
 }
@@ -1960,6 +1975,7 @@ export const terminalMachine = setup({
           unitOfColumn(context),
           context.palette,
           flatConfigs(context.rows).map((c) => c.color),
+          context.spreadColor,
         );
         // In front of leg A when it is seated — the spread is the signal and
         // must read over its legs (a study's insertion rule). An UNSEATED leg
@@ -2588,6 +2604,7 @@ export const terminalMachine = setup({
     // straight into the stuck-seam state rather than being healed on first edit.
     rows: withRemainder(input.initialRows),
     palette: input.palette ?? [],
+    spreadColor: input.spreadColor,
     axisRanges: {},
     rowSeq: input.initialRows.length,
     cfgSeq: cfgSeqAfter(input.initialRows),
