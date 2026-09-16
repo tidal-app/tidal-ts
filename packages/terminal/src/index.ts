@@ -72,3 +72,13 @@ export {
   type TerminalEvent,
   type TerminalInput,
 } from './terminalMachine.js';
+// The axis policy a host's MENUS gate on — the same predicates the machine's
+// guards enforce, exported so the two cannot disagree (0.1.0 left them internal;
+// a host had to keep its own copy).
+export {
+  axisBindings,
+  allowedAxes,
+  canAddUnit,
+  axisForAdd,
+  type AxisMember,
+} from './axisPolicy.js';

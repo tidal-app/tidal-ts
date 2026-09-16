@@ -2,6 +2,16 @@
 
 All packages release together on one version.
 
+## 0.1.1 — 2026-09-16
+
+- `@tidal-ts/terminal` exports its **axis policy** (`canAddUnit` and friends):
+  the predicates a host's menus gate on, the same ones the machine's guards
+  enforce. 0.1.0 left them internal, so the first host had to keep its own
+  copy to grey out an incompatible metric before the guard refused it.
+- `@tidal-ts/chart` exports `hasBarOutput` — whether a config's study draws a
+  bar output (a MACD's histogram), which a host's style controls gate on.
+- `@tidal-ts/core`: version bump only (one version across the family).
+
 ## 0.1.0 — 2026-09-16
 
 First publish, cut out of the Tidal application (`tidal-app/tidal`). **Pre-1.0:

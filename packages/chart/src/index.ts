@@ -43,6 +43,7 @@ export {
   axisFormat,
   bandColumns,
   configColumns,
+  hasBarOutput,
   logAllowed,
   AXIS_PRECISIONS,
   type PairJoinOp,
