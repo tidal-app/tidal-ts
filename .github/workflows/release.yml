@@ -40,7 +40,6 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
-          registry-url: https://registry.npmjs.org
       - run: pnpm install --frozen-lockfile
       - run: pnpm run verify
       # The npm CLI is the reference client for trusted publishing; pnpm 11's own
@@ -50,6 +49,13 @@ jobs:
       # to the concrete version, which `npm pack` would not), npm PUBLISHES.
       - run: npm install --global npm@11
       - name: Publish what the registry does not have yet (dependency order)
+        # No `registry-url` on setup-node and an explicitly EMPTY NODE_AUTH_TOKEN:
+        # setup-node's registry-url writes an `_authToken=${NODE_AUTH_TOKEN}`
+        # line into .npmrc and fills the variable with a placeholder, and that
+        # bogus credential pre-empts the OIDC exchange (github.com/orgs/community
+        # /discussions/176761). The registry default is npmjs.org anyway.
+        env:
+          NODE_AUTH_TOKEN: ''
         run: |
           out="$RUNNER_TEMP/tarballs"; mkdir -p "$out"
           for pkg in core chart terminal; do
