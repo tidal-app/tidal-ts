@@ -150,10 +150,14 @@ function fakeStorage() {
  *  (a host's chart resolves whatever keys it chooses; this is what Tidal's does). */
 const PALETTE = ['blue', 'amber', 'teal', 'pink', 'green', 'purple', 'orange', 'rose'] as const;
 
-function start(rows: RowState[] = initialRows(), palette: readonly string[] = PALETTE) {
+function start(
+  rows: RowState[] = initialRows(),
+  palette: readonly string[] = PALETTE,
+  spreadColor?: string,
+) {
   const { storage, saved } = fakeStorage();
   const actor = createActor(terminalMachine, {
-    input: { initialRows: rows, catalog: CATALOG, storage, palette },
+    input: { initialRows: rows, catalog: CATALOG, storage, palette, spreadColor },
   });
   actor.start();
   const ctx = () => actor.getSnapshot().context;
@@ -2401,5 +2405,36 @@ describe("the palette is the host's (TerminalInput.palette)", () => {
     const vol = ctx().rows[0]!.configs;
     expect(vol).toHaveLength(2);
     expect(vol.map((c) => c.color)).toEqual(['blue', 'blue']);
+  });
+});
+
+describe('a spread draws in the colour the host reserves for one', () => {
+  const pair = (actor: ReturnType<typeof start>['actor'], leg: (c: string) => string) =>
+    actor.send({
+      type: 'series.addPair',
+      a: { metricId: leg('iv63') },
+      b: { metricId: leg('iv42') },
+      op: 'diff',
+    });
+
+  it('takes `spreadColor` over the first free palette key', () => {
+    // A spread is a different KIND of line from its legs, and a palette whose
+    // hues MEAN something (one reserved for comparison, say) cannot say that by
+    // position — so the host names it.
+    const { actor, ctx, leg } = start(initialRows(), ['blue', 'amber', 'teal'], 'purple');
+    pair(actor, leg);
+    const spread = ctx()
+      .rows.flatMap((r) => r.configs)
+      .find((c) => c.derive && isPairOp(c.derive.op))!;
+    expect(spread.color).toBe('purple');
+  });
+
+  it('falls back to the first key its row is not using when the host names none', () => {
+    const { actor, ctx, leg } = start(initialRows(), ['blue', 'amber', 'teal']);
+    pair(actor, leg);
+    const spread = ctx()
+      .rows.flatMap((r) => r.configs)
+      .find((c) => c.derive && isPairOp(c.derive.op))!;
+    expect(spread.color).toBe('amber'); // blue is the seeded iv21
   });
 });

@@ -29,6 +29,9 @@ export interface TerminalProviderProps {
    *  A host's own vocabulary — palette names its chart resolves, or CSS colours.
    *  Omit to let a new leg keep its pair's colour. */
   palette?: readonly string[];
+  /** What a new SPREAD draws in, when the host reserves a colour for one —
+   *  see {@link TerminalInput.spreadColor}. Absent ⇒ the first free palette key. */
+  spreadColor?: string;
   /** An XState inspector (`@statelyai/inspect`'s `inspect`, or any observer of
    *  inspection events). The host decides whether and when to attach one; the
    *  machine has no opinion and no build-time flag. */
@@ -41,13 +44,20 @@ export function TerminalProvider({
   catalog,
   storage,
   palette,
+  spreadColor,
   inspect,
   children,
 }: TerminalProviderProps) {
   return (
     <TerminalContext.Provider
       options={{
-        input: { initialRows, catalog, storage, ...(palette ? { palette } : {}) },
+        input: {
+          initialRows,
+          catalog,
+          storage,
+          ...(palette ? { palette } : {}),
+          ...(spreadColor ? { spreadColor } : {}),
+        },
         ...(inspect ? { inspect } : {}),
       }}
     >
