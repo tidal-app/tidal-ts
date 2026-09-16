@@ -4,6 +4,8 @@ All packages release together on one version.
 
 ## 0.1.1 — 2026-09-16
 
+First release through npm trusted publishing (OIDC, no stored token).
+
 - `@tidal-ts/terminal` exports its **axis policy** (`canAddUnit` and friends):
   the predicates a host's menus gate on, the same ones the machine's guards
   enforce. 0.1.0 left them internal, so the first host had to keep its own
