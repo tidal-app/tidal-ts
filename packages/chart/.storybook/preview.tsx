@@ -21,9 +21,12 @@ import type { Preview } from '@storybook/react';
  * — no stylesheet, so there is nowhere else they could come from, and a story
  * that rendered without them would be lying about what a host has to supply.
  *
- * They are a SHAPE, not a transcription of anyone's design system: a ground and
- * three lifted steps, two rules, four ink tiers, and the ink that sits ON a
- * curve's own colour. A real consumer maps its own ladder onto these names, and
+ * They are a SHAPE, not a transcription of anyone's design system: a ground,
+ * one step BELOW it for the plot, three lifted steps above it, two rules, four
+ * ink tiers, and the ink that sits ON a curve's own colour. `--pane-well` is
+ * the odd one: chrome lifts away from the ground and the reading surface sinks
+ * away from it, in opposite directions, so the plot is the furthest thing from
+ * the controls in both schemes — darker in dark, lighter in light. A real consumer maps its own ladder onto these names, and
  * the chart never sees any of them.
  *
  * `PANE_TOKENS` is the list, exported so `paneTokens.test.ts` can fail when an
@@ -33,6 +36,7 @@ import type { Preview } from '@storybook/react';
  * undefined unnoticed in the first place.
  */
 export const PANE_TOKENS = [
+  '--pane-well',
   '--pane-surface',
   '--pane-surface-raised',
   '--pane-surface-hover',
@@ -49,6 +53,7 @@ export const PANE_TOKENS = [
 export type PaneTokens = Record<(typeof PANE_TOKENS)[number], string>;
 
 export const PANE_DARK: PaneTokens = {
+  '--pane-well': '#0d1322',
   '--pane-surface': '#141a2b',
   '--pane-surface-raised': '#1d2438',
   '--pane-surface-hover': '#262e44',
@@ -63,17 +68,21 @@ export const PANE_DARK: PaneTokens = {
 };
 
 export const PANE_LIGHT: PaneTokens = {
-  '--pane-surface': '#fbfcfe',
-  '--pane-surface-raised': '#eef1f6',
-  '--pane-surface-hover': '#e3e7ef',
-  '--pane-surface-active': '#cfd5e2',
-  '--pane-border': '#b6bdcd',
-  '--pane-border-strong': '#8b94a8',
+  // The pane steps OFF pure white so the plot has somewhere brighter to go —
+  // the light ladder runs the other way, and a ground already at #fff leaves
+  // the reading surface nowhere.
+  '--pane-well': '#ffffff',
+  '--pane-surface': '#eef1f6',
+  '--pane-surface-raised': '#e4e8f0',
+  '--pane-surface-hover': '#d8dde8',
+  '--pane-surface-active': '#c6cdda',
+  '--pane-border': '#b0b8c8',
+  '--pane-border-strong': '#858ea3',
   '--pane-ink-strong': '#0f172a',
   '--pane-ink': '#334155',
   '--pane-ink-muted': '#55607a',
   '--pane-ink-faint': '#606b80',
-  '--pane-swatch-ink': '#fbfcfe',
+  '--pane-swatch-ink': '#ffffff',
 };
 
 const preview: Preview = {

@@ -76,6 +76,34 @@ export const paneStyles = {
     fontVariantNumeric: 'tabular-nums',
   },
   plotRow: { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 },
+  /** The CHART AREA — gutters, plots and time axis — one step off the pane, and
+   *  the only thing separating the reading surface from the controls above it.
+   *  No border and no shadow: the step already says it. */
+  plotWell: {
+    position: 'relative',
+    minWidth: 0,
+    // No `flex: 1`: the host gives the chart RESOLVED pixel heights, so the
+    // well has to hug what the chart actually draws. Stretching it instead left
+    // the last row hanging 20px past the ground it was supposed to sit on.
+    background: 'var(--pane-well)',
+    borderRadius: 4,
+  },
+  /** The grip a host drags to move the split between rows. The chart takes
+   *  RESOLVED pixel heights, so the gesture and the remainder math are the
+   *  host's — this is that, at its smallest. */
+  rowGrip: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 9,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'row-resize',
+    touchAction: 'none',
+    zIndex: 1,
+  },
+  rowGripBar: { width: 28, height: 3, borderRadius: 2, background: 'var(--pane-border-strong)' },
   subtitle: {
     alignSelf: 'flex-end',
     fontSize: 10,
