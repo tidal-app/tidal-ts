@@ -13,7 +13,11 @@ names='spiderrock|\bwts\b|mlink|hlink|\bmars\b|\bignite\b|web-platform|srse|\bve
 schema='atmCen|HistoricalVolatilities|TickerHistory|LiveAtmStream|OptionRoot|\bekey\b|\bdsets?\b|nEarnCnt|expiryCount'
 private='datasources\.md|wts-handoff|control-panel\.md|state-architecture\.md|docs/(plans|notes)/|TDL_[A-Z]+|the desk'
 pattern="$names|$schema|$private"
-if grep -rniE "$pattern" packages/*/src packages/*/package.json README.md CHANGELOG.md CLAUDE.md test .github scripts --exclude=check-vocabulary.sh; then
+# `.storybook` is in the sweep too: the workshop is published prose (a story's
+# doc block renders in Docs) and its files are as public as `src`. It was
+# outside the sweep until a review pointed out that ~45 lines of new prose
+# had landed in an ungated file (PR #9).
+if grep -rniE "$pattern" packages/*/src packages/*/.storybook packages/*/package.json README.md CHANGELOG.md CLAUDE.md test .github scripts --exclude=check-vocabulary.sh; then
   echo "vocabulary gate: the lines above identify an employer's stack" >&2
   exit 1
 fi

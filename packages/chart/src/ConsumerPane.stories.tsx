@@ -42,8 +42,10 @@ import type { ChartSeries, SeriesConfig, TimeSeriesChartRow } from './index.js';
  * - **a confidence envelope under two of the curves** — a `bollinger` spec
  *   drawn as `style: 'band'`, sharing its curve's `axisGroup` so the band
  *   scales with the line it belongs to instead of claiming a gutter column of
- *   its own. Fixed by the pane, not added by a user: on this surface the
- *   envelope is part of what the curve MEANS;
+ *   its own. It is still inside the extent that axis has to cover, so a band
+ *   WIDENS its curve's scale — the cost it does have. Fixed by the pane, not
+ *   added by a user: on this surface the envelope is part of what the curve
+ *   MEANS;
  * - an expiry radio group and a day-range segmented control, which change what
  *   is asked for rather than what is drawn;
  * - colours, labels and units decided by the pane, so no `resolveColor` is
@@ -60,15 +62,24 @@ import type { ChartSeries, SeriesConfig, TimeSeriesChartRow } from './index.js';
  *
  * **What this pane cannot say yet.** A closed vocabulary wants TEXTURE as a
  * channel it controls: a censored twin drawn in its sibling's hue and a dash,
- * a benchmark-relative curve dashed so it reads as derived with no legend. Here
- * dash is resolved by CATEGORY (`ChartSettings.metrics` / `derived` /
- * `comparisons`) from a single `DASH_PATTERN`, and the category is decided by
- * whether a spec is windowed — so a pointwise relative like the two below takes
- * the raw-metric category and draws solid. The pane's only free channel is
- * colour, which is why the censored pair are two hues rather than one hue and
- * two textures. Written down rather than worked around: a per-series texture
- * would be a change to `SeriesConfig` and to what dash MEANS on this chart, and
- * that is a decision for the consumer to ask for, not for a story to force.
+ * a benchmark-relative curve dashed so it reads as derived with no legend.
+ *
+ * A `SeriesConfig` has no texture field. `seriesCategoryStyle` answers for one:
+ * `comparisons` when the spec reads the compare symbol, else `derived` when it
+ * is WINDOWED (`isStudySeries` — an op with params), else `metrics`; each
+ * category is solid-or-dashed from a single `DASH_PATTERN`. Both relatives here
+ * are pointwise (`ratio`/`diff` declare no params), so they land in `metrics`
+ * and draw exactly like a raw column. Dashing that category would dash every
+ * raw curve with them.
+ *
+ * The chart is not textureless — a multi-output study's 2nd..Nth lines take a
+ * dash ladder, and a comparison counterpart is dashed automatically. Both are
+ * textures the CHART assigns; neither is one a pane can ask for. So colour is
+ * this pane's only free channel, which is why the censored pair are two hues
+ * rather than one hue and two textures. Written down rather than worked around:
+ * a per-series texture is a change to `SeriesConfig` AND to what dash means on
+ * this chart (today it encodes the comparison symbol), which is a decision for
+ * a consumer to ask for, not one for a story to force.
  *
  * Everything outside the plot is the pane's own (`.storybook/paneAtoms.tsx`)
  * and deliberately not part of the package: the library owns the drawing, the
@@ -78,9 +89,19 @@ const priceSeries = generatePriceSeries(DEMO_INSTRUMENTS[0]!, { bars: 180 });
 const volSeries = generateVolSeries('AAPL', { bars: 180 });
 const sources = { vol: volSeries, price: priceSeries } as unknown as Record<string, ChartSeries>;
 
-/** A categorical ladder the pane owns. A consumer's design system supplies
- *  these; the chart only ever sees the resolved colour on a config. */
-const LADDER = [
+/**
+ * A categorical ladder the pane owns, **one per scheme**. A consumer's design
+ * system supplies these; the chart only ever sees the resolved colour on a
+ * config.
+ *
+ * Two ladders rather than one, because a curve colour is not only a stroke on
+ * the canvas — the pane also prints it as label text and fills a checkbox with
+ * it. The dark ladder's pastels are a stroke that works and body text that does
+ * not once the ground turns to paper (a checked label ran 1.6:1 on white). So
+ * light deepens every hue to carry 4.5:1 as ink, which is the same move a
+ * designed light theme makes for its series strokes.
+ */
+const LADDER_DARK = [
   '#f0cb62',
   '#7caefd',
   '#79e295',
@@ -89,6 +110,17 @@ const LADDER = [
   '#b99eef',
   '#ffa657',
   '#f986b8',
+] as const;
+
+const LADDER_LIGHT = [
+  '#7a5c00',
+  '#1a5cb8',
+  '#1f7a3d',
+  '#b5372c',
+  '#11697a',
+  '#6b3fc0',
+  '#98520a',
+  '#a63a6b',
 ] as const;
 
 const ratio: DeriveSpec = { op: 'ratio', inputs: ['iv21', 'iv63'] };
@@ -186,7 +218,10 @@ const CATALOG: readonly Curve[] = [
     derive: spread,
   },
 ];
-const colorOf = (key: string) => LADDER[CATALOG.findIndex((c) => c.key === key) % LADDER.length]!;
+const colorOf = (key: string, scheme: 'dark' | 'light') => {
+  const ladder = scheme === 'light' ? LADDER_LIGHT : LADDER_DARK;
+  return ladder[CATALOG.findIndex((c) => c.key === key) % ladder.length]!;
+};
 
 const MAX_ACTIVE = 6;
 const DEFAULT_ON = ['iv21', 'hv21', 'rv21', 'price'];
@@ -213,7 +248,7 @@ function Pane({ scheme }: { scheme: 'dark' | 'light' }) {
       id: c.key,
       column: c.column,
       label: c.label,
-      color: colorOf(c.key),
+      color: colorOf(c.key, scheme),
       axis: 'L',
       axisGroup: c.key,
       style: 'line',
@@ -234,8 +269,8 @@ function Pane({ scheme }: { scheme: 'dark' | 'light' }) {
             return {
               id: `${c.key}__band`,
               column: deriveId(spec),
-              label: `${c.label} band`,
-              color: colorOf(c.key),
+              label: `${c.label} · mean ±1σ`,
+              color: colorOf(c.key, scheme),
               axis: 'L',
               axisGroup: c.key,
               style: 'band',
@@ -244,12 +279,20 @@ function Pane({ scheme }: { scheme: 'dark' | 'light' }) {
               unit: c.unit,
               source: c.source,
               derive: spec,
+              // A `band` is TWO marks: the wash, and its MIDDLE drawn as an
+              // ordinary line in the same ink. The middle of a Bollinger is an
+              // SMA, so a banded curve gains a smoothed twin of itself — which
+              // is worth having and must not compete, hence the hairline.
+              lineWidth: 0.5,
             };
           })
       : [];
-    // Bands first: configs draw in order, and a band is a hint UNDER its line.
-    return [...envelopes, ...lines];
-  }, [bands, on]);
+    // Envelopes LAST. `<Layers>` z-orders by declaration and the chart renders
+    // `[...visible].reverse()`, so the row's FIRST config paints last = on top
+    // (the controls list reads front→back, like a layers panel). Put the
+    // envelopes first and the washes composite over every curve.
+    return [...lines, ...envelopes];
+  }, [bands, on, scheme]);
 
   // The fold runs the two derived curves; the facts value the legend. A pane
   // does exactly what a terminal does here — it just never offers the menu.
@@ -301,7 +344,7 @@ function Pane({ scheme }: { scheme: 'dark' | 'light' }) {
           <SeriesCheckbox
             key={c.key}
             label={c.label}
-            color={colorOf(c.key)}
+            color={colorOf(c.key, scheme)}
             checked={on.includes(c.key)}
             disabled={full && !on.includes(c.key)}
             onToggle={() => toggle(c.key)}
@@ -313,7 +356,7 @@ function Pane({ scheme }: { scheme: 'dark' | 'light' }) {
           <SeriesCheckbox
             key={c.key}
             label={c.label}
-            color={colorOf(c.key)}
+            color={colorOf(c.key, scheme)}
             checked={on.includes(c.key)}
             disabled={full && !on.includes(c.key)}
             onToggle={() => toggle(c.key)}

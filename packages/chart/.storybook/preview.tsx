@@ -22,36 +22,59 @@ import type { Preview } from '@storybook/react';
  * that rendered without them would be lying about what a host has to supply.
  *
  * They are a SHAPE, not a transcription of anyone's design system: a ground and
- * three lifted steps, two rules, four ink tiers, one caution. A real consumer
- * maps its own ladder onto these names, and the chart never sees any of them.
+ * three lifted steps, two rules, four ink tiers, and the ink that sits ON a
+ * curve's own colour. A real consumer maps its own ladder onto these names, and
+ * the chart never sees any of them.
+ *
+ * `PANE_TOKENS` is the list, exported so `paneTokens.test.ts` can fail when an
+ * atom reads a name no scheme defines — the type system cannot, because a style
+ * object carrying custom properties has to be cast to `CSSProperties` and the
+ * cast takes excess-property checking with it. That cast is why the tokens went
+ * undefined unnoticed in the first place.
  */
-const PANE_DARK: CSSProperties = {
+export const PANE_TOKENS = [
+  '--pane-surface',
+  '--pane-surface-raised',
+  '--pane-surface-hover',
+  '--pane-surface-active',
+  '--pane-border',
+  '--pane-border-strong',
+  '--pane-ink-strong',
+  '--pane-ink',
+  '--pane-ink-muted',
+  '--pane-ink-faint',
+  '--pane-swatch-ink',
+] as const;
+
+export type PaneTokens = Record<(typeof PANE_TOKENS)[number], string>;
+
+export const PANE_DARK: PaneTokens = {
   '--pane-surface': '#141a2b',
   '--pane-surface-raised': '#1d2438',
   '--pane-surface-hover': '#262e44',
   '--pane-surface-active': '#333c55',
-  '--pane-border': '#333c55',
-  '--pane-border-strong': '#4b5570',
+  '--pane-border': '#414b66',
+  '--pane-border-strong': '#5a6584',
   '--pane-ink-strong': '#f2f5fc',
   '--pane-ink': '#c4cbdd',
   '--pane-ink-muted': '#a6aec4',
   '--pane-ink-faint': '#868fa6',
-  '--pane-caution': '#f0cb62',
-} as CSSProperties;
+  '--pane-swatch-ink': '#141a2b',
+};
 
-const PANE_LIGHT: CSSProperties = {
-  '--pane-surface': '#ffffff',
-  '--pane-surface-raised': '#f1f3f7',
-  '--pane-surface-hover': '#e7eaf1',
-  '--pane-surface-active': '#d7dce7',
-  '--pane-border': '#d7dce7',
-  '--pane-border-strong': '#a8b0c2',
+export const PANE_LIGHT: PaneTokens = {
+  '--pane-surface': '#fbfcfe',
+  '--pane-surface-raised': '#eef1f6',
+  '--pane-surface-hover': '#e3e7ef',
+  '--pane-surface-active': '#cfd5e2',
+  '--pane-border': '#b6bdcd',
+  '--pane-border-strong': '#8b94a8',
   '--pane-ink-strong': '#0f172a',
   '--pane-ink': '#334155',
   '--pane-ink-muted': '#55607a',
-  '--pane-ink-faint': '#6b7280',
-  '--pane-caution': '#8a6100',
-} as CSSProperties;
+  '--pane-ink-faint': '#606b80',
+  '--pane-swatch-ink': '#fbfcfe',
+};
 
 const preview: Preview = {
   globalTypes: {
@@ -74,13 +97,15 @@ const preview: Preview = {
       const dark = context.globals.scheme !== 'light';
       return (
         <div
-          style={{
-            background: dark ? '#0b1020' : '#f7f8fa',
-            color: dark ? '#e9edf6' : '#111827',
-            padding: 12,
-            minHeight: '100vh',
-            ...(dark ? PANE_DARK : PANE_LIGHT),
-          }}
+          style={
+            {
+              background: dark ? '#0b1020' : '#f7f8fa',
+              color: dark ? '#e9edf6' : '#111827',
+              padding: 12,
+              minHeight: '100vh',
+              ...(dark ? PANE_DARK : PANE_LIGHT),
+            } as CSSProperties
+          }
         >
           <Story />
         </div>

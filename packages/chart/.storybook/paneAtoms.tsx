@@ -15,7 +15,7 @@ import type { CSSProperties, ReactNode } from 'react';
  */
 const font = "'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace";
 
-export const paneStyles: Record<string, CSSProperties> = {
+export const paneStyles = {
   root: {
     display: 'flex',
     flexDirection: 'column',
@@ -64,10 +64,17 @@ export const paneStyles: Record<string, CSSProperties> = {
     color: 'var(--pane-ink-muted)',
   },
   cap: { fontSize: 10, color: 'var(--pane-ink-faint)', fontVariantNumeric: 'tabular-nums' },
-  /** The same counter once the pane is AT its cap. A colour change, not a new
-   *  line of text: the row is already dense, and the inert checkboxes beside it
-   *  tell the rest of the story. */
-  capFull: { fontSize: 10, color: 'var(--pane-caution)', fontVariantNumeric: 'tabular-nums' },
+  /** The same counter once the pane is AT its cap. It lifts to the top ink tier
+   *  rather than taking a warning hue: on a pane where colour IS the series
+   *  vocabulary, an amber counter is one curve's identity spent on chrome — and
+   *  the obvious amber is the first ladder entry, which is on by default and
+   *  sits in this very row. Brightness is the channel chrome gets. */
+  capFull: {
+    fontSize: 10,
+    color: 'var(--pane-ink-strong)',
+    fontWeight: 600,
+    fontVariantNumeric: 'tabular-nums',
+  },
   plotRow: { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 },
   subtitle: {
     alignSelf: 'flex-end',
@@ -75,7 +82,7 @@ export const paneStyles: Record<string, CSSProperties> = {
     color: 'var(--pane-ink-muted)',
     marginBottom: 2,
   },
-};
+} satisfies Record<string, CSSProperties>;
 
 export function SelectLabel({ children, colon = true }: { children: ReactNode; colon?: boolean }) {
   return (
@@ -248,7 +255,11 @@ export function SeriesCheckbox({
           borderRadius: 2,
           border: `1.5px solid ${checked ? color : 'var(--pane-border-strong)'}`,
           background: checked ? color : 'transparent',
-          color: 'var(--pane-surface)',
+          // The tick sits on the CURVE's colour, not on the pane — so it takes
+          // the ink meant for that, which inverts with the scheme alongside the
+          // ladder. Reading the pane's ground here put a near-white tick on a
+          // pale swatch in light mode (1.56:1, invisible).
+          color: 'var(--pane-swatch-ink)',
           fontSize: 9,
           fontWeight: 700,
           lineHeight: '9px',
