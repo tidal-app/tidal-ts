@@ -31,7 +31,9 @@
     "build": "rm -rf dist && tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.test.json",
     "test": "vitest run",
-    "prepack": "pnpm run build"
+    "prepack": "pnpm run build",
+    "storybook": "storybook dev -p 6009 --no-open",
+    "build-storybook": "storybook build"
   },
   "publishConfig": {
     "access": "public"
@@ -46,13 +48,21 @@
     "@tidal-ts/core": "workspace:*"
   },
   "devDependencies": {
+    "@pond-ts/charts": "^0.69.0",
     "@pond-ts/financial": "^0.69.0",
     "@pond-ts/process": "0.69.0",
-    "pond-ts": "^0.69.0",
-    "typescript": "^5.7.2",
-    "vitest": "^2.1.8",
-    "@pond-ts/charts": "^0.69.0",
+    "@storybook/addon-essentials": "^8.5.0",
+    "@storybook/react": "^8.5.0",
+    "@storybook/react-vite": "^8.5.0",
     "@types/react": "^18.3.18",
-    "react": "^18.3.1"
+    "@types/react-dom": "^18.3.5",
+    "@vitejs/plugin-react": "^4.3.4",
+    "pond-ts": "^0.69.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "storybook": "^8.5.0",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8"
   }
 }

@@ -20,6 +20,9 @@ configuration statechart). Dependency direction is one-way: `terminal → chart
 
 ## Rules that shape the code
 
+- **The stories are the proof, not decoration.** `pnpm storybook` hosts the
+  chart from a literal theme with no provider and no stylesheet; a story that
+  needs either is the boundary breaking.
 - **The chart reads no token, no provider, no storage.** Theme, colour
   resolution and settings arrive as props (`packages/chart/src/boundary.test.ts`
   enforces the folder's imports). A host owns the look; the chart owns the
