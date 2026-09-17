@@ -64,6 +64,10 @@ export const paneStyles: Record<string, CSSProperties> = {
     color: 'var(--pane-ink-muted)',
   },
   cap: { fontSize: 10, color: 'var(--pane-ink-faint)', fontVariantNumeric: 'tabular-nums' },
+  /** The same counter once the pane is AT its cap. A colour change, not a new
+   *  line of text: the row is already dense, and the inert checkboxes beside it
+   *  tell the rest of the story. */
+  capFull: { fontSize: 10, color: 'var(--pane-caution)', fontVariantNumeric: 'tabular-nums' },
   plotRow: { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 },
   subtitle: {
     alignSelf: 'flex-end',

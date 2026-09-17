@@ -39,6 +39,11 @@ import type { ChartSeries, SeriesConfig, TimeSeriesChartRow } from './index.js';
  * - **one y-axis column per active curve**, each in its curve's own colour
  *   (`axisGroup` per config — the same mechanism a terminal's "unlink" uses,
  *   here applied by the pane rather than by the user);
+ * - **a confidence envelope under two of the curves** — a `bollinger` spec
+ *   drawn as `style: 'band'`, sharing its curve's `axisGroup` so the band
+ *   scales with the line it belongs to instead of claiming a gutter column of
+ *   its own. Fixed by the pane, not added by a user: on this surface the
+ *   envelope is part of what the curve MEANS;
  * - an expiry radio group and a day-range segmented control, which change what
  *   is asked for rather than what is drawn;
  * - colours, labels and units decided by the pane, so no `resolveColor` is
@@ -47,6 +52,23 @@ import type { ChartSeries, SeriesConfig, TimeSeriesChartRow } from './index.js';
  * Two of the eight curves are **derived** (a ratio and a difference between two
  * columns), built as `DeriveSpec`s and folded by `prepareChart` — a pane gets
  * the study engine without shipping a study menu.
+ *
+ * **Why six.** The cap is not a taste call — it is the gutter's price. Every
+ * active curve takes its own tick column, so the chrome grows with the data and
+ * a pane that allowed its whole catalog at once would be mostly axis. Six is
+ * where the gutter still leaves the plot more than half the width.
+ *
+ * **What this pane cannot say yet.** A closed vocabulary wants TEXTURE as a
+ * channel it controls: a censored twin drawn in its sibling's hue and a dash,
+ * a benchmark-relative curve dashed so it reads as derived with no legend. Here
+ * dash is resolved by CATEGORY (`ChartSettings.metrics` / `derived` /
+ * `comparisons`) from a single `DASH_PATTERN`, and the category is decided by
+ * whether a spec is windowed — so a pointwise relative like the two below takes
+ * the raw-metric category and draws solid. The pane's only free channel is
+ * colour, which is why the censored pair are two hues rather than one hue and
+ * two textures. Written down rather than worked around: a per-series texture
+ * would be a change to `SeriesConfig` and to what dash MEANS on this chart, and
+ * that is a decision for the consumer to ask for, not for a story to force.
  *
  * Everything outside the plot is the pane's own (`.storybook/paneAtoms.tsx`)
  * and deliberately not part of the package: the library owns the drawing, the
@@ -72,6 +94,21 @@ const LADDER = [
 const ratio: DeriveSpec = { op: 'ratio', inputs: ['iv21', 'iv63'] };
 const spread: DeriveSpec = { op: 'diff', inputs: ['iv21', 'rvcc21'] };
 
+/** The envelope under a banded curve — the same `bollinger` op a terminal
+ *  offers in its study menu, here nailed down by the pane. One period and one
+ *  width for every band on the pane: envelopes at several weights would read as
+ *  several different things rather than one convention.
+ *
+ *  One standard deviation, not the textbook two: the band has to stay a HINT
+ *  under its line. At 2σ a vol spike inflates the envelope until it is the
+ *  loudest thing in the plot and drags its curve's axis out with it — the band
+ *  is inside the extent the axis has to cover. */
+const envelope = (column: string): DeriveSpec => ({
+  op: 'bollinger',
+  inputs: [column],
+  params: { period: 20, stdDev: 1 },
+});
+
 /** The pane's CLOSED vocabulary: what this chart is for, named once. A user can
  *  turn these on and off and nothing else — there is no path to a ninth curve. */
 interface Curve {
@@ -82,9 +119,20 @@ interface Curve {
   unit: string;
   group: 'level' | 'relative';
   derive?: DeriveSpec;
+  /** Carries a confidence envelope. A property of the CURVE, not a user choice
+   *  — the vocabulary says which readings come with a band. */
+  band?: boolean;
 }
 const CATALOG: readonly Curve[] = [
-  { key: 'iv21', label: 'ATM Vol 21D', column: 'iv21', source: 'vol', unit: '%', group: 'level' },
+  {
+    key: 'iv21',
+    label: 'ATM Vol 21D',
+    column: 'iv21',
+    source: 'vol',
+    unit: '%',
+    group: 'level',
+    band: true,
+  },
   {
     key: 'hv21',
     label: 'ATM Vol 21D · censored',
@@ -108,6 +156,7 @@ const CATALOG: readonly Curve[] = [
     source: 'vol',
     unit: '%',
     group: 'level',
+    band: true,
   },
   { key: 'price', label: 'Price', column: 'close', source: 'price', unit: '$', group: 'level' },
   {
@@ -153,28 +202,54 @@ function Pane({ scheme }: { scheme: 'dark' | 'light' }) {
   const [on, setOn] = useState<readonly string[]>(DEFAULT_ON);
   const [expiry, setExpiry] = useState(EXPIRIES[0]!);
   const [days, setDays] = useState<(typeof DAY_RANGES)[number]['value']>('5');
+  const [bands, setBands] = useState(true);
 
   // One config per ACTIVE curve, in catalog order — the pane decides colour,
   // axis and style; `axisGroup` gives each curve its own scale, which is what
   // puts a coloured tick column per curve down the left.
-  const configs = useMemo<SeriesConfig[]>(
-    () =>
-      CATALOG.filter((c) => on.includes(c.key)).map((c) => ({
-        id: c.key,
-        column: c.column,
-        label: c.label,
-        color: colorOf(c.key),
-        axis: 'L',
-        axisGroup: c.key,
-        style: 'line',
-        visible: true,
-        value: null,
-        unit: c.unit,
-        source: c.source,
-        ...(c.derive ? { derive: c.derive } : {}),
-      })),
-    [on],
-  );
+  const configs = useMemo<SeriesConfig[]>(() => {
+    const active = CATALOG.filter((c) => on.includes(c.key));
+    const lines = active.map<SeriesConfig>((c) => ({
+      id: c.key,
+      column: c.column,
+      label: c.label,
+      color: colorOf(c.key),
+      axis: 'L',
+      axisGroup: c.key,
+      style: 'line',
+      visible: true,
+      value: null,
+      unit: c.unit,
+      source: c.source,
+      ...(c.derive ? { derive: c.derive } : {}),
+    }));
+    // An envelope is not a seventh curve: it takes its parent's `axisGroup`, so
+    // it shares that curve's scale and adds no tick column — which is why a
+    // band costs nothing against the cap.
+    const envelopes = bands
+      ? active
+          .filter((c) => c.band)
+          .map<SeriesConfig>((c) => {
+            const spec = envelope(c.column);
+            return {
+              id: `${c.key}__band`,
+              column: deriveId(spec),
+              label: `${c.label} band`,
+              color: colorOf(c.key),
+              axis: 'L',
+              axisGroup: c.key,
+              style: 'band',
+              visible: true,
+              value: null,
+              unit: c.unit,
+              source: c.source,
+              derive: spec,
+            };
+          })
+      : [];
+    // Bands first: configs draw in order, and a band is a hint UNDER its line.
+    return [...envelopes, ...lines];
+  }, [bands, on]);
 
   // The fold runs the two derived curves; the facts value the legend. A pane
   // does exactly what a terminal does here — it just never offers the menu.
@@ -217,6 +292,7 @@ function Pane({ scheme }: { scheme: 'dark' | 'light' }) {
         </SelectorGroup>
         <span style={S.spacer} />
         <ToggleGroup label="Day Range" items={DAY_RANGES} active={days} onChange={setDays} />
+        <SelectPill label="Bands" active={bands} onClick={() => setBands((b) => !b)} />
       </div>
 
       <div style={S.seriesRow} role="group" aria-label="Curves">
@@ -244,7 +320,7 @@ function Pane({ scheme }: { scheme: 'dark' | 'light' }) {
           />
         ))}
         <span style={S.spacer} />
-        <span style={S.cap}>
+        <span style={full ? S.capFull : S.cap}>
           {on.length}/{MAX_ACTIVE} curves
         </span>
       </div>
