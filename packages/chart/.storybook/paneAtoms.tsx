@@ -103,7 +103,25 @@ export const paneStyles = {
     touchAction: 'none',
     zIndex: 1,
   },
-  rowGripBar: { width: 28, height: 3, borderRadius: 2, background: 'var(--pane-border-strong)' },
+  /** The hairline where two rows meet. Full width, under the grip, so the
+   *  boundary reads as a boundary even when nobody is reaching for it — the
+   *  grip alone said "you may drag here" without saying "the reading changes
+   *  here", which is the more important of the two. */
+  rowRule: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 4,
+    height: 1,
+    background: 'var(--pane-border)',
+  },
+  rowGripBar: {
+    width: 28,
+    height: 3,
+    borderRadius: 2,
+    background: 'var(--pane-border-strong)',
+    position: 'relative',
+  },
   subtitle: {
     alignSelf: 'flex-end',
     fontSize: 10,

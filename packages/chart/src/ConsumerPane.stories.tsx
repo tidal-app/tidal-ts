@@ -511,6 +511,7 @@ function Pane({ scheme }: { scheme: 'dark' | 'light' }) {
               style={{ ...S.rowGrip, top: CHART_H - relH - 5 }}
               onPointerDown={onGripDown}
             >
+              <span aria-hidden style={S.rowRule} />
               <span aria-hidden style={S.rowGripBar} />
             </div>
           ) : null}
