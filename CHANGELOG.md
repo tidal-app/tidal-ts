@@ -2,7 +2,11 @@
 
 All packages release together on one version.
 
-## Unreleased
+## 0.2.1 — 2026-09-18
+
+The day after 0.2.0. The first embedded consumer's review found a band a bar
+ahead of the line beside it, and pond 0.70.0 shipped the same morning with the
+`sessionBreaks` the band had been working around. Both are in.
 
 - **The pond family floors at `^0.70.0`** (`@pond-ts/process` exact `0.70.0`), and
   `@pond-ts/react` is named as `@tidal-ts/chart`'s peer. It always was
