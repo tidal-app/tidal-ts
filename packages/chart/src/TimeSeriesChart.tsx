@@ -1179,10 +1179,11 @@ function TimeSeriesChartInner({
   /** …and whether a FILL has to be split to do so: only when there are seams. */
   const splitsFor = (c: SeriesConfig): boolean => breaksFor(c) && sessions.length > 1;
 
-  // One sub-series per live segment, for the layers pond gives no `sessionBreaks`
-  // (`<BandChart>`, `<AreaChart>`). Lazy and cached on the series object: slicing
-  // a 250k-row series into ~250 sessions is real work, and most renders draw no
-  // fill at all. The cache resets with the segments.
+  // One sub-series per live segment, for the one layer pond gives no
+  // `sessionBreaks` (`<AreaChart>`; `<BandChart>` got it in charts 0.70.0).
+  // Lazy and cached on the series object: slicing a 250k-row series into ~250
+  // sessions is real work, and most renders draw no fill at all. The cache
+  // resets with the segments.
   const { segmentsFor, endSegmentsFor } = useMemo(() => {
     const raw = new Map<ChartSeries, ChartSeries[]>();
     const end = new Map<ChartSeries, ChartSeries[]>();

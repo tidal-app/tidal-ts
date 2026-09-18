@@ -8,11 +8,11 @@ Cut out of [Tidal](https://github.com/tidal-app/tidal), a volatility analytics
 terminal, so that other applications can render the same chart without Tidal's
 control panel or data layer. **Pre-1.0 — pin an exact version.**
 
-| package              | what                                                                                                                         | peers                                                     |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| `@tidal-ts/core`     | studies and derive specs on `@pond-ts/process`, the vol schema, bar windows, the columnar wire adapter, sessions, time zones | `pond-ts`, `@pond-ts/financial`, `@pond-ts/process`       |
-| `@tidal-ts/chart`    | `TimeSeriesChart`, `SeriesConfig` and the axis vocabulary, chart settings, the prepare step                                  | React, `@pond-ts/charts`, `pond-ts`, `@pond-ts/financial` |
-| `@tidal-ts/terminal` | the terminal machine (XState v5): rows, series, studies, pairs, axes, presets — config only                                  | React, `xstate`, `@xstate/react`                          |
+| package              | what                                                                                                                         | peers                                                                       |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `@tidal-ts/core`     | studies and derive specs on `@pond-ts/process`, the vol schema, bar windows, the columnar wire adapter, sessions, time zones | `pond-ts`, `@pond-ts/financial`, `@pond-ts/process`                         |
+| `@tidal-ts/chart`    | `TimeSeriesChart`, `SeriesConfig` and the axis vocabulary, chart settings, the prepare step                                  | React, `@pond-ts/charts`, `@pond-ts/react`, `pond-ts`, `@pond-ts/financial` |
+| `@tidal-ts/terminal` | the terminal machine (XState v5): rows, series, studies, pairs, axes, presets — config only                                  | React, `xstate`, `@xstate/react`                                            |
 
 The pond family is a **peer dependency**: one copy of `pond-ts` per bundle, on
 one version, or series identity breaks silently. Install the same version of
