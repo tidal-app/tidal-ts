@@ -103,6 +103,7 @@ export {
   sessionOpenLine,
   sessionSegments,
   shiftKeys,
+  sliceBySegments,
   type Segment,
   type SessionSegmentOptions,
 } from './sessions.js';

@@ -46,6 +46,7 @@ import {
   exactSessionSegments,
   sessionSegments,
   shiftKeys,
+  sliceBySegments,
   WINDOW_MS,
   autoBarWindow,
   type BarReducer,
@@ -67,6 +68,7 @@ import {
   seriesLineWidth,
   sharedAxisId,
   axisFormat,
+  fractionTicks,
   bandColumns,
   outputKey,
   configColumns,
@@ -363,6 +365,28 @@ export interface TimeSeriesChartProps {
       precision?: number;
       /** `log` never arrives with a `0` bound — the host refuses that pairing. */
       scaleType?: 'linear' | 'log';
+      /**
+       * A title over the gutter — the curve's name atop its own column. Drawn
+       * at the top of the gutter with headroom padded into the domain so the
+       * top tick does not collide with it. One titled axis pads every axis on
+       * its side, so their tick rows stay aligned. Absent everywhere ⇒ no title
+       * and no pad: the legend carries identity, which is right for a terminal
+       * and wrong for a pane whose gutter IS the legend.
+       */
+      label?: string;
+      /**
+       * Pin this many ticks at equal FRACTIONS of `[min, max]`. Several
+       * own-axes stacked on one side each nice their ticks independently, so
+       * their rows land at different heights and the one grid the row draws
+       * lines up with exactly one of them; the same fractions on every axis
+       * make the rows agree by construction (`fractionTicks`). Honoured only
+       * when BOTH bounds are pinned (a free bound has no fraction to pin to)
+       * and the scale is linear (equal fractions of a log domain bunch).
+       */
+      ticks?: number;
+      /** The gutter's width in px; absent keeps pond's default. A pane that
+       *  stacks one column per curve budgets this exactly. */
+      width?: number;
     }
   >;
   /**
@@ -411,6 +435,10 @@ function parseHex(hex: string): [number, number, number] | null {
   const n = parseInt(m[1]!, 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
+
+/** Headroom a TITLED axis adds above its domain, as a fraction of the span, so
+ *  the top tick clears the title drawn in the same gutter. */
+const AXIS_LABEL_HEADROOM = 0.14;
 
 /** How far a hovered axis's ink shifts toward the theme's extreme. */
 const HOVER_LIFT = 0.42;
@@ -1145,6 +1173,28 @@ function TimeSeriesChartInner({
     return bar !== undefined && bar < WINDOW_MS['1d'];
   }, [sources]);
 
+  /** Whether this config's layers break at the session seams. */
+  const breaksFor = (c: SeriesConfig): boolean =>
+    intraday && settings.sessions.breaks && !coarse.has(c.source ?? '');
+  /** …and whether a FILL has to be split to do so: only when there are seams. */
+  const splitsFor = (c: SeriesConfig): boolean => breaksFor(c) && sessions.length > 1;
+
+  // One sub-series per live segment, for the layers pond gives no `sessionBreaks`
+  // (`<BandChart>`, `<AreaChart>`). Lazy and cached on the series object: slicing
+  // a 250k-row series into ~250 sessions is real work, and most renders draw no
+  // fill at all. The cache resets with the segments.
+  const segmentsFor = useMemo(() => {
+    const cache = new Map<ChartSeries, ChartSeries[]>();
+    return (series: ChartSeries): ChartSeries[] => {
+      let slices = cache.get(series);
+      if (!slices) {
+        slices = sliceBySegments(series, sessions) as ChartSeries[];
+        cache.set(series, slices);
+      }
+      return slices;
+    };
+  }, [sessions]);
+
   const discontinuities = useMemo(
     () =>
       !collapseWeekends
@@ -1181,12 +1231,37 @@ function TimeSeriesChartInner({
       (c.source ? shifted.get(c.source) : undefined) ??
       panelSeries;
     switch (c.style) {
-      case 'area':
-        return [
-          // No `sessionBreaks` on `<AreaChart>` — the prop is LineChart-only, so
-          // an area still bridges the seam. Logged as F-charts-20.
-          <AreaChart key={c.id} series={closeSeries} column={col} as={c.id} axis={axis} />,
-        ];
+      case 'area': {
+        // No `sessionBreaks` on `<AreaChart>` — the prop is LineChart-only
+        // (F-charts-20), so the break is made here: one layer per live segment,
+        // and the fill ends at the close and restarts at the open like the line
+        // would. One layer when nothing collapses.
+        //
+        // Cut the RAW series, then shift each slice — never the reverse. The
+        // segments come from unshifted keys, so a shifted session's last close
+        // sits exactly on its segment end and the half-open cut would drop it:
+        // the fill would stop one bar before the line it is meant to agree with,
+        // at every seam.
+        if (!splitsFor(c)) {
+          return [<AreaChart key={c.id} series={closeSeries} column={col} as={c.id} axis={axis} />];
+        }
+        const native = c.source ? nativeMs(sources[c.source]!) : undefined;
+        const atClose = (slice: ChartSeries): ChartSeries => {
+          if (native === undefined) return slice;
+          if (c.source && col === 'close' && ohlc.has(c.source))
+            return sessionOpenLine(slice, native, { open: 'open', close: 'close' }) as ChartSeries;
+          return shiftKeys(slice, native) as ChartSeries;
+        };
+        return segmentsFor(panelSeries).map((slice, i) => (
+          <AreaChart
+            key={`${c.id}__s${i}`}
+            series={atClose(slice)}
+            column={col}
+            as={c.id}
+            axis={axis}
+          />
+        ));
+      }
       case 'bar': {
         const s = derived.bar.get(c.id);
         if (!s) return [];
@@ -1252,23 +1327,41 @@ function TimeSeriesChartInner({
         // `col` is the SPEC ID here, not a column: a multi-output op names its
         // three columns off it (`bandColumns`). Reading `col` itself would find
         // nothing.
+        //
+        // The wash has no `sessionBreaks` either, so on a collapsing axis it is
+        // one `<BandChart>` per live segment over that segment's slice — else a
+        // filled envelope bridges the overnight gap its own centre line honours.
         const b = bandColumns(col);
+        const washes = splitsFor(c)
+          ? segmentsFor(panelSeries).map((slice, i) => (
+              <BandChart
+                key={`${c.id}__band${i}`}
+                series={slice}
+                lower={b.lower}
+                upper={b.upper}
+                as={c.id}
+                axis={axis}
+              />
+            ))
+          : [
+              <BandChart
+                key={`${c.id}__band`}
+                series={panelSeries}
+                lower={b.lower}
+                upper={b.upper}
+                as={c.id}
+                axis={axis}
+              />,
+            ];
         return [
-          <BandChart
-            key={`${c.id}__band`}
-            series={panelSeries}
-            lower={b.lower}
-            upper={b.upper}
-            as={c.id}
-            axis={axis}
-          />,
+          ...washes,
           <LineChart
             key={c.id}
             series={panelSeries}
             column={b.middle}
             as={c.id}
             axis={axis}
-            sessionBreaks={intraday && settings.sessions.breaks && !coarse.has(c.source ?? '')}
+            sessionBreaks={breaksFor(c)}
           />,
         ];
       }
@@ -1529,6 +1622,16 @@ function TimeSeriesChartInner({
                       setHoverAxis((cur) => (cur === axisId ? null : cur));
                   }
                 : () => undefined;
+              // A title pads its axis's domain (headroom for the title), and pond
+              // pads BOTH ends. Pad one axis and its tick rows slide against its
+              // neighbours', which undoes what `ticks` is for — so one titled
+              // axis pads every axis on its side. Recorded as a pond ask: a
+              // top-only pad, so a title does not also lift a `min: 0` floor.
+              const sideAxisIds = [
+                ...(shared.length > 0 ? [rowAxis(row.id, side)] : []),
+                ...[...grouped.keys()].map((g) => seriesAxisId(row.id, side, g)),
+              ];
+              const sideTitled = sideAxisIds.some((a) => !!axisOptions?.[a]?.label);
               const axis = (id: string, cfgs: readonly SeriesConfig[]) => {
                 // An axis takes its members' colour when they AGREE on one —
                 // not just when there is exactly one of them. Two legs of a
@@ -1538,17 +1641,39 @@ function TimeSeriesChartInner({
                 // (Peter, 2026-08-18).
                 const only = new Set(cfgs.map((c) => c.color));
                 const own = only.size === 1 ? resolveColor(cfgs[0]!.color) : null;
+                const opts = axisOptions?.[id];
+                // The unit decides the shape, the axis's precision decides the
+                // decimals (`axisFormat`); absent, every unit formats exactly as
+                // it always did.
+                const format = axisFormat(cfgs[0]!.unit, opts?.precision);
+                // Pinned ticks need pinned bounds (a fraction of a free edge is
+                // not a position) and a linear scale (equal fractions of a log
+                // domain bunch toward the top).
+                const scale = opts?.scaleType ?? 'linear';
+                const ticks =
+                  scale === 'linear' &&
+                  opts?.ticks !== undefined &&
+                  opts.min !== undefined &&
+                  opts.max !== undefined
+                    ? fractionTicks(opts.min, opts.max, opts.ticks, format)
+                    : undefined;
                 return (
                   <YAxis
                     key={id}
                     id={id}
                     side={side === 'R' ? 'right' : 'left'}
-                    label=""
-                    // The unit decides the shape, the axis's precision decides
-                    // the decimals (`axisFormat`); absent, every unit formats
-                    // exactly as it always did.
-                    format={axisFormat(cfgs[0]!.unit, axisOptions?.[id]?.precision)}
-                    scale={axisOptions?.[id]?.scaleType ?? 'linear'}
+                    label={opts?.label ?? ''}
+                    // A title sits at the top of its own gutter, exactly where
+                    // the top tick label wants to be. Padding the domain pushes
+                    // that tick down off the edge and leaves the title a clear
+                    // line; the same pad on every titled axis keeps their rows
+                    // aligned.
+                    labelPlacement={opts?.label ? 'top' : undefined}
+                    pad={sideTitled ? AXIS_LABEL_HEADROOM : undefined}
+                    width={opts?.width}
+                    ticks={ticks}
+                    format={format}
+                    scale={scale}
                     color={
                       hoverAxis === id
                         ? hoverInk(own ?? base.axis.label, colorScheme)

@@ -364,6 +364,32 @@ export function logAllowed(range: AxisRange | undefined): [boolean, string?] {
  */
 const AXIS_FORMATS = new Map<string, (v: number) => string>();
 
+/**
+ * Ticks at the same FRACTIONS of an axis's own domain — `i / (count - 1)` of the
+ * way from `min` to `max`, labelled by `format`.
+ *
+ * Several own-axes stacked on one side each nice their ticks independently, so
+ * their rows land at different heights and the one grid the row draws (from the
+ * first axis) lines up with exactly one of them. Pinning every axis to explicit
+ * bounds and to these ticks makes the rows agree by construction, and the
+ * gridlines then read as every axis's grid. Only meaningful when both bounds are
+ * fixed, which is why the chart takes the count through `axisOptions` and
+ * ignores it when either bound is free. Fewer than two ticks, or an inverted
+ * domain, is nothing to draw.
+ */
+export function fractionTicks(
+  min: number,
+  max: number,
+  count: number,
+  format: (v: number) => string,
+): Array<{ at: number; label: string }> {
+  if (!(count >= 2) || !(max > min)) return [];
+  return Array.from({ length: count }, (_, i) => {
+    const at = min + ((max - min) * i) / (count - 1);
+    return { at, label: format(at) };
+  });
+}
+
 export function axisFormat(unit: string | undefined, precision?: number): (v: number) => string {
   const key = `${unit ?? ''}|${precision ?? ''}`;
   const memo = AXIS_FORMATS.get(key);

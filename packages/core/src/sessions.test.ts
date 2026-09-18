@@ -5,6 +5,7 @@ import {
   sessionOpenLine,
   sessionSegments,
   shiftKeys,
+  sliceBySegments,
   type Segment,
 } from './sessions.js';
 import { buildPriceSeries, type PriceRow } from './fixture.js';
@@ -430,5 +431,79 @@ describe('what a calendar buys over inferring from bars', () => {
     const listed = utc('2025-11-20');
     const clipped = CALENDAR.filter((d) => d >= listed);
     expect(span(exactSessionSegments(clipped, DAY))).toEqual(['2025-11-20→2025-11-22']);
+  });
+});
+
+describe('sliceBySegments — a fill ends at the close and restarts at the open', () => {
+  const session = (day: number, bars: number) => {
+    const rows: PriceRow[] = [];
+    const open = Date.UTC(2026, 6, day, 13, 30);
+    for (let m = 0; m < bars; m += 1) {
+      const v = 100 + day + m;
+      rows.push([open + m * MIN, v, v + 1, v - 1, v + 0.5, 10]);
+    }
+    return rows;
+  };
+  const keys = (s: unknown) => {
+    const a = s as { keyColumn(): { at(i: number): number }; length: number };
+    return Array.from({ length: a.length }, (_, i) => a.keyColumn().at(i));
+  };
+  const closes = (s: unknown) => {
+    const a = s as { length: number; column(n: string): { read(i: number): number } };
+    return Array.from({ length: a.length }, (_, i) => a.column('close').read(i));
+  };
+
+  it('cuts one sub-series per session, each holding exactly that session’s bars', () => {
+    const raw = buildPriceSeries('X', [...session(15, 5), ...session(16, 3)]);
+    const segments = sessionSegments(keys(raw));
+    expect(segments).toHaveLength(2);
+    const slices = sliceBySegments(raw, segments);
+    expect(slices.map((s) => keys(s).length)).toEqual([5, 3]);
+    // Values travel with their keys — this cuts rows, it does not reorder them.
+    expect(closes(slices[0])).toEqual(closes(raw).slice(0, 5));
+    expect(closes(slices[1])).toEqual(closes(raw).slice(5));
+    // Pond did the cut, so the slice is still the same series in every other way.
+    expect((slices[0] as unknown as { name: string }).name).toBe(
+      (raw as unknown as { name: string }).name,
+    );
+  });
+
+  it('is half-open: a key exactly on a segment’s end belongs to nothing', () => {
+    const raw = buildPriceSeries('X', [...session(15, 5), ...session(16, 3)]);
+    const [first] = sessionSegments(keys(raw));
+    // A segment that begins AT the first's end holds nothing — the bar at that
+    // instant would have to be strictly inside it.
+    expect(sliceBySegments(raw, [first!, [first![1], first![1] + MIN]])).toHaveLength(1);
+  });
+
+  it('cut then shift keeps every row; shift then cut loses the last close of every session', () => {
+    const raw = buildPriceSeries('X', [...session(15, 5), ...session(16, 3)]);
+    const segments = sessionSegments(keys(raw));
+    const cutThenShift = sliceBySegments(raw, segments).map((s) => shiftKeys(s, MIN));
+    expect(cutThenShift.reduce((n, s) => n + keys(s).length, 0)).toBe(8);
+    // The trap the chart avoids: shifted, each session’s last key lands ON its
+    // segment end and the half-open bound drops it.
+    const shiftThenCut = sliceBySegments(shiftKeys(raw, MIN), segments);
+    expect(shiftThenCut.reduce((n, s) => n + keys(s).length, 0)).toBe(6);
+  });
+
+  it('drops a segment the data never reaches rather than emitting an empty series', () => {
+    const raw = buildPriceSeries('X', session(15, 4));
+    const segments: Segment[] = [
+      [Date.UTC(2026, 6, 14, 13, 30), Date.UTC(2026, 6, 14, 20)],
+      [Date.UTC(2026, 6, 15, 13, 30), Date.UTC(2026, 6, 15, 20)],
+    ];
+    expect(sliceBySegments(raw, segments)).toHaveLength(1);
+  });
+
+  it('hands the series back whole when no segment is known', () => {
+    const raw = buildPriceSeries('X', session(15, 4));
+    expect(sliceBySegments(raw, [])).toEqual([raw]);
+  });
+
+  it('cuts to a single segment’s span, dropping what lies outside it', () => {
+    const raw = buildPriceSeries('X', session(15, 4));
+    const [only] = sliceBySegments(raw, [[keys(raw)[1]!, keys(raw)[3]!]]);
+    expect(keys(only!)).toHaveLength(2);
   });
 });

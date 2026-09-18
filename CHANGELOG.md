@@ -4,6 +4,25 @@ All packages release together on one version.
 
 ## Unreleased
 
+- `@tidal-ts/chart`: **a fill breaks at the session seams.** `<BandChart>` and
+  `<AreaChart>` have no `sessionBreaks` (the prop is `<LineChart>`'s alone), so
+  on a collapsing intraday axis a confidence envelope bridged the overnight gap
+  its own centre line honoured. The chart now draws one wash per live segment,
+  over that segment's slice — `sliceBySegments` in `@tidal-ts/core`, pond's own
+  `bisect` + `slice`, nothing materialised — when the axis actually collapses,
+  and one layer otherwise. A fill drawn at the bar's END is cut first and shifted
+  after: shifted, a session's last close sits exactly on its segment's half-open
+  end and would be dropped at every seam. The first embedded consumer had this
+  as a per-pane workaround; it belongs in the chart.
+- `@tidal-ts/chart`: **`axisOptions` grows three fields a pane needs and a
+  terminal does not.** `label` titles the gutter (the curve's name atop its own
+  column, with headroom so the top tick clears it); `ticks` pins that many
+  ticks at equal fractions of a pinned `[min, max]`, so stacked own-axes put
+  their tick rows at the same heights and the one grid reads as everyone's
+  (`fractionTicks`); `width` budgets the gutter. One titled axis pads every axis
+  on its side, since pond pads both ends and an unequal pad would slide the rows
+  apart again; pinned ticks apply to linear scales only. All three absent ⇒
+  exactly the 0.1.x rendering.
 - `@tidal-ts/chart` has a **workshop**: Storybook on `:6009`, hosting the chart
   from a literal `ChartTheme` with no provider and no stylesheet. Not published
   (the packages ship `dist` only) — it is where a consumer can see what the

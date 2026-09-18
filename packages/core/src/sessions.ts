@@ -208,6 +208,47 @@ interface ColumnarOut {
 }
 
 /**
+ * The series cut into one sub-series per live segment — `[start, end)` on the
+ * time key, empty segments dropped.
+ *
+ * For the layers pond gives no `sessionBreaks` of their own: `<BandChart>` and
+ * `<AreaChart>` (the prop is `<LineChart>`'s alone). A fill drawn across a
+ * collapsed overnight gap bridges seventeen hours of closed market in one
+ * confident sweep and contradicts the line drawn over it; one layer per segment
+ * ends the fill at the close and restarts it at the open, which is what that
+ * line already does. The cost is `segments.length` layers instead of one, so a
+ * caller asks only when the axis actually collapses.
+ *
+ * Pond does the cutting — `bisect` finds each edge in O(log n) on the packed key
+ * buffer and `slice` is positional and half-open — so nothing here is
+ * materialised or rebuilt. Segments must be ascending and non-overlapping, which
+ * is what `sessionSegments` / `exactSessionSegments` produce; no segments means
+ * nothing is known to be closed, and the series comes back whole.
+ *
+ * **Cut before you shift.** A series whose keys were moved to the bar's END
+ * (`shiftKeys`) puts every session's last point exactly ON its segment's end,
+ * which the half-open bound excludes — one close lost per session, at the seam,
+ * where it shows. Slice the raw series and shift each slice.
+ */
+export function sliceBySegments(
+  series: TimeSeries<SeriesSchema>,
+  segments: readonly Segment[],
+): TimeSeries<SeriesSchema>[] {
+  if (segments.length === 0) return [series];
+  const s = series as unknown as {
+    bisect(key: number): number;
+    slice(begin: number, end: number): TimeSeries<SeriesSchema>;
+  };
+  const out: TimeSeries<SeriesSchema>[] = [];
+  for (const [start, end] of segments) {
+    const lo = s.bisect(start);
+    const hi = s.bisect(end);
+    if (hi > lo) out.push(s.slice(lo, hi));
+  }
+  return out;
+}
+
+/**
  * The price path a session actually traced: its **open**, then every close.
  *
  * A line of closes alone starts a minute late. The bar covering 15:30–15:31 has
