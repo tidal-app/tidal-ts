@@ -2,6 +2,20 @@
 
 All packages release together on one version.
 
+## Unreleased
+
+- `@tidal-ts/chart`: **a band's wash and centre line, and a study's line
+  outputs, now sit where a plain line does — at the bar's end.** A `line`
+  config was drawn on the key-shifted series (a close belongs at its bar's
+  end) while `band` and `lines` configs were drawn on the raw one, so a banded
+  curve led the plain line beside it by a bar, visibly at every seam. Found by
+  the first embedded consumer's review the day after 0.2.0. A study's
+  histogram rides on the same series as its lines (a point-keyed bar is
+  centred on its key; left behind, a MACD's zero-cross landed a bar left of
+  the line-cross), and a `candle` config that has no OHLC to draw falls back
+  to a line at the bar's end like any other. Per-segment slices are cut from
+  the raw series, shifted after, and cached beside the raw ones.
+
 ## 0.2.0 — 2026-09-18
 
 What the second consumer needed. An embedded pane adopting the chart found
