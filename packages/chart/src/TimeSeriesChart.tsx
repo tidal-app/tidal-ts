@@ -1183,16 +1183,33 @@ function TimeSeriesChartInner({
   // (`<BandChart>`, `<AreaChart>`). Lazy and cached on the series object: slicing
   // a 250k-row series into ~250 sessions is real work, and most renders draw no
   // fill at all. The cache resets with the segments.
-  const segmentsFor = useMemo(() => {
-    const cache = new Map<ChartSeries, ChartSeries[]>();
-    return (series: ChartSeries): ChartSeries[] => {
-      let slices = cache.get(series);
+  const { segmentsFor, endSegmentsFor } = useMemo(() => {
+    const raw = new Map<ChartSeries, ChartSeries[]>();
+    const end = new Map<ChartSeries, ChartSeries[]>();
+    const segmentsFor = (series: ChartSeries): ChartSeries[] => {
+      let slices = raw.get(series);
       if (!slices) {
         slices = sliceBySegments(series, sessions) as ChartSeries[];
-        cache.set(series, slices);
+        raw.set(series, slices);
       }
       return slices;
     };
+    // The same slices moved to the bar's END — cut first, shifted after, and
+    // cached like the raw ones: a fill that is re-shifted on every frame of a
+    // pan hands pond a fresh series identity per slice per frame.
+    const endSegmentsFor = (series: ChartSeries): ChartSeries[] => {
+      let slices = end.get(series);
+      if (!slices) {
+        const native = nativeMs(series);
+        slices =
+          native === undefined
+            ? segmentsFor(series)
+            : segmentsFor(series).map((slice) => shiftKeys(slice, native) as ChartSeries);
+        end.set(series, slices);
+      }
+      return slices;
+    };
+    return { segmentsFor, endSegmentsFor };
   }, [sessions]);
 
   const discontinuities = useMemo(
@@ -1222,10 +1239,10 @@ function TimeSeriesChartInner({
     candleable: boolean,
   ): ReactNode[] => {
     const col = c.column;
-    // A line/area draws CLOSES, which belong at their bar's end — see `shifted`.
-    // For the price column of an OHLC source it can do better still and start at
-    // the session's open (`openLine`). Both fall back to the raw series when there
-    // is nothing to shift, which is daily data.
+    // A line/area draws CLOSES, which belong at their bar's end — see `shifted`,
+    // and daily is not exempt. For the price column of an OHLC source it can do
+    // better still and start at the session's open (`openLine`). Both fall back
+    // to the raw series only when no bar interval can be inferred.
     const closeSeries =
       (c.source && col === 'close' ? openLine.get(c.source) : undefined) ??
       (c.source ? shifted.get(c.source) : undefined) ??
@@ -1234,12 +1251,11 @@ function TimeSeriesChartInner({
     // and middle, a study's outputs — or a banded curve leads the plain line
     // beside it by one bar, visibly at every seam. Same shift as `closeSeries`,
     // minus the open-line case: only a price column has an open to start from.
-    // `atEnd` is for a per-segment slice, which is cut from the RAW series and
-    // shifted after (shifted first, its last close sits on the segment end).
+    // Per-segment slices come from `endSegmentsFor`: cut from the RAW series
+    // and shifted after (shifted first, a session's last close sits on the
+    // segment end), and cached.
     const src = c.source ? sources[c.source] : undefined;
     const native = src ? nativeMs(src) : undefined;
-    const atEnd = (s: ChartSeries): ChartSeries =>
-      native === undefined ? s : (shiftKeys(s, native) as ChartSeries);
     const endSeries = (c.source ? shifted.get(c.source) : undefined) ?? panelSeries;
     switch (c.style) {
       case 'area': {
@@ -1256,18 +1272,18 @@ function TimeSeriesChartInner({
         if (!splitsFor(c)) {
           return [<AreaChart key={c.id} series={closeSeries} column={col} as={c.id} axis={axis} />];
         }
-        const atClose = (slice: ChartSeries): ChartSeries =>
+        // The price close gets the open-line treatment per slice (one source,
+        // so uncached is cheap); everything else takes the cached end-shifted
+        // slices.
+        const slices =
           native !== undefined && c.source && col === 'close' && ohlc.has(c.source)
-            ? (sessionOpenLine(slice, native, { open: 'open', close: 'close' }) as ChartSeries)
-            : atEnd(slice);
-        return segmentsFor(panelSeries).map((slice, i) => (
-          <AreaChart
-            key={`${c.id}__s${i}`}
-            series={atClose(slice)}
-            column={col}
-            as={c.id}
-            axis={axis}
-          />
+            ? segmentsFor(panelSeries).map(
+                (slice) =>
+                  sessionOpenLine(slice, native, { open: 'open', close: 'close' }) as ChartSeries,
+              )
+            : endSegmentsFor(panelSeries);
+        return slices.map((slice, i) => (
+          <AreaChart key={`${c.id}__s${i}`} series={slice} column={col} as={c.id} axis={axis} />
         ));
       }
       case 'bar': {
@@ -1316,7 +1332,7 @@ function TimeSeriesChartInner({
           : [
               <LineChart
                 key={c.id}
-                series={panelSeries}
+                series={closeSeries}
                 column={col}
                 as={c.id}
                 axis={axis}
@@ -1341,10 +1357,10 @@ function TimeSeriesChartInner({
         // filled envelope bridges the overnight gap its own centre line honours.
         const b = bandColumns(col);
         const washes = splitsFor(c)
-          ? segmentsFor(panelSeries).map((slice, i) => (
+          ? endSegmentsFor(panelSeries).map((slice, i) => (
               <BandChart
                 key={`${c.id}__band${i}`}
-                series={atEnd(slice)}
+                series={slice}
                 lower={b.lower}
                 upper={b.upper}
                 as={c.id}
@@ -1385,9 +1401,13 @@ function TimeSeriesChartInner({
           mark: outputMark(op, suffix),
           node:
             outputMark(op, suffix) === 'bar' ? (
+              // On the SAME series as the study's lines: a point-keyed bar is
+              // centred on its key, so a histogram left on the raw keys would
+              // put its zero-cross one bar left of the line-cross it exists to
+              // mark.
               <BarChart
                 key={`${c.id}__o${i}`}
-                series={panelSeries}
+                series={endSeries}
                 column={`${col}${suffix}`}
                 as={outputKey(c.id, i)}
                 axis={axis}
@@ -1397,7 +1417,7 @@ function TimeSeriesChartInner({
                 {...(histSplit.mode === 'split'
                   ? {
                       binColors: signColors(
-                        panelSeries,
+                        endSeries,
                         `${col}${suffix}`,
                         resolveColor(histSplit.rise),
                         resolveColor(histSplit.fall),
