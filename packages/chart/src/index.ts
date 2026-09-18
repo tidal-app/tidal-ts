@@ -41,6 +41,7 @@ export {
   centerOnZero,
   axisRangeIsEmpty,
   axisFormat,
+  fractionTicks,
   bandColumns,
   configColumns,
   hasBarOutput,

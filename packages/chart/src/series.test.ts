@@ -12,6 +12,7 @@ import {
   barZeroLock,
   centerOnZero,
   axisFormat,
+  fractionTicks,
   logAllowed,
   type AxisRange,
   type SeriesConfig,
@@ -536,5 +537,29 @@ describe('currency reads in the accounting convention', () => {
     expect(formatSeriesValue(-2.75, '')).toBe('-2.75');
     expect(formatSeriesValue(-0.23, 'log')).toBe('-0.23');
     expect(axisFormat('%')(-5)).toBe('-5.0%');
+  });
+});
+
+describe('fractionTicks — stacked axes agree on their rows by construction', () => {
+  const pct = axisFormat('%', 0);
+
+  it('lands one tick at each fraction of the domain, both ends included', () => {
+    expect(fractionTicks(10, 20, 3, pct)).toEqual([
+      { at: 10, label: '10%' },
+      { at: 15, label: '15%' },
+      { at: 20, label: '20%' },
+    ]);
+  });
+
+  it('puts the same FRACTIONS on two axes with different domains', () => {
+    const a = fractionTicks(0, 100, 5, pct).map((t) => t.at / 100);
+    const b = fractionTicks(-3, 3, 5, pct).map((t) => (t.at + 3) / 6);
+    expect(a).toEqual(b);
+  });
+
+  it('draws nothing for fewer than two ticks or an inverted domain', () => {
+    expect(fractionTicks(0, 1, 1, pct)).toEqual([]);
+    expect(fractionTicks(5, 5, 3, pct)).toEqual([]);
+    expect(fractionTicks(9, 1, 3, pct)).toEqual([]);
   });
 });
