@@ -2,7 +2,11 @@
 
 All packages release together on one version.
 
-## Unreleased
+## 0.2.0 — 2026-09-18
+
+What the second consumer needed. An embedded pane adopting the chart found
+three things it already did on raw pond that `TimeSeriesChart` could not
+express; they are in the library now, for every consumer.
 
 - `@tidal-ts/chart`: **a fill breaks at the session seams.** `<BandChart>` and
   `<AreaChart>` have no `sessionBreaks` (the prop is `<LineChart>`'s alone), so
@@ -29,7 +33,15 @@ All packages release together on one version.
   chart needs from a host. It includes a **consumer pane** story: a closed
   eight-curve vocabulary capped at six, one coloured y-axis column per active
   curve, expiry and range controls, and two derived curves — the embedded-pane
-  shape, as opposed to the open-ended terminal the chart came out of.
+  shape, as opposed to the open-ended terminal the chart came out of. The pane
+  since grew a confidence envelope under two curves (`style: 'band'` sharing its
+  curve's axis), a second row for the relatives with every axis centred on
+  zero and a draggable split, and a chart well one step off the pane's ground.
+- `@tidal-ts/core` exports **`sliceBySegments`** — a series cut into one
+  sub-series per live segment, `[start, end)` on the key, via pond's `bisect`
+  and `slice`. Cut before you shift: a key moved to its bar's end sits on the
+  segment's half-open end and is dropped.
+- `@tidal-ts/terminal`: version bump only (one version across the family).
 
 ## 0.1.2 — 2026-09-16
 
