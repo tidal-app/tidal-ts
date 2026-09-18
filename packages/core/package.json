@@ -1,6 +1,6 @@
 {
   "name": "@tidal-ts/core",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "private": false,
   "description": "Financial time-series vocabulary on pond-ts: the study/derive seam, the vol schema, bar windows, the columnar adapter and session helpers.",
   "license": "MIT",
