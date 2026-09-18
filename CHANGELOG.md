@@ -2,6 +2,16 @@
 
 All packages release together on one version.
 
+## Unreleased
+
+- `@tidal-ts/chart`: **a band's wash and centre line, and a study's line
+  outputs, now sit where a plain line does — at the bar's end.** A `line`
+  config was drawn on the key-shifted series (a close belongs at its bar's
+  end) while `band` and `lines` configs were drawn on the raw one, so a banded
+  curve led the plain line beside it by a bar, visibly at every seam. Found by
+  the first embedded consumer's review the day after 0.2.0. Per-segment washes
+  are cut from the raw series and shifted after, as the area case already was.
+
 ## 0.2.0 — 2026-09-18
 
 What the second consumer needed. An embedded pane adopting the chart found

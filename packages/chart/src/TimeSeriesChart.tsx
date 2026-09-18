@@ -1230,6 +1230,17 @@ function TimeSeriesChartInner({
       (c.source && col === 'close' ? openLine.get(c.source) : undefined) ??
       (c.source ? shifted.get(c.source) : undefined) ??
       panelSeries;
+    // Every OTHER line-like mark belongs at its bar's end too — a band's edges
+    // and middle, a study's outputs — or a banded curve leads the plain line
+    // beside it by one bar, visibly at every seam. Same shift as `closeSeries`,
+    // minus the open-line case: only a price column has an open to start from.
+    // `atEnd` is for a per-segment slice, which is cut from the RAW series and
+    // shifted after (shifted first, its last close sits on the segment end).
+    const src = c.source ? sources[c.source] : undefined;
+    const native = src ? nativeMs(src) : undefined;
+    const atEnd = (s: ChartSeries): ChartSeries =>
+      native === undefined ? s : (shiftKeys(s, native) as ChartSeries);
+    const endSeries = (c.source ? shifted.get(c.source) : undefined) ?? panelSeries;
     switch (c.style) {
       case 'area': {
         // No `sessionBreaks` on `<AreaChart>` — the prop is LineChart-only
@@ -1245,13 +1256,10 @@ function TimeSeriesChartInner({
         if (!splitsFor(c)) {
           return [<AreaChart key={c.id} series={closeSeries} column={col} as={c.id} axis={axis} />];
         }
-        const native = c.source ? nativeMs(sources[c.source]!) : undefined;
-        const atClose = (slice: ChartSeries): ChartSeries => {
-          if (native === undefined) return slice;
-          if (c.source && col === 'close' && ohlc.has(c.source))
-            return sessionOpenLine(slice, native, { open: 'open', close: 'close' }) as ChartSeries;
-          return shiftKeys(slice, native) as ChartSeries;
-        };
+        const atClose = (slice: ChartSeries): ChartSeries =>
+          native !== undefined && c.source && col === 'close' && ohlc.has(c.source)
+            ? (sessionOpenLine(slice, native, { open: 'open', close: 'close' }) as ChartSeries)
+            : atEnd(slice);
         return segmentsFor(panelSeries).map((slice, i) => (
           <AreaChart
             key={`${c.id}__s${i}`}
@@ -1336,7 +1344,7 @@ function TimeSeriesChartInner({
           ? segmentsFor(panelSeries).map((slice, i) => (
               <BandChart
                 key={`${c.id}__band${i}`}
-                series={slice}
+                series={atEnd(slice)}
                 lower={b.lower}
                 upper={b.upper}
                 as={c.id}
@@ -1346,7 +1354,7 @@ function TimeSeriesChartInner({
           : [
               <BandChart
                 key={`${c.id}__band`}
-                series={panelSeries}
+                series={endSeries}
                 lower={b.lower}
                 upper={b.upper}
                 as={c.id}
@@ -1357,7 +1365,7 @@ function TimeSeriesChartInner({
           ...washes,
           <LineChart
             key={c.id}
-            series={panelSeries}
+            series={endSeries}
             column={b.middle}
             as={c.id}
             axis={axis}
@@ -1400,7 +1408,7 @@ function TimeSeriesChartInner({
             ) : (
               <LineChart
                 key={`${c.id}__o${i}`}
-                series={panelSeries}
+                series={endSeries}
                 column={`${col}${suffix}`}
                 as={outputKey(c.id, i)}
                 axis={axis}
