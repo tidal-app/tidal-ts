@@ -1,7 +1,20 @@
 import type { Meta, StoryObj } from '@storybook/react';
-import { DEMO_INSTRUMENTS, generatePriceSeries, generateVolSeries } from '@tidal-ts/core';
+import {
+  buildPriceSeries,
+  DEMO_INSTRUMENTS,
+  deriveId,
+  generatePriceSeries,
+  generateVolSeries,
+  type DeriveSpec,
+  type PriceRow,
+} from '@tidal-ts/core';
 import { demoDark, demoLight } from '../.storybook/demoTheme.js';
-import { TimeSeriesChart, type TimeSeriesChartProps, type TimeSeriesChartRow } from './index.js';
+import {
+  prepareChart,
+  TimeSeriesChart,
+  type TimeSeriesChartProps,
+  type TimeSeriesChartRow,
+} from './index.js';
 import type { ChartSeries, SeriesConfig } from './index.js';
 
 /**
@@ -95,4 +108,81 @@ export const Emphasis: Story = { args: { dimmed: ['hv21', 'iv63'] } };
  *  consumer pane starts from. */
 export const Single: Story = {
   args: { rows: [{ id: 'only', height: 380, configs: [volConfigs[0]!] }] },
+};
+
+/** Two cash sessions of one-minute bars, back to back: 390 bars to the close,
+ *  an overnight gap, 390 more from the next open. The fixture generates one
+ *  contiguous run, so the second day is a second run seeded off the first
+ *  day's close and stitched on. */
+const SESSION_BARS = 390;
+const DAY_MS = 24 * 60 * 60_000;
+// 2024-01-02 21:00Z — a 16:00 ET close — and the same time the next day.
+const DAY_ONE_CLOSE_MS = 1_704_229_200_000;
+const intradaySeries = (() => {
+  const inst = DEMO_INSTRUMENTS[0]!;
+  const rowsOf = (s: ReturnType<typeof generatePriceSeries>): PriceRow[] => {
+    type Col = { at(i: number): number | undefined };
+    const t = s.keyColumn() as unknown as Col;
+    const [o, h, l, c, v] = (['open', 'high', 'low', 'close', 'volume'] as const).map(
+      (n) => s.column(n) as unknown as Col,
+    );
+    return Array.from({ length: s.length }, (_, i) => [
+      t.at(i)!,
+      o!.at(i)!,
+      h!.at(i)!,
+      l!.at(i)!,
+      c!.at(i)!,
+      v!.at(i)!,
+    ]);
+  };
+  // The fixture's defaults are DAILY moves; a minute bar walks a few basis
+  // points, not two percent, or the day is a cliff.
+  const minute = { bars: SESSION_BARS, interval: '1m', volatility: 0.0006, drift: 0 } as const;
+  const one = rowsOf(generatePriceSeries(inst, { ...minute, endMs: DAY_ONE_CLOSE_MS }));
+  const two = rowsOf(
+    generatePriceSeries(inst, {
+      ...minute,
+      endMs: DAY_ONE_CLOSE_MS + DAY_MS,
+      startPrice: one[one.length - 1]![4],
+      seed: 7,
+    }),
+  );
+  return buildPriceSeries(inst.symbol, [...one, ...two]);
+})();
+
+/** The same envelope the consumer pane draws: a 20-bar Bollinger at 1σ, folded
+ *  by `prepareChart` so the band's three columns exist on the series. */
+const intradayEnvelope: DeriveSpec = {
+  op: 'bollinger',
+  inputs: ['close'],
+  params: { period: 20, stdDev: 1 },
+};
+const intradayConfigs: SeriesConfig[] = [
+  line('close', 'close', 'Price', '#c9a94a', { unit: '', source: 'price' }),
+  line('close__band', deriveId(intradayEnvelope), 'Price · mean ±1σ', '#c9a94a', {
+    style: 'band',
+    unit: '',
+    source: 'price',
+    derive: intradayEnvelope,
+    lineWidth: 0.5,
+  }),
+];
+const intraday = prepareChart({ price: { series: intradaySeries as unknown as ChartSeries } }, [
+  { id: 'only', configs: intradayConfigs },
+]);
+
+/** A band across a session seam. Every other band here is daily; this is the
+ *  intraday case, where the seam is a real gap in the data. With
+ *  `collapseWeekends` on (the default here) the axis closes the overnight and
+ *  the wash ends at the close and restarts at the open, exactly as its centre
+ *  line does — pond's own `sessionBreaks`, since charts 0.70.0. Turn
+ *  `collapseWeekends` off in the controls and the gap comes back on a
+ *  continuous axis; the wash and the line then both bridge it. */
+export const IntradayBand: Story = {
+  args: {
+    rows: [{ id: 'only', height: 380, configs: intraday.rows[0]!.configs }],
+    sources: intraday.sources,
+    ohlcSources: [],
+    collapseWeekends: true,
+  },
 };

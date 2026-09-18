@@ -4,6 +4,24 @@ All packages release together on one version.
 
 ## Unreleased
 
+- **The pond family floors at `^0.70.0`** (`@pond-ts/process` exact `0.70.0`), and
+  `@pond-ts/react` is named as `@tidal-ts/chart`'s peer. It always was
+  `@pond-ts/charts`'s peer; with nothing in this repo naming it, the bump left
+  the previously auto-installed 0.69 beside `pond-ts` 0.70 — the family split
+  the README warns about. Naming it keeps the family in lockstep.
+  **`<BandChart sessionBreaks>`** shipped in 0.70.0 with the line's semantics,
+  so a band breaks at the session seams natively and the chart's
+  one-wash-per-segment workaround from 0.2.0 is gone; `sliceBySegments` stays
+  for `<AreaChart>`, which still has no such prop. One visible change from
+  that: on a **continuous** axis (`collapseWeekends` off) with intraday data,
+  the old workaround still split the wash while its centre line bridged; now
+  both bridge, as the line always did. Pond's `specId` now judges **arity**: a
+  spec with the wrong number of inputs (or none) is a broken id in lenient mode
+  and an `ArityError` in strict, where 0.62–0.69 named it valid and let it die
+  at `compile` with no code. `isValidSpec` therefore says `false` for such a
+  spec, so a persisted no-inputs study now surfaces as a broken chip that
+  refuses param edits instead of a silent skip; `DeriveSkip.code` now documents
+  the `'ArityError'` literal beside the other two.
 - `@tidal-ts/chart`: **a band's wash and centre line, and a study's line
   outputs, now sit where a plain line does — at the bar's end.** A `line`
   config was drawn on the key-shifted series (a close belongs at its bar's

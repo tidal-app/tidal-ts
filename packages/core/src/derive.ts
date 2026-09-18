@@ -640,9 +640,11 @@ export function specUnit(spec: DeriveSpec, unitOf: (column: string) => string): 
  *  spec's id carries the `p1?:` prefix — see {@link isBrokenId}). `code` is
  *  the engine's per-class literal (`'UnknownColumnError'` = the column isn't
  *  in this feed, could fold elsewhere → a dimmed-removable chip;
- *  `'ParamError'` = the spec itself is garbage → a broken chip); ABSENT code
- *  means the throw came from op code, not the plan layer. Compare the string
- *  literal, never `err.name` — bundlers rename classes. */
+ *  `'ParamError'` = the spec itself is garbage → a broken chip;
+ *  `'ArityError'` (process 0.70.0) = the wrong number of inputs, or none →
+ *  also a broken chip); ABSENT code means the throw came from op code, not
+ *  the plan layer. Compare the string literal, never `err.name` — bundlers
+ *  rename classes. */
 export interface DeriveSkip {
   id: string;
   code?: string;
