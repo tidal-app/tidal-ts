@@ -209,11 +209,13 @@ describe('applyDerived', () => {
     const { series: out, skipped } = applyDerivedReport(s, [oldShape, outOfRange]);
     expect(out.schema.length).toBe(s.schema.length);
     expect(skipped).toHaveLength(2);
-    // The rejected-params spec reports the plan layer's class literal; the
-    // arity-broken one currently escapes as a codeless op-layer throw
-    // (upstream nit, reported on the bump ping-back) — either way it lands.
+    // Each rejected spec reports the plan layer's class literal — the
+    // arity-broken one included since process 0.70.0 (`ArityError`); before
+    // that it escaped as a codeless op-layer throw, which was the nit reported
+    // on the 0.62 bump.
     const codes = new Map(skipped.map((k) => [k.id, k.code]));
     expect(codes.get(deriveId(outOfRange))).toBe('ParamError');
+    expect(codes.get(deriveId(oldShape))).toBe('ArityError');
   });
 
   it('survives pathological persisted shapes the ENGINE survives (report never out-crashes)', () => {
@@ -264,11 +266,12 @@ describe('isValidSpec / broken ids (0.62 lenient naming)', () => {
     expect(isValidSpec({ op: 'sma', inputs: ['x'], params: { period: 0 } })).toBe(false); // below min
     expect(isValidSpec({ op: 'sma', inputs: ['x'], params: { period: 9999999 } })).toBe(false); // above max
     expect(isValidSpec({ op: 'nope', inputs: ['x'] } as unknown as DeriveSpec)).toBe(false); // unknown op
-    // ENGINE SEMANTICS CHANGE at 0.62: input arity is NOT a specId validation
-    // concern (0.61's throw on a no-inputs spec was an incidental TypeError,
-    // not a designed check) — the spec names fine and SKIPS at fold instead
-    // (pinned below). Reported upstream on the bump ping-back.
-    expect(isValidSpec({ op: 'sma', params: { period: 20 } } as unknown as DeriveSpec)).toBe(true);
+    // Arity IS a specId concern since process 0.70.0: a spec with the wrong
+    // number of inputs — or none — is a broken id in lenient mode and an
+    // `ArityError` in strict, decided from the registry alone. 0.62–0.69 named
+    // it valid and let it die at `compile` as a bare TypeError with no code;
+    // that was reported on the 0.62 bump and this is the answer landing.
+    expect(isValidSpec({ op: 'sma', params: { period: 20 } } as unknown as DeriveSpec)).toBe(false);
   });
 
   it('names a REJECTED spec with the opaque broken marker, never a throw', () => {

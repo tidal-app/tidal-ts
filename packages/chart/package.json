@@ -39,25 +39,27 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@pond-ts/charts": "^0.69.0",
-    "@pond-ts/financial": "^0.69.0",
-    "pond-ts": "^0.69.0",
+    "@pond-ts/charts": "^0.70.0",
+    "@pond-ts/financial": "^0.70.0",
+    "@pond-ts/react": "^0.70.0",
+    "pond-ts": "^0.70.0",
     "react": "^18.2.0 || ^19.0.0"
   },
   "dependencies": {
     "@tidal-ts/core": "workspace:*"
   },
   "devDependencies": {
-    "@pond-ts/charts": "^0.69.0",
-    "@pond-ts/financial": "^0.69.0",
-    "@pond-ts/process": "0.69.0",
+    "@pond-ts/charts": "^0.70.0",
+    "@pond-ts/financial": "^0.70.0",
+    "@pond-ts/process": "0.70.0",
+    "@pond-ts/react": "^0.70.0",
     "@storybook/addon-essentials": "^8.5.0",
     "@storybook/react": "^8.5.0",
     "@storybook/react-vite": "^8.5.0",
     "@types/react": "^18.3.18",
     "@types/react-dom": "^18.3.5",
     "@vitejs/plugin-react": "^4.3.4",
-    "pond-ts": "^0.69.0",
+    "pond-ts": "^0.70.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "storybook": "^8.5.0",

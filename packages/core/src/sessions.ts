@@ -211,8 +211,9 @@ interface ColumnarOut {
  * The series cut into one sub-series per live segment — `[start, end)` on the
  * time key, empty segments dropped.
  *
- * For the layers pond gives no `sessionBreaks` of their own: `<BandChart>` and
- * `<AreaChart>` (the prop is `<LineChart>`'s alone). A fill drawn across a
+ * For the layer pond gives no `sessionBreaks` of its own — `<AreaChart>`
+ * (`<LineChart>` has always had it; `<BandChart>` gained it in charts 0.70.0,
+ * which retired this function's other caller). A fill drawn across a
  * collapsed overnight gap bridges seventeen hours of closed market in one
  * confident sweep and contradicts the line drawn over it; one layer per segment
  * ends the fill at the close and restarts it at the open, which is what that

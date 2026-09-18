@@ -46,15 +46,16 @@
     "@tidal-ts/core": "workspace:*"
   },
   "devDependencies": {
-    "@pond-ts/financial": "^0.69.0",
-    "@pond-ts/process": "0.69.0",
-    "pond-ts": "^0.69.0",
+    "@pond-ts/charts": "^0.70.0",
+    "@pond-ts/financial": "^0.70.0",
+    "@pond-ts/process": "0.70.0",
+    "@pond-ts/react": "^0.70.0",
+    "@types/react": "^18.3.18",
+    "@xstate/react": "^6.1.0",
+    "pond-ts": "^0.70.0",
+    "react": "^18.3.1",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8",
-    "@pond-ts/charts": "^0.69.0",
-    "@types/react": "^18.3.18",
-    "react": "^18.3.1",
-    "@xstate/react": "^6.1.0",
     "xstate": "^5.32.4"
   }
 }

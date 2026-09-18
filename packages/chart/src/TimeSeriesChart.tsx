@@ -1196,7 +1196,9 @@ function TimeSeriesChartInner({
     };
     // The same slices moved to the bar's END — cut first, shifted after, and
     // cached like the raw ones: a fill that is re-shifted on every frame of a
-    // pan hands pond a fresh series identity per slice per frame.
+    // pan hands pond a fresh series identity per slice per frame. Only the area
+    // still needs these — `<AreaChart>` has no `sessionBreaks` (F-charts-20);
+    // `<BandChart>` gained it in charts 0.70.0.
     const endSegmentsFor = (series: ChartSeries): ChartSeries[] => {
       let slices = end.get(series);
       if (!slices) {
@@ -1352,33 +1354,20 @@ function TimeSeriesChartInner({
         // three columns off it (`bandColumns`). Reading `col` itself would find
         // nothing.
         //
-        // The wash has no `sessionBreaks` either, so on a collapsing axis it is
-        // one `<BandChart>` per live segment over that segment's slice — else a
-        // filled envelope bridges the overnight gap its own centre line honours.
+        // Both break at the session seams together — `<BandChart sessionBreaks>`
+        // arrived in charts 0.70.0 with the same semantics as the line's, which
+        // retired this chart's one-wash-per-segment workaround (0.2.0).
         const b = bandColumns(col);
-        const washes = splitsFor(c)
-          ? endSegmentsFor(panelSeries).map((slice, i) => (
-              <BandChart
-                key={`${c.id}__band${i}`}
-                series={slice}
-                lower={b.lower}
-                upper={b.upper}
-                as={c.id}
-                axis={axis}
-              />
-            ))
-          : [
-              <BandChart
-                key={`${c.id}__band`}
-                series={endSeries}
-                lower={b.lower}
-                upper={b.upper}
-                as={c.id}
-                axis={axis}
-              />,
-            ];
         return [
-          ...washes,
+          <BandChart
+            key={`${c.id}__band`}
+            series={endSeries}
+            lower={b.lower}
+            upper={b.upper}
+            as={c.id}
+            axis={axis}
+            sessionBreaks={breaksFor(c)}
+          />,
           <LineChart
             key={c.id}
             series={endSeries}
