@@ -15,7 +15,7 @@ import type { CSSProperties, ReactNode } from 'react';
  */
 const font = "'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace";
 
-export const paneStyles: Record<string, CSSProperties> = {
+export const paneStyles = {
   root: {
     display: 'flex',
     flexDirection: 'column',
@@ -64,14 +64,71 @@ export const paneStyles: Record<string, CSSProperties> = {
     color: 'var(--pane-ink-muted)',
   },
   cap: { fontSize: 10, color: 'var(--pane-ink-faint)', fontVariantNumeric: 'tabular-nums' },
+  /** The same counter once the pane is AT its cap. It lifts to the top ink tier
+   *  rather than taking a warning hue: on a pane where colour IS the series
+   *  vocabulary, an amber counter is one curve's identity spent on chrome — and
+   *  the obvious amber is the first ladder entry, which is on by default and
+   *  sits in this very row. Brightness is the channel chrome gets. */
+  capFull: {
+    fontSize: 10,
+    color: 'var(--pane-ink-strong)',
+    fontWeight: 600,
+    fontVariantNumeric: 'tabular-nums',
+  },
   plotRow: { flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0, minWidth: 0 },
+  /** The CHART AREA — gutters, plots and time axis — one step off the pane, and
+   *  the only thing separating the reading surface from the controls above it.
+   *  No border and no shadow: the step already says it. */
+  plotWell: {
+    position: 'relative',
+    minWidth: 0,
+    // No `flex: 1`: the host gives the chart RESOLVED pixel heights, so the
+    // well has to hug what the chart actually draws. Stretching it instead left
+    // the last row hanging 20px past the ground it was supposed to sit on.
+    background: 'var(--pane-well)',
+    borderRadius: 4,
+  },
+  /** The grip a host drags to move the split between rows. The chart takes
+   *  RESOLVED pixel heights, so the gesture and the remainder math are the
+   *  host's — this is that, at its smallest. */
+  rowGrip: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 9,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    cursor: 'row-resize',
+    touchAction: 'none',
+    zIndex: 1,
+  },
+  /** The hairline where two rows meet. Full width, under the grip, so the
+   *  boundary reads as a boundary even when nobody is reaching for it — the
+   *  grip alone said "you may drag here" without saying "the reading changes
+   *  here", which is the more important of the two. */
+  rowRule: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 4,
+    height: 1,
+    background: 'var(--pane-border)',
+  },
+  rowGripBar: {
+    width: 28,
+    height: 3,
+    borderRadius: 2,
+    background: 'var(--pane-border-strong)',
+    position: 'relative',
+  },
   subtitle: {
     alignSelf: 'flex-end',
     fontSize: 10,
     color: 'var(--pane-ink-muted)',
     marginBottom: 2,
   },
-};
+} satisfies Record<string, CSSProperties>;
 
 export function SelectLabel({ children, colon = true }: { children: ReactNode; colon?: boolean }) {
   return (
@@ -244,7 +301,11 @@ export function SeriesCheckbox({
           borderRadius: 2,
           border: `1.5px solid ${checked ? color : 'var(--pane-border-strong)'}`,
           background: checked ? color : 'transparent',
-          color: 'var(--pane-surface)',
+          // The tick sits on the CURVE's colour, not on the pane — so it takes
+          // the ink meant for that, which inverts with the scheme alongside the
+          // ladder. Reading the pane's ground here put a near-white tick on a
+          // pale swatch in light mode (1.56:1, invisible).
+          color: 'var(--pane-swatch-ink)',
           fontSize: 9,
           fontWeight: 700,
           lineHeight: '9px',
