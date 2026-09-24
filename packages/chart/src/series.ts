@@ -195,13 +195,22 @@ export interface SeriesConfig {
    *  the chart settings (see {@link seriesLineWidth}). */
   lineWidth?: number;
   /**
-   * An `area`'s fill measures FROM A BASELINE, and the baseline is the value of
-   * the **first point in the viewport** — so the fill reads as the move since
-   * the left edge, and re-bases as you pan. The same anchor a rebased axis uses
-   * for a comparison.
+   * An `area`'s fill measures FROM A BASELINE. Two kinds, and the difference is
+   * whether the anchor moves:
    *
-   * With it on, the area also draws **in parts**: above the baseline in the
-   * rise colour, below it in the fall colour, flat rather than graded, and the
+   * - `'view'` — the value of the **first point in the viewport**, so the fill
+   *   reads as the move since the left edge and RE-BASES as you pan. The same
+   *   anchor a rebased axis uses for a comparison.
+   * - a **number** — a level you put there and it stays. Drawn as a real
+   *   horizontal rule on the chart (charts' `<Baseline>`), labelled with the
+   *   axis's own formatter and pinned to the axis edge, and **draggable**: the
+   *   chart reports a drag through
+   *   {@link TimeSeriesChartProps.onBaselineChange} and the host writes it back
+   *   here, which is what makes the line and the fill one thing rather than two
+   *   that agree.
+   *
+   * Either way the area draws **in parts**: above the baseline in the rise
+   * colour, below it in the fall colour, flat rather than graded, and the
    * outline switches hue at each crossing. Which colours, and whether it splits
    * at all, are the bar's own question — {@link colorMode} / {@link riseColor} /
    * {@link fallColor}, defaulted from the chart settings' `areas` section.
@@ -209,7 +218,7 @@ export interface SeriesConfig {
    * Omitted ⇒ off, and the fill rests where the data says: on zero for a series
    * with a negative reading, on the axis floor otherwise (see `areaBaseline`).
    */
-  baseline?: boolean;
+  baseline?: 'view' | number;
   /** Direction coloring for a `bar`/`candle` series, or an `area` with
    *  {@link baseline} on: `'split'` (rise/fall pair) vs `'single'` (the series'
    *  own `color`). Omitted ⇒ the chart settings' default for that mark (legacy
@@ -707,7 +716,7 @@ export function effectiveSplit(
           // one there is no "above" and "below" to mean anything — the fill
           // rests on the axis floor or on zero, and two colours would be
           // claiming a reading the mark is not making.
-          s.style === 'area' && s.baseline === true
+          s.style === 'area' && s.baseline != null
           ? (s.colorMode ?? (def.split ? 'split' : 'single'))
           : 'single';
   return { mode, rise: s.riseColor ?? def.rise, fall: s.fallColor ?? def.fall };

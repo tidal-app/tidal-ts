@@ -55,14 +55,22 @@ describe('effectiveSplit, for an area', () => {
   });
 
   it('splits with one, and takes the settings’ area defaults', () => {
-    const sp = effectiveSplit(cfg({ baseline: true }));
-    expect(sp).toEqual({ mode: 'split', rise: 'positive', fall: 'negative' });
+    expect(effectiveSplit(cfg({ baseline: 'view' }))).toEqual({
+      mode: 'split',
+      rise: 'positive',
+      fall: 'negative',
+    });
+    // A FIXED baseline splits the same way — it is a level either way.
+    expect(effectiveSplit(cfg({ baseline: 300 })).mode).toBe('split');
+    // …including one AT zero, which `!= null` keeps and a truthiness test
+    // would have thrown away.
+    expect(effectiveSplit(cfg({ baseline: 0 })).mode).toBe('split');
   });
 
   it('is overridable per series, like a bar’s', () => {
-    expect(effectiveSplit(cfg({ baseline: true, colorMode: 'single' })).mode).toBe('single');
+    expect(effectiveSplit(cfg({ baseline: 'view', colorMode: 'single' })).mode).toBe('single');
     expect(
-      effectiveSplit(cfg({ baseline: true, riseColor: 'teal', fallColor: 'rose' })),
+      effectiveSplit(cfg({ baseline: 'view', riseColor: 'teal', fallColor: 'rose' })),
     ).toMatchObject({ rise: 'teal', fall: 'rose' });
   });
 
@@ -71,7 +79,7 @@ describe('effectiveSplit, for an area', () => {
       ...DEFAULT_CHART_SETTINGS,
       areas: { split: false, rise: 'teal', fall: 'rose' },
     };
-    expect(effectiveSplit(cfg({ baseline: true }), settings)).toEqual({
+    expect(effectiveSplit(cfg({ baseline: 'view' }), settings)).toEqual({
       mode: 'single',
       rise: 'teal',
       fall: 'rose',

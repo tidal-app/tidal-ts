@@ -5,10 +5,23 @@ All packages release together on one version.
 ## Unreleased
 
 - **An area can measure from a BASELINE, and draw in parts.** `SeriesConfig`
-  takes `baseline?: boolean`; with it on, the fill measures from **the value of
-  the first point in the viewport** — the anchor a rebased axis already uses
-  for a comparison — so the area reads as the move since the left edge and
-  re-bases as you pan.
+  takes `baseline?: 'view' | number`, and the difference is whether the anchor
+  moves. **`'view'`** is the value of the first point in the viewport — the
+  anchor a rebased axis already uses for a comparison — so the area reads as
+  the move since the left edge and re-bases as you pan. **A number** is a level
+  you put there: drawn as a real horizontal rule (charts' `<Baseline>`),
+  labelled by the axis's own formatter, pinned to the axis edge, wearing its own
+  area's ink, and **draggable** — the drag reports through
+  `onBaselineChange` and the host writes it back, which is what makes the rule
+  and the fill one thing rather than two that agree.
+
+  Dragging needs **`editBaselines`**, charts' annotation-edit mode, and that is
+  a mode rather than a permanent affordance for a reason worth stating: charts
+  suppresses the data cursor while it is on, because the crosshair and a
+  draggable mark both want the pointer. So a host turns it on for the moment
+  the reader is placing a level — its style panel open on that series, say —
+  and off again after. Story `FixedBaseline` has it on, which is why the
+  crosshair is missing there.
 
   It then draws in parts: above the baseline in the rise colour, below it in
   the fall colour, flat rather than graded, with the outline switching hue at

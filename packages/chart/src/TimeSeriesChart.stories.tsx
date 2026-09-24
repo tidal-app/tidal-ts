@@ -288,10 +288,47 @@ export const BaselinedArea: Story = {
         id: 'only',
         height: 380,
         configs: [
-          line('iv21', 'iv21', 'ATM Vol 21D', '#4f9cd9', { style: 'area', baseline: true }),
+          line('iv21', 'iv21', 'ATM Vol 21D', '#4f9cd9', { style: 'area', baseline: 'view' }),
         ],
       },
     ],
+  },
+};
+
+/** **A FIXED baseline**, drawn as a real rule at the level and **draggable** —
+ *  grab the line and move it; the story writes the new value back, which is
+ *  what keeps the rule and the fill one thing rather than two that agree. It is
+ *  labelled by the axis's own formatter and pinned to the axis edge, and wears
+ *  its area's ink rather than the annotation register's.
+ *
+ *  Note the crosshair is GONE here: `editBaselines` is charts' annotation-edit
+ *  mode, and the cursor and a draggable mark both want the pointer. That is why
+ *  it is a mode a host turns on for the moment rather than a permanent
+ *  affordance. */
+export const FixedBaseline: Story = {
+  render: (args, { globals }) => {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const [level, setLevel] = useState(28);
+    return (
+      <Hosted
+        {...args}
+        onBaselineChange={(_id, v) => setLevel(Number(v.toFixed(2)))}
+        // The mode that makes it draggable — and that takes the crosshair
+        // away while it is on, which is why a host scopes it to the moment
+        // the reader is placing a level.
+        editBaselines
+        rows={[
+          {
+            id: 'only',
+            height: 380,
+            configs: [
+              line('iv21', 'iv21', 'ATM Vol 21D', '#4f9cd9', { style: 'area', baseline: level }),
+            ],
+          },
+        ]}
+        scheme={globals.scheme === 'light' ? 'light' : 'dark'}
+      />
+    );
   },
 };
 
@@ -306,7 +343,7 @@ export const BaselinedAreaSingle: Story = {
         configs: [
           line('iv21', 'iv21', 'ATM Vol 21D', '#4f9cd9', {
             style: 'area',
-            baseline: true,
+            baseline: 'view',
             colorMode: 'single',
           }),
         ],

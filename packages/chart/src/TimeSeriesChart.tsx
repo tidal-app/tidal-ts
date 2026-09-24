@@ -13,6 +13,7 @@ import type { ChartSeries } from './types.js';
 import {
   AreaChart,
   BandChart,
+  Baseline,
   BarChart,
   Candlestick,
   ChartContainer,
@@ -315,6 +316,26 @@ export interface TimeSeriesChartProps {
    * render for this prop alone.
    */
   onSnap?: (snap: SeriesSnap | null) => void;
+  /**
+   * A FIXED baseline was dragged. Fires with the series and the new value in
+   * that axis's units — the mark is controlled, so the host writes it back to
+   * the config's `baseline` and the rule and the fill it anchors move together.
+   * Omit and the rule is drawn but cannot be moved.
+   */
+  onBaselineChange?: (id: string, value: number) => void;
+  /**
+   * Put the chart in **annotation-edit mode**, which is what makes a fixed
+   * baseline's rule draggable: hovering it reveals its handles, and a drag
+   * reports through {@link onBaselineChange}.
+   *
+   * It is a MODE and not a permanent affordance, because charts suppresses the
+   * data cursor while it is on — the crosshair and a draggable mark both want
+   * the pointer, and the library resolves that by giving it to the mark. So a
+   * host turns this on for the moment the reader is placing a level (its style
+   * panel open on that series, say) and off again after, rather than trading
+   * the crosshair away for a rule that is usually just sitting there.
+   */
+  editBaselines?: boolean;
   /** Draw diagnostics for the status line: how many points are on screen and what
    *  the last repaint cost. Coalesced — see `onDrawStats` in the render. */
   onStats?: (stats: ChartStats) => void;
@@ -731,6 +752,11 @@ export function splitBarColumns(
  * left edge then. `null` when the column has no finite value in view at all —
  * the caller draws an ordinary area rather than measuring from nothing.
  */
+/** The theme role a fixed baseline's rule wears — one per series, so the mark
+ *  takes its own area's ink (colour reaches an annotation only through a
+ *  role). */
+export const baselineRole = (id: string): string => `baseline:${id}`;
+
 export function viewBaseline(series: ChartSeries, column: string, from?: number): number | null {
   const col = readNumericColumn(series, column);
   if (!col) return null;
@@ -790,6 +816,8 @@ function TimeSeriesChartInner({
   splitters,
   onTracker,
   onSnap,
+  onBaselineChange,
+  editBaselines = false,
   onStats,
   pricePill,
   collapseWeekends,
@@ -942,13 +970,27 @@ function TimeSeriesChartInner({
     const annotation = base.annotation
       ? {
           ...base.annotation,
-          roles: annotations.reduce<NonNullable<ChartTheme['annotation']>['roles']>(
-            (acc, a) => ({
-              ...acc,
-              [a.role]: { ...acc?.[a.role], color: resolveColor(a.color) },
-            }),
-            base.annotation.roles ?? {},
-          ),
+          roles: allConfigs
+            // A FIXED baseline's rule takes ITS OWN AREA'S ink, through a role
+            // of its own: the mark belongs to that series, and the annotation
+            // register's base colour would make two areas' baselines
+            // indistinguishable. One entry per baselined series, which is a
+            // handful — and it is the only way a per-mark colour can reach the
+            // canvas, since there is no colour prop.
+            .filter((c) => typeof c.baseline === 'number')
+            .reduce<NonNullable<ChartTheme['annotation']>['roles']>(
+              (acc, c) => ({
+                ...acc,
+                [baselineRole(c.id)]: { color: resolveColor(c.color) },
+              }),
+              annotations.reduce<NonNullable<ChartTheme['annotation']>['roles']>(
+                (acc, a) => ({
+                  ...acc,
+                  [a.role]: { ...acc?.[a.role], color: resolveColor(a.color) },
+                }),
+                base.annotation.roles ?? {},
+              ),
+            ),
         }
       : base.annotation;
     return {
@@ -1364,10 +1406,15 @@ function TimeSeriesChartInner({
     const endSeries = (c.source ? shifted.get(c.source) : undefined) ?? panelSeries;
     switch (c.style) {
       case 'area': {
-        // WITH A BASELINE: the first value in view is the anchor, and a split
-        // area bands at it. Without one, the fill rests where the data says.
+        // WITH A BASELINE: `'view'` re-bases on the first value in view, a
+        // number stays where it was put, and a split area bands at whichever it
+        // is. Without one, the fill rests where the data says.
         const anchored =
-          c.baseline === true ? viewBaseline(closeSeries, col, viewRange?.[0]) : null;
+          c.baseline === 'view'
+            ? viewBaseline(closeSeries, col, viewRange?.[0])
+            : typeof c.baseline === 'number'
+              ? c.baseline
+              : null;
         const baseline = anchored ?? areaBaseline(closeSeries, col);
         const bands =
           anchored != null && effectiveSplit(c, settings).mode === 'split' ? [anchored] : undefined;
@@ -1713,6 +1760,7 @@ function TimeSeriesChartInner({
           range={viewRange ?? undefined}
           onTimeRangeChange={onViewRangeChange}
           minDuration={minDuration}
+          editAnnotations={editBaselines && !!onBaselineChange}
           onTrackerChanged={onTracker}
           // Omitting it makes charts skip per-layer timing entirely, so an app that
           // doesn't show the diagnostics line pays nothing for them.
@@ -1898,6 +1946,38 @@ function TimeSeriesChartInner({
                         />
                       ) : null,
                     )}
+                    {/* A FIXED baseline is a real mark on the chart, not a
+                        property of the fill: a rule at the level, labelled by
+                        the axis's own formatter, pinned to the axis edge, and
+                        DRAGGABLE — the drag reports the new value and the host
+                        writes it back, so the line and the fill it anchors are
+                        one thing rather than two that agree (Peter,
+                        2026-09-24). Declared with the annotations, behind every
+                        series, because it is context for them.
+
+                        `'view'` draws none: its anchor moves with the viewport,
+                        so a rule would be re-drawing itself under the pointer
+                        and inviting a drag it cannot honour. */}
+                    {row.configs
+                      .filter((c) => seriesDrawn(c) && typeof c.baseline === 'number')
+                      .map((c) => (
+                        <Baseline
+                          key={`${c.id}:baseline`}
+                          id={`${c.id}:baseline`}
+                          value={c.baseline as number}
+                          axis={configAxisId(row.id, c)}
+                          role={baselineRole(c.id)}
+                          indicator
+                          // In edit, so its handles show and a drag lands. The
+                          // mark's own flag is not enough on its own — the
+                          // container has to be in annotation-edit mode too, or
+                          // the data cursor keeps the pointer (measured, not
+                          // assumed: hovering the rule moved the crosshair and
+                          // the mark never lit).
+                          editing={editBaselines && !!onBaselineChange}
+                          onChange={onBaselineChange ? (v) => onBaselineChange(c.id, v) : undefined}
+                        />
+                      ))}
                     {shownAnnotations.map((a) => (
                       <Marker
                         key={a.id}
