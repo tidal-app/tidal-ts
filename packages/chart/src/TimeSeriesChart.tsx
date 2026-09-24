@@ -17,6 +17,7 @@ import {
   Candlestick,
   ChartContainer,
   ChartRow,
+  CrosshairCursor,
   Layers,
   LineChart,
   Marker,
@@ -29,6 +30,7 @@ import type {
   AxisMouseEvent,
   CandleStyle,
   ChartTheme,
+  CursorSnap,
   DrawStatsFrame,
   LiveValue,
   TrackerInfo,
@@ -284,6 +286,21 @@ export interface TimeSeriesChartProps {
    *  (`TrackerSample.label` = the series id / `<id>__cmp`), and `null` on leave —
    *  the caller renders the readout (chip values) outside the chart. */
   onTracker?: (info: TrackerInfo | null) => void;
+  /**
+   * WHICH of those values the crosshair is on — the series the reticle snapped
+   * to (`label` is the series id, as `onTracker`'s samples are) with its
+   * `axisId` and the value already formatted by that axis. `null` when it lets
+   * go: the pointer leaves, or moves to a row with nothing under it.
+   *
+   * `onTracker` answers "what does every line read here"; this answers "which
+   * line am I pointing at", and a readout that emphasises one row cannot be
+   * built from the first alone. The chart draws the dot on the snapped point
+   * already — this is the same conclusion, said out loud (charts 0.71).
+   *
+   * Fires only when the snapped point CHANGES, so it is cheap to hold in state
+   * beside a tracker that fires on every move.
+   */
+  onSnap?: (snap: CursorSnap | null) => void;
   /** Draw diagnostics for the status line: how many points are on screen and what
    *  the last repaint cost. Coalesced — see `onDrawStats` in the render. */
   onStats?: (stats: ChartStats) => void;
@@ -665,6 +682,21 @@ export function splitBarColumns(
 }
 
 /**
+ * Where an area's fill rests: **on the floor of its axis**, not on zero.
+ *
+ * charts 0.71 made `baseline={0}` the default, which is the right default for
+ * a chart of quantities — a fill as tall as its value. It is the wrong one
+ * here: these axes carry vol in percent and prices in dollars, series that
+ * live nowhere near zero, and pulling zero into an auto-fit domain flattens
+ * the shape the reader came for. A 15–55% band drawn from 0 is a band in the
+ * top third of its own plot.
+ *
+ * So the pre-0.71 rendering is kept, deliberately and in one place: the fill
+ * shows the shape, and the axis says what the numbers are.
+ */
+const AREA_BASELINE = 'floor';
+
+/**
  * The time-series chart: N stacked viewport **rows** sharing one time axis, each
  * row a set of series on its own dual L/R axes. A config names its data `source`
  * (`vol` / `price`, from {@link TimeSeriesChartProps.sources}) and its `column`; rows are
@@ -695,6 +727,7 @@ function TimeSeriesChartInner({
   dimmed = [],
   splitters,
   onTracker,
+  onSnap,
   onStats,
   pricePill,
   collapseWeekends,
@@ -1273,7 +1306,16 @@ function TimeSeriesChartInner({
         // the fill would stop one bar before the line it is meant to agree with,
         // at every seam.
         if (!splitsFor(c)) {
-          return [<AreaChart key={c.id} series={closeSeries} column={col} as={c.id} axis={axis} />];
+          return [
+            <AreaChart
+              key={c.id}
+              series={closeSeries}
+              column={col}
+              as={c.id}
+              axis={axis}
+              baseline={AREA_BASELINE}
+            />,
+          ];
         }
         // The price close gets the open-line treatment per slice (one source,
         // so uncached is cheap); everything else takes the cached end-shifted
@@ -1286,7 +1328,14 @@ function TimeSeriesChartInner({
               )
             : endSegmentsFor(panelSeries);
         return slices.map((slice, i) => (
-          <AreaChart key={`${c.id}__s${i}`} series={slice} column={col} as={c.id} axis={axis} />
+          <AreaChart
+            key={`${c.id}__s${i}`}
+            series={slice}
+            column={col}
+            as={c.id}
+            axis={axis}
+            baseline={AREA_BASELINE}
+          />
         ));
       }
       case 'bar': {
@@ -1571,7 +1620,6 @@ function TimeSeriesChartInner({
           range={viewRange ?? undefined}
           onTimeRangeChange={onViewRangeChange}
           minDuration={minDuration}
-          cursor="crosshair"
           onTrackerChanged={onTracker}
           // Omitting it makes charts skip per-layer timing entirely, so an app that
           // doesn't show the diagnostics line pays nothing for them.
@@ -1581,6 +1629,17 @@ function TimeSeriesChartInner({
           rowGap={gapSplitter ? 0 : 8}
           showAxis={false}
         >
+          {/* THE CURSOR IS MOUNTED, not named. Until charts 0.71 this was
+              `cursor="crosshair"` on the container; 0.71 removed that prop and
+              every one beside it, and a container with no cursor CHILD now
+              draws no cursor at all — so the same line that deletes the prop
+              has to mount this, or the chart silently loses its crosshair.
+
+              At the container, so it covers every row: the reticle is how you
+              read a stack against one time, and a row without it would be a
+              row you cannot question. `onSnap` is the library's own conclusion
+              about which series the dot is on — see the prop. */}
+          <CrosshairCursor onSnap={onSnap} />
           {renderedRows.map((row, i) => {
             const visible = row.configs.filter(seriesDrawn);
             // Visible AND its column actually folded — the drawable set. A `—`

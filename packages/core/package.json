@@ -37,14 +37,14 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@pond-ts/financial": "^0.70.0",
-    "@pond-ts/process": "0.70.0",
-    "pond-ts": "^0.70.0"
+    "@pond-ts/financial": "^0.71.0",
+    "@pond-ts/process": "0.71.0",
+    "pond-ts": "^0.71.0"
   },
   "devDependencies": {
-    "@pond-ts/financial": "^0.70.0",
-    "@pond-ts/process": "0.70.0",
-    "pond-ts": "^0.70.0",
+    "@pond-ts/financial": "^0.71.0",
+    "@pond-ts/process": "0.71.0",
+    "pond-ts": "^0.71.0",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }

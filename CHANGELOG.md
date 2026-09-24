@@ -2,6 +2,38 @@
 
 All packages release together on one version.
 
+## Unreleased
+
+- **The pond family floors at `^0.71.0`** (`@pond-ts/process` exact `0.71.0`),
+  and **the cursor is MOUNTED rather than named.** 0.71 removed
+  `<ChartContainer cursor>` and the rest of the pre-0.58 cursor props in favour
+  of cursor components, and a container with no cursor child now draws **no
+  cursor at all** — so `cursor="crosshair"` becoming `<CrosshairCursor />` is
+  not a tidy-up, it is the line that keeps the chart's crosshair. It is mounted
+  at the container, so it covers every row: the reticle is how a stack is read
+  against one time.
+
+- **`TimeSeriesChart` takes `onSnap`** — WHICH series the crosshair is on,
+  where `onTracker` says what every line reads. The snap carries the series
+  (`label`, the series id, as a tracker sample's is), the `axisId` it is
+  measured against, the raw `value` and the value already formatted by that
+  axis, and `null` when the reticle lets go. It fires only when the snapped
+  point **changes**, so it is cheap to hold in state beside a tracker that
+  fires on every move. `CursorSnap` is re-exported for it.
+
+  This is the answer to a consumer's oldest open ask. A readout listing one row
+  per series could show every value and could not emphasise the one being
+  pointed at — the chart drew the dot on it and said nothing about which it
+  was. The information never had to leave the library as geometry; it only had
+  to leave as a conclusion.
+
+- **Areas keep their floor.** 0.71 made `<AreaChart baseline>` default to `0`,
+  which is right for a chart of quantities and wrong for these axes: vol in
+  percent and prices in dollars live nowhere near zero, and pulling zero into
+  an auto-fit domain flattens the shape the reader came for. Every area passes
+  `baseline="floor"`, in one named constant, so the rendering is unchanged
+  from 0.2.1.
+
 ## 0.2.1 — 2026-09-18
 
 The day after 0.2.0. The first embedded consumer's review found a band a bar
