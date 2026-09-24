@@ -89,6 +89,8 @@ export { finiteColumns, firstLast, lastRow } from './seriesFacts.js';
 // site for the library the chart is built on.
 export { createLiveValue } from '@pond-ts/charts';
 export type { TrackerInfo, TrackerSample, LiveValue } from '@pond-ts/charts';
-/** What the crosshair is snapped to — see `TimeSeriesChartProps.onSnap`. Its
- *  `label` is the series id, as a `TrackerSample`'s is. */
+/** What the crosshair is snapped to, resolved to a series this chart drew —
+ *  see `TimeSeriesChartProps.onSnap`. `CursorSnap` comes with it because
+ *  `SeriesSnap` extends it. */
+export { seriesSnap, type SeriesSnap } from './snap.js';
 export type { CursorSnap } from '@pond-ts/charts';

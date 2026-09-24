@@ -13,13 +13,23 @@ All packages release together on one version.
   at the container, so it covers every row: the reticle is how a stack is read
   against one time.
 
+  One visible change comes with it: the reticle's **centre dot is drawn in the
+  snapped series' colour** rather than the cursor ink, so the cross shows which
+  line it is reading.
+
 - **`TimeSeriesChart` takes `onSnap`** — WHICH series the crosshair is on,
-  where `onTracker` says what every line reads. The snap carries the series
-  (`label`, the series id, as a tracker sample's is), the `axisId` it is
-  measured against, the raw `value` and the value already formatted by that
-  axis, and `null` when the reticle lets go. It fires only when the snapped
+  where `onTracker` says what every line reads. It fires only when the snapped
   point **changes**, so it is cheap to hold in state beside a tracker that
-  fires on every move. `CursorSnap` is re-exported for it.
+  fires on every move, and it is held in a ref internally so an inline callback
+  will not re-render the chart under the pointer.
+
+  The snap is **resolved to a config**, not handed over raw: `id` is the
+  config's own id and `part` names the layer within it — a band's edge, one of
+  a candle's four quotes, a split bar's falling half. The cursor reports those
+  as `"<as> <role>"` composites and `<id>__down`, which are this chart's own
+  inventions; a host keying on the raw label would match nothing on exactly the
+  marks where knowing the layer matters most. `seriesSnap` does the undoing and
+  is exported with `SeriesSnap` for a host that reads a raw cursor itself.
 
   This is the answer to a consumer's oldest open ask. A readout listing one row
   per series could show every value and could not emphasise the one being
@@ -27,12 +37,19 @@ All packages release together on one version.
   was. The information never had to leave the library as geometry; it only had
   to leave as a conclusion.
 
-- **Areas keep their floor.** 0.71 made `<AreaChart baseline>` default to `0`,
-  which is right for a chart of quantities and wrong for these axes: vol in
-  percent and prices in dollars live nowhere near zero, and pulling zero into
-  an auto-fit domain flattens the shape the reader came for. Every area passes
-  `baseline="floor"`, in one named constant, so the rendering is unchanged
-  from 0.2.1.
+- **An area's fill rests where its data says.** 0.71 made `<AreaChart baseline>`
+  default to `0`, which is right for a chart of quantities and wrong for most
+  of these axes: vol in percent and prices in dollars live nowhere near zero,
+  and pulling zero into an auto-fit domain flattens the shape the reader came
+  for. Those keep the pre-0.71 floor, so their rendering is unchanged from
+  0.2.1.
+
+  A series with a **negative** reading takes zero, because there the floor is
+  actively wrong: skew is signed and the sign is the whole signal, and rested
+  on the floor its fill grows as the number rises _towards_ zero — the deepest
+  skew drawn as the smallest mark. `areaBaseline` reads the drawn column, so
+  nothing chooses it by hand. Story `Chart/TimeSeriesChart / Areas`; the snap
+  has `SnapReadout` beside it.
 
 ## 0.2.1 — 2026-09-18
 

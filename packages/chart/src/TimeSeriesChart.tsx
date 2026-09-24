@@ -35,6 +35,7 @@ import type {
   LiveValue,
   TrackerInfo,
 } from '@pond-ts/charts';
+import { seriesSnap, type SeriesSnap } from './snap.js';
 import { segmentDiscontinuity, weekendSkip } from '@pond-ts/financial';
 import {
   resolveTimeZone,
@@ -287,20 +288,33 @@ export interface TimeSeriesChartProps {
    *  the caller renders the readout (chip values) outside the chart. */
   onTracker?: (info: TrackerInfo | null) => void;
   /**
-   * WHICH of those values the crosshair is on — the series the reticle snapped
-   * to (`label` is the series id, as `onTracker`'s samples are) with its
-   * `axisId` and the value already formatted by that axis. `null` when it lets
-   * go: the pointer leaves, or moves to a row with nothing under it.
+   * WHICH of those values the crosshair is on. `onTracker` answers "what does
+   * every line read here"; this answers "which line am I pointing at", and a
+   * readout that emphasises one row cannot be built from the first alone. The
+   * chart draws its dot on the snapped point already — this is the same
+   * conclusion, said out loud (charts 0.71).
    *
-   * `onTracker` answers "what does every line read here"; this answers "which
-   * line am I pointing at", and a readout that emphasises one row cannot be
-   * built from the first alone. The chart draws the dot on the snapped point
-   * already — this is the same conclusion, said out loud (charts 0.71).
+   * The snap is resolved to a CONFIG, not handed over raw: `id` is the config's
+   * own id and `part` names the layer within it when the mark drew several — a
+   * band's edge, one of a candle's four quotes, a split bar's falling half.
+   * The cursor reports those as `"<as> <role>"` composites and `<id>__down`,
+   * which are this chart's own inventions, so undoing them is this chart's job
+   * (see `seriesSnap`). Everything the cursor said comes through untouched
+   * beside them, including the value already formatted by its axis.
    *
-   * Fires only when the snapped point CHANGES, so it is cheap to hold in state
-   * beside a tracker that fires on every move.
+   * `null` when the reticle lets go — the pointer leaves the chart, or moves to
+   * a row with nothing under it — and also for a snap this chart cannot place
+   * on a config it drew, which a host should ignore rather than guess at.
+   * Upstream reports the POINTER's snap only, so a reticle shown by a
+   * controlled tracker position with no pointer on the chart stays `null` too.
+   *
+   * Fires only when the snapped point CHANGES, so it costs nothing beside a
+   * tracker that fires on every move. It is held in a ref internally, so an
+   * inline callback will not re-render the chart — but a host that MEMOIZES
+   * `TimeSeriesChart` still wants a stable one, or the memo misses on every
+   * render for this prop alone.
    */
-  onSnap?: (snap: CursorSnap | null) => void;
+  onSnap?: (snap: SeriesSnap | null) => void;
   /** Draw diagnostics for the status line: how many points are on screen and what
    *  the last repaint cost. Coalesced — see `onDrawStats` in the render. */
   onStats?: (stats: ChartStats) => void;
@@ -682,19 +696,36 @@ export function splitBarColumns(
 }
 
 /**
- * Where an area's fill rests: **on the floor of its axis**, not on zero.
+ * Where an area's fill rests — **on zero when the series can be negative, on
+ * the axis floor when it cannot.**
  *
- * charts 0.71 made `baseline={0}` the default, which is the right default for
- * a chart of quantities — a fill as tall as its value. It is the wrong one
- * here: these axes carry vol in percent and prices in dollars, series that
+ * charts 0.71 made `baseline={0}` the default. That is right for a chart of
+ * quantities and wrong for most of these: vol in percent and prices in dollars
  * live nowhere near zero, and pulling zero into an auto-fit domain flattens
- * the shape the reader came for. A 15–55% band drawn from 0 is a band in the
- * top third of its own plot.
+ * the shape the reader came for — a 15–55% band drawn from 0 is a band in the
+ * top third of its own plot. So the pre-0.71 floor is kept for them.
  *
- * So the pre-0.71 rendering is kept, deliberately and in one place: the fill
- * shows the shape, and the axis says what the numbers are.
+ * A series with a NEGATIVE reading is the case 0.71's default was written for,
+ * and the floor is actively wrong there. Skew is the example to think with: it
+ * is signed, and the sign is the whole signal — more negative is a steeper
+ * crash premium. Rested on the floor, its fill grows as the number rises
+ * *towards* zero, so the deepest skew draws the smallest mark and the reading
+ * is inverted. Rested on zero, the fill hangs from zero and its depth is the
+ * measurement (PR #15 review).
+ *
+ * Note it is "can be negative", not "crosses zero": an all-negative series has
+ * the same problem as a crossing one, and the fixture's skew is exactly that.
+ * One pass over the column, stopping at the first value that settles it.
  */
-const AREA_BASELINE = 'floor';
+export function areaBaseline(series: ChartSeries, column: string): 0 | 'floor' {
+  const col = readNumericColumn(series, column);
+  if (!col) return 'floor';
+  for (let i = 0; i < col.length; i += 1) {
+    const v = col.read(i);
+    if (v != null && Number.isFinite(v) && v < 0) return 0;
+  }
+  return 'floor';
+}
 
 /**
  * The time-series chart: N stacked viewport **rows** sharing one time axis, each
@@ -712,10 +743,13 @@ const AREA_BASELINE = 'floor';
  * the primary as-is and a **dashed counterpart** (`<id>__cmp`, same color + axis) —
  * texture encodes primary-vs-compare, color encodes the series.
  *
- * Cursor is the crosshair (synced line + per-series dots + on-axis value pills +
- * x-axis time pill); hover values ALSO surface via {@link onTracker} so the legend
- * chips can track the hovered point. Memoized — the caller's hover state re-renders
- * chips, not the canvas (keep prop identities stable).
+ * Cursor is the crosshair, mounted for every row: a reticle whose centre dot
+ * sits on the snapped point IN THAT SERIES' COLOUR (charts 0.71 — it used to
+ * take the cursor ink), with the value pinned to its own y axis and the time
+ * pinned to the x axis. Hover values ALSO surface via {@link onTracker} so the
+ * legend chips can track the hovered point, and which of them the reticle is on
+ * via {@link onSnap}. Memoized — the caller's hover state re-renders chips, not
+ * the canvas (keep prop identities stable).
  */
 function TimeSeriesChartInner({
   rows,
@@ -1313,7 +1347,7 @@ function TimeSeriesChartInner({
               column={col}
               as={c.id}
               axis={axis}
-              baseline={AREA_BASELINE}
+              baseline={areaBaseline(closeSeries, col)}
             />,
           ];
         }
@@ -1334,7 +1368,7 @@ function TimeSeriesChartInner({
             column={col}
             as={c.id}
             axis={axis}
-            baseline={AREA_BASELINE}
+            baseline={areaBaseline(slice, col)}
           />
         ));
       }
@@ -1515,6 +1549,21 @@ function TimeSeriesChartInner({
   useEffect(() => setHoverAxis(null), [gutterSig]);
 
   const renderedRows = rows.filter((r, i) => i === 0 || r.configs.some(seriesDrawn));
+
+  // THE SNAP, resolved and handed on through a STABLE callback. Both halves
+  // matter. The cursor reports a layer's `as`, which this chart mints — so the
+  // composite labels a band and a candle produce are undone here rather than in
+  // every host (`seriesSnap`). And the callback the cursor is given never
+  // changes identity, so a host may pass an inline lambda without re-rendering
+  // the chart under the pointer; the ids are read through a ref for the same
+  // reason.
+  const snapCb = useRef(onSnap);
+  snapCb.current = onSnap;
+  const snapIds = useRef<string[]>([]);
+  snapIds.current = renderedRows.flatMap((r) => r.configs.map((c) => c.id));
+  const handleSnap = useCallback((raw: CursorSnap | null) => {
+    snapCb.current?.(raw && seriesSnap(raw, snapIds.current));
+  }, []);
   const gapSplitter = renderedRows.length > 1 && !!splitters?.length;
 
   // The live pill rides the first visible config on its named source (that config
@@ -1639,7 +1688,7 @@ function TimeSeriesChartInner({
               read a stack against one time, and a row without it would be a
               row you cannot question. `onSnap` is the library's own conclusion
               about which series the dot is on — see the prop. */}
-          <CrosshairCursor onSnap={onSnap} />
+          <CrosshairCursor onSnap={onSnap ? handleSnap : undefined} />
           {renderedRows.map((row, i) => {
             const visible = row.configs.filter(seriesDrawn);
             // Visible AND its column actually folded — the drawable set. A `—`

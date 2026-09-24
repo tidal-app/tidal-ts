@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import {
   buildPriceSeries,
@@ -15,7 +16,7 @@ import {
   type TimeSeriesChartProps,
   type TimeSeriesChartRow,
 } from './index.js';
-import type { ChartSeries, SeriesConfig } from './index.js';
+import type { ChartSeries, SeriesConfig, SeriesSnap } from './index.js';
 
 /**
  * The chart's workshop, hosted the way a CONSUMER hosts it: a literal
@@ -184,5 +185,88 @@ export const IntradayBand: Story = {
     sources: intraday.sources,
     ohlcSources: [],
     collapseWeekends: true,
+  },
+};
+
+/**
+ * **Areas, and where their fill rests.** charts 0.71 made `baseline={0}` the
+ * default; this chart picks per series, and the two readings are why.
+ *
+ * The vol area rests on the **floor**: it runs 15–55%, and pulling zero into
+ * its domain would flatten the shape into the top third of the plot. The skew
+ * area rests on **zero**, because skew is signed and the sign is the whole
+ * signal — more negative is a steeper crash premium. Rested on the floor its
+ * fill would grow as the number rose *towards* zero, drawing the deepest skew
+ * as the smallest mark.
+ *
+ * Nothing chooses this by hand: `areaBaseline` reads the drawn column.
+ */
+export const Areas: Story = {
+  args: {
+    rows: [
+      {
+        id: 'vol',
+        height: 240,
+        configs: [line('iv21', 'iv21', 'ATM Vol 21D', '#4f9cd9', { style: 'area' })],
+      },
+      {
+        id: 'skew',
+        height: 200,
+        configs: [line('skew21', 'skew21', 'Skew 21D', '#c9a06a', { style: 'area', unit: '' })],
+      },
+    ],
+  },
+};
+
+/** The host's readout, driven by the snap: which series the reticle is on,
+ *  which LAYER of it when the mark draws several, and the value already
+ *  formatted by that series' own axis.
+ *
+ *  Hover the plot. The candle row is the one to watch — with the full quote
+ *  reported, the reticle lands on a wick extreme and `part` says which of
+ *  `open` / `high` / `low` / `close` you are reading, where the raw cursor
+ *  label would have been the composite `"price high"`. */
+export const SnapReadout: Story = {
+  render: (args, { globals }) => {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const [snap, setSnap] = useState<SeriesSnap | null>(null);
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+        <div
+          style={{
+            padding: '8px 12px',
+            fontFamily: 'ui-monospace, monospace',
+            fontSize: 12,
+            color: snap ? snap.color : '#888',
+          }}
+        >
+          {snap
+            ? `${snap.id}${snap.part ? ` · ${snap.part}` : ''} — ${snap.formatted} (axis ${snap.axisId})`
+            : 'no snap — the pointer is off the plot'}
+        </div>
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <Hosted
+            {...args}
+            onSnap={setSnap}
+            rows={[
+              { id: 'top', height: 260, configs: volConfigs.slice(0, 2) },
+              {
+                id: 'bottom',
+                height: 200,
+                configs: [
+                  line('price', 'close', 'Price', '#c9a94a', {
+                    axis: 'R',
+                    unit: '',
+                    source: 'price',
+                    style: 'candle',
+                  }),
+                ],
+              },
+            ]}
+            scheme={globals.scheme === 'light' ? 'light' : 'dark'}
+          />
+        </div>
+      </div>
+    );
   },
 };
