@@ -351,3 +351,25 @@ export const BaselinedAreaSingle: Story = {
     ],
   },
 };
+
+/** **A baseline as a PERCENTAGE of what is on screen** — `{ pct: 50 }` sits
+ *  halfway between the lowest and highest drawn value in view, so it holds its
+ *  place as you pan rather than its number. Pan or zoom the x axis and watch the
+ *  rule's own chip re-read.
+ *
+ *  Measured against the DATA in view, not the plot's height: the axis rounds its
+ *  auto-fit domain out past the data and never publishes where it landed, so a
+ *  percentage of the panel would be a guess at the library's own arithmetic. */
+export const PercentBaseline: Story = {
+  args: {
+    rows: [
+      {
+        id: 'only',
+        height: 380,
+        configs: [
+          line('iv21', 'iv21', 'ATM Vol 21D', '#4f9cd9', { style: 'area', baseline: { pct: 50 } }),
+        ],
+      },
+    ],
+  },
+};

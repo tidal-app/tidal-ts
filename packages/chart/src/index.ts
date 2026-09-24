@@ -93,4 +93,7 @@ export type { TrackerInfo, TrackerSample, LiveValue } from '@pond-ts/charts';
  *  see `TimeSeriesChartProps.onSnap`. `CursorSnap` comes with it because
  *  `SeriesSnap` extends it. */
 export { seriesSnap, type SeriesSnap } from './snap.js';
+/** Where an area's fill rests — the two a host may need to convert between a
+ *  level and a percentage of what is on screen. */
+export { pctBaseline, viewBaseline, areaBaseline } from './TimeSeriesChart.js';
 export type { CursorSnap } from '@pond-ts/charts';

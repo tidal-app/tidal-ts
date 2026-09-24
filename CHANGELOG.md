@@ -15,6 +15,23 @@ All packages release together on one version.
   `onBaselineChange` and the host writes it back, which is what makes the rule
   and the fill one thing rather than two that agree.
 
+  A level can also be a **percentage of the drawn range in view** —
+  `{ pct: 50 }` sits halfway between the lowest and highest value on screen, so
+  it holds its PLACE as you pan rather than its number, and `pctBaseline` is
+  exported for a host that converts between the two units. It is measured
+  against the data in view and **not the plot's height**: the axis rounds its
+  auto-fit domain out past the data — $240–$540 around a series running
+  $237–$520 — and never publishes where it landed, so a percentage of the panel
+  would be this package guessing at the library's own arithmetic. Story
+  `PercentBaseline`.
+
+  The rule is drawn for an **area**, and for a level the reader set. Not for
+  `'view'`, whose anchor is a data point the fill's own edge already shows —
+  and not for a config that merely carries the field while drawing as something
+  else, which an auto-compare mirror does: it is forced to a line and keeps
+  every other field of its primary, so a baselined area with a comparison drew
+  two rules, one of them under a line with no fill to anchor.
+
   Dragging needs **`editBaselines`**, charts' annotation-edit mode, and that is
   a mode rather than a permanent affordance for a reason worth stating: charts
   suppresses the data cursor while it is on, because the crosshair and a

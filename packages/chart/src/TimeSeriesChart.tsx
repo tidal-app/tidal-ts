@@ -771,6 +771,48 @@ export function viewBaseline(series: ChartSeries, column: string, from?: number)
   return null;
 }
 
+/**
+ * A level given as a **percentage of the drawn range in view**: `0` is the
+ * lowest value on screen, `100` the highest.
+ *
+ * Measured against the DATA in view, not the plot's height. The axis rounds its
+ * auto-fit domain out past the data — $240–$540 around a series running
+ * $237–$520 — and never publishes where it landed, so a percentage of the panel
+ * would be this function guessing at the library's own arithmetic, which is the
+ * parallel implementation we have promised not to write (the same gap as
+ * `F-charts-23` / `F-charts-28`). What this measures is exact and it re-reads as
+ * you pan, which is the behaviour that was wanted (Peter, 2026-09-24).
+ *
+ * `null` when nothing in view has a value — there is no range to take a
+ * fraction of.
+ */
+export function pctBaseline(
+  series: ChartSeries,
+  column: string,
+  pct: number,
+  from?: number,
+  to?: number,
+): number | null {
+  const col = readNumericColumn(series, column);
+  if (!col) return null;
+  const key = series.keyColumn() as unknown as { at(i: number): number | undefined };
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let i = 0; i < col.length; i += 1) {
+    const t = key.at(i);
+    if (from != null && (t ?? Infinity) < from) continue;
+    if (to != null && (t ?? -Infinity) > to) break;
+    const v = col.read(i);
+    if (v == null || !Number.isFinite(v)) continue;
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  if (lo === Infinity) return null;
+  // A flat window has one value and every percentage of it is that value —
+  // which is right, and keeps the fill from jumping when a series goes quiet.
+  return lo + ((hi - lo) * pct) / 100;
+}
+
 export function areaBaseline(series: ChartSeries, column: string): 0 | 'floor' {
   const col = readNumericColumn(series, column);
   if (!col) return 'floor';
@@ -1414,7 +1456,9 @@ function TimeSeriesChartInner({
             ? viewBaseline(closeSeries, col, viewRange?.[0])
             : typeof c.baseline === 'number'
               ? c.baseline
-              : null;
+              : c.baseline != null
+                ? pctBaseline(closeSeries, col, c.baseline.pct, viewRange?.[0], viewRange?.[1])
+                : null;
         const baseline = anchored ?? areaBaseline(closeSeries, col);
         const bands =
           anchored != null && effectiveSplit(c, settings).mode === 'split' ? [anchored] : undefined;
@@ -1959,12 +2003,45 @@ function TimeSeriesChartInner({
                         so a rule would be re-drawing itself under the pointer
                         and inviting a drag it cannot honour. */}
                     {row.configs
-                      .filter((c) => seriesDrawn(c) && typeof c.baseline === 'number')
-                      .map((c) => (
+                      .flatMap((c) => {
+                        // AREAS ONLY. `baseline` is an area's property, and a
+                        // config can carry it while drawing as something else —
+                        // an auto-compare mirror is forced to a line and keeps
+                        // every other field of its primary, so a baselined area
+                        // with a comparison drew TWO rules, one of them under a
+                        // line with no fill to anchor (seen on a running
+                        // render, 2026-09-24).
+                        if (
+                          c.style !== 'area' ||
+                          !seriesDrawn(c) ||
+                          c.baseline == null ||
+                          c.baseline === 'view'
+                        )
+                          return [];
+                        // A percentage is a level too — the reader set it, and
+                        // it has a value at every moment — so it gets the same
+                        // rule. `'view'` does not: its anchor is a data point
+                        // the fill's own edge already shows.
+                        const src = c.source ? sources[c.source] : undefined;
+                        const at =
+                          typeof c.baseline === 'number'
+                            ? c.baseline
+                            : src
+                              ? pctBaseline(
+                                  src,
+                                  configColumns(c)[0] ?? c.column,
+                                  c.baseline.pct,
+                                  viewRange?.[0],
+                                  viewRange?.[1],
+                                )
+                              : null;
+                        return at == null ? [] : [[c, at] as const];
+                      })
+                      .map(([c, at]) => (
                         <Baseline
                           key={`${c.id}:baseline`}
                           id={`${c.id}:baseline`}
-                          value={c.baseline as number}
+                          value={at}
                           axis={configAxisId(row.id, c)}
                           role={baselineRole(c.id)}
                           indicator

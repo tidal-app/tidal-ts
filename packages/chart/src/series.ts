@@ -201,6 +201,13 @@ export interface SeriesConfig {
    * - `'view'` — the value of the **first point in the viewport**, so the fill
    *   reads as the move since the left edge and RE-BASES as you pan. The same
    *   anchor a rebased axis uses for a comparison.
+   * - `{ pct }` — a level given as a **percentage of the drawn range in view**:
+   *   `0` is the lowest value on screen, `100` the highest, `50` halfway
+   *   between them. It re-reads as you pan, so it stays in the same place
+   *   relative to what you are looking at rather than at the same number.
+   *   Measured against the DATA in view and not the plot's height — the axis
+   *   rounds its domain out past the data and never publishes where it landed,
+   *   so a percentage of the panel would be a guess (Peter, 2026-09-24).
    * - a **number** — a level you put there and it stays. Drawn as a real
    *   horizontal rule on the chart (charts' `<Baseline>`), labelled with the
    *   axis's own formatter and pinned to the axis edge, and **draggable**: the
@@ -218,7 +225,7 @@ export interface SeriesConfig {
    * Omitted ⇒ off, and the fill rests where the data says: on zero for a series
    * with a negative reading, on the axis floor otherwise (see `areaBaseline`).
    */
-  baseline?: 'view' | number;
+  baseline?: 'view' | number | { readonly pct: number };
   /** Direction coloring for a `bar`/`candle` series, or an `area` with
    *  {@link baseline} on: `'split'` (rise/fall pair) vs `'single'` (the series'
    *  own `color`). Omitted ⇒ the chart settings' default for that mark (legacy
