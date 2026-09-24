@@ -13,10 +13,12 @@ import type { ChartSeries } from './types.js';
 import {
   AreaChart,
   BandChart,
+  Baseline,
   BarChart,
   Candlestick,
   ChartContainer,
   ChartRow,
+  CrosshairCursor,
   Layers,
   LineChart,
   Marker,
@@ -29,10 +31,12 @@ import type {
   AxisMouseEvent,
   CandleStyle,
   ChartTheme,
+  CursorSnap,
   DrawStatsFrame,
   LiveValue,
   TrackerInfo,
 } from '@pond-ts/charts';
+import { seriesSnap, type SeriesSnap } from './snap.js';
 import { segmentDiscontinuity, weekendSkip } from '@pond-ts/financial';
 import {
   resolveTimeZone,
@@ -284,6 +288,54 @@ export interface TimeSeriesChartProps {
    *  (`TrackerSample.label` = the series id / `<id>__cmp`), and `null` on leave —
    *  the caller renders the readout (chip values) outside the chart. */
   onTracker?: (info: TrackerInfo | null) => void;
+  /**
+   * WHICH of those values the crosshair is on. `onTracker` answers "what does
+   * every line read here"; this answers "which line am I pointing at", and a
+   * readout that emphasises one row cannot be built from the first alone. The
+   * chart draws its dot on the snapped point already — this is the same
+   * conclusion, said out loud (charts 0.71).
+   *
+   * The snap is resolved to a CONFIG, not handed over raw: `id` is the config's
+   * own id and `part` names the layer within it when the mark drew several — a
+   * band's edge, one of a candle's four quotes, a split bar's falling half.
+   * The cursor reports those as `"<as> <role>"` composites and `<id>__down`,
+   * which are this chart's own inventions, so undoing them is this chart's job
+   * (see `seriesSnap`). Everything the cursor said comes through untouched
+   * beside them, including the value already formatted by its axis.
+   *
+   * `null` when the reticle lets go — the pointer leaves the chart, or moves to
+   * a row with nothing under it — and also for a snap this chart cannot place
+   * on a config it drew, which a host should ignore rather than guess at.
+   * Upstream reports the POINTER's snap only, so a reticle shown by a
+   * controlled tracker position with no pointer on the chart stays `null` too.
+   *
+   * Fires only when the snapped point CHANGES, so it costs nothing beside a
+   * tracker that fires on every move. It is held in a ref internally, so an
+   * inline callback will not re-render the chart — but a host that MEMOIZES
+   * `TimeSeriesChart` still wants a stable one, or the memo misses on every
+   * render for this prop alone.
+   */
+  onSnap?: (snap: SeriesSnap | null) => void;
+  /**
+   * A FIXED baseline was dragged. Fires with the series and the new value in
+   * that axis's units — the mark is controlled, so the host writes it back to
+   * the config's `baseline` and the rule and the fill it anchors move together.
+   * Omit and the rule is drawn but cannot be moved.
+   */
+  onBaselineChange?: (id: string, value: number) => void;
+  /**
+   * Put the chart in **annotation-edit mode**, which is what makes a fixed
+   * baseline's rule draggable: hovering it reveals its handles, and a drag
+   * reports through {@link onBaselineChange}.
+   *
+   * It is a MODE and not a permanent affordance, because charts suppresses the
+   * data cursor while it is on — the crosshair and a draggable mark both want
+   * the pointer, and the library resolves that by giving it to the mark. So a
+   * host turns this on for the moment the reader is placing a level (its style
+   * panel open on that series, say) and off again after, rather than trading
+   * the crosshair away for a rule that is usually just sitting there.
+   */
+  editBaselines?: boolean;
   /** Draw diagnostics for the status line: how many points are on screen and what
    *  the last repaint cost. Coalesced — see `onDrawStats` in the render. */
   onStats?: (stats: ChartStats) => void;
@@ -665,6 +717,113 @@ export function splitBarColumns(
 }
 
 /**
+ * Where an area's fill rests — **on zero when the series can be negative, on
+ * the axis floor when it cannot.**
+ *
+ * charts 0.71 made `baseline={0}` the default. That is right for a chart of
+ * quantities and wrong for most of these: vol in percent and prices in dollars
+ * live nowhere near zero, and pulling zero into an auto-fit domain flattens
+ * the shape the reader came for — a 15–55% band drawn from 0 is a band in the
+ * top third of its own plot. So the pre-0.71 floor is kept for them.
+ *
+ * A series with a NEGATIVE reading is the case 0.71's default was written for,
+ * and the floor is actively wrong there. Skew is the example to think with: it
+ * is signed, and the sign is the whole signal — more negative is a steeper
+ * crash premium. Rested on the floor, its fill grows as the number rises
+ * *towards* zero, so the deepest skew draws the smallest mark and the reading
+ * is inverted. Rested on zero, the fill hangs from zero and its depth is the
+ * measurement (PR #15 review).
+ *
+ * Note it is "can be negative", not "crosses zero": an all-negative series has
+ * the same problem as a crossing one, and the fixture's skew is exactly that.
+ * One pass over the column, stopping at the first value that settles it.
+ */
+/**
+ * The value an area with `baseline` measures from: **the first point in the
+ * viewport.**
+ *
+ * The same anchor a rebased axis uses for a comparison — the fill then reads as
+ * the move since the left edge of what you are looking at, and re-bases as you
+ * pan, which is the reading a trader already has for "since the open" and
+ * "year to date". A fixed anchor is a different feature (`TDL-CMPANCHOR`), and
+ * a view-following one is what was asked for.
+ *
+ * `from` absent (auto-fit) ⇒ the series' own first drawn point, which IS the
+ * left edge then. `null` when the column has no finite value in view at all —
+ * the caller draws an ordinary area rather than measuring from nothing.
+ */
+/** The theme role a fixed baseline's rule wears — one per series, so the mark
+ *  takes its own area's ink (colour reaches an annotation only through a
+ *  role). */
+export const baselineRole = (id: string): string => `baseline:${id}`;
+
+export function viewBaseline(series: ChartSeries, column: string, from?: number): number | null {
+  const col = readNumericColumn(series, column);
+  if (!col) return null;
+  // The KEY column for the time, the way every other walk here reads it — a
+  // series' key is its time and `time` is not a column you can ask for.
+  const key = series.keyColumn() as unknown as { at(i: number): number | undefined };
+  for (let i = 0; i < col.length; i += 1) {
+    if (from != null && (key.at(i) ?? Infinity) < from) continue;
+    const v = col.read(i);
+    if (v != null && Number.isFinite(v)) return v;
+  }
+  return null;
+}
+
+/**
+ * A level given as a **percentage of the drawn range in view**: `0` is the
+ * lowest value on screen, `100` the highest.
+ *
+ * Measured against the DATA in view, not the plot's height. The axis rounds its
+ * auto-fit domain out past the data — $240–$540 around a series running
+ * $237–$520 — and never publishes where it landed, so a percentage of the panel
+ * would be this function guessing at the library's own arithmetic, which is the
+ * parallel implementation we have promised not to write (the same gap as
+ * `F-charts-23` / `F-charts-28`). What this measures is exact and it re-reads as
+ * you pan, which is the behaviour that was wanted (Peter, 2026-09-24).
+ *
+ * `null` when nothing in view has a value — there is no range to take a
+ * fraction of.
+ */
+export function pctBaseline(
+  series: ChartSeries,
+  column: string,
+  pct: number,
+  from?: number,
+  to?: number,
+): number | null {
+  const col = readNumericColumn(series, column);
+  if (!col) return null;
+  const key = series.keyColumn() as unknown as { at(i: number): number | undefined };
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let i = 0; i < col.length; i += 1) {
+    const t = key.at(i);
+    if (from != null && (t ?? Infinity) < from) continue;
+    if (to != null && (t ?? -Infinity) > to) break;
+    const v = col.read(i);
+    if (v == null || !Number.isFinite(v)) continue;
+    if (v < lo) lo = v;
+    if (v > hi) hi = v;
+  }
+  if (lo === Infinity) return null;
+  // A flat window has one value and every percentage of it is that value —
+  // which is right, and keeps the fill from jumping when a series goes quiet.
+  return lo + ((hi - lo) * pct) / 100;
+}
+
+export function areaBaseline(series: ChartSeries, column: string): 0 | 'floor' {
+  const col = readNumericColumn(series, column);
+  if (!col) return 'floor';
+  for (let i = 0; i < col.length; i += 1) {
+    const v = col.read(i);
+    if (v != null && Number.isFinite(v) && v < 0) return 0;
+  }
+  return 'floor';
+}
+
+/**
  * The time-series chart: N stacked viewport **rows** sharing one time axis, each
  * row a set of series on its own dual L/R axes. A config names its data `source`
  * (`vol` / `price`, from {@link TimeSeriesChartProps.sources}) and its `column`; rows are
@@ -680,10 +839,13 @@ export function splitBarColumns(
  * the primary as-is and a **dashed counterpart** (`<id>__cmp`, same color + axis) —
  * texture encodes primary-vs-compare, color encodes the series.
  *
- * Cursor is the crosshair (synced line + per-series dots + on-axis value pills +
- * x-axis time pill); hover values ALSO surface via {@link onTracker} so the legend
- * chips can track the hovered point. Memoized — the caller's hover state re-renders
- * chips, not the canvas (keep prop identities stable).
+ * Cursor is the crosshair, mounted for every row: a reticle whose centre dot
+ * sits on the snapped point IN THAT SERIES' COLOUR (charts 0.71 — it used to
+ * take the cursor ink), with the value pinned to its own y axis and the time
+ * pinned to the x axis. Hover values ALSO surface via {@link onTracker} so the
+ * legend chips can track the hovered point, and which of them the reticle is on
+ * via {@link onSnap}. Memoized — the caller's hover state re-renders chips, not
+ * the canvas (keep prop identities stable).
  */
 function TimeSeriesChartInner({
   rows,
@@ -695,6 +857,9 @@ function TimeSeriesChartInner({
   dimmed = [],
   splitters,
   onTracker,
+  onSnap,
+  onBaselineChange,
+  editBaselines = false,
   onStats,
   pricePill,
   collapseWeekends,
@@ -824,6 +989,13 @@ function TimeSeriesChartInner({
         bar[c.id] = { ...base.bar.default, fill: riseC, highlight: riseC };
         bar[`${c.id}__down`] = { ...base.bar.default, fill: fallC, highlight: fallC };
         if (c.style === 'candle') candle[c.id] = candleStyleForPair(riseC, fallC);
+        // An AREA with a baseline splits the same way, through the layer's own
+        // band ladder: one breakpoint at the baseline, so `bands` reads
+        // [below, above]. The outline switches hue at each crossing too, and
+        // the fill goes FLAT — charts drops the grade for a banded area,
+        // because the fade encoded distance-from-baseline and the bands now
+        // state which side you are on.
+        if (c.style === 'area') area[c.id] = { ...area[c.id]!, bands: [fallC, riseC] };
       } else {
         bar[c.id] = { ...base.bar.default, fill: color, highlight: color };
         // A single-color candle takes the series' one colour (a per-id style) so
@@ -840,13 +1012,27 @@ function TimeSeriesChartInner({
     const annotation = base.annotation
       ? {
           ...base.annotation,
-          roles: annotations.reduce<NonNullable<ChartTheme['annotation']>['roles']>(
-            (acc, a) => ({
-              ...acc,
-              [a.role]: { ...acc?.[a.role], color: resolveColor(a.color) },
-            }),
-            base.annotation.roles ?? {},
-          ),
+          roles: allConfigs
+            // A FIXED baseline's rule takes ITS OWN AREA'S ink, through a role
+            // of its own: the mark belongs to that series, and the annotation
+            // register's base colour would make two areas' baselines
+            // indistinguishable. One entry per baselined series, which is a
+            // handful — and it is the only way a per-mark colour can reach the
+            // canvas, since there is no colour prop.
+            .filter((c) => typeof c.baseline === 'number')
+            .reduce<NonNullable<ChartTheme['annotation']>['roles']>(
+              (acc, c) => ({
+                ...acc,
+                [baselineRole(c.id)]: { color: resolveColor(c.color) },
+              }),
+              annotations.reduce<NonNullable<ChartTheme['annotation']>['roles']>(
+                (acc, a) => ({
+                  ...acc,
+                  [a.role]: { ...acc?.[a.role], color: resolveColor(a.color) },
+                }),
+                base.annotation.roles ?? {},
+              ),
+            ),
         }
       : base.annotation;
     return {
@@ -1262,6 +1448,20 @@ function TimeSeriesChartInner({
     const endSeries = (c.source ? shifted.get(c.source) : undefined) ?? panelSeries;
     switch (c.style) {
       case 'area': {
+        // WITH A BASELINE: `'view'` re-bases on the first value in view, a
+        // number stays where it was put, and a split area bands at whichever it
+        // is. Without one, the fill rests where the data says.
+        const anchored =
+          c.baseline === 'view'
+            ? viewBaseline(closeSeries, col, viewRange?.[0])
+            : typeof c.baseline === 'number'
+              ? c.baseline
+              : c.baseline != null
+                ? pctBaseline(closeSeries, col, c.baseline.pct, viewRange?.[0], viewRange?.[1])
+                : null;
+        const baseline = anchored ?? areaBaseline(closeSeries, col);
+        const bands =
+          anchored != null && effectiveSplit(c, settings).mode === 'split' ? [anchored] : undefined;
         // No `sessionBreaks` on `<AreaChart>` — the prop is LineChart-only
         // (F-charts-20), so the break is made here: one layer per live segment,
         // and the fill ends at the close and restarts at the open like the line
@@ -1273,7 +1473,17 @@ function TimeSeriesChartInner({
         // the fill would stop one bar before the line it is meant to agree with,
         // at every seam.
         if (!splitsFor(c)) {
-          return [<AreaChart key={c.id} series={closeSeries} column={col} as={c.id} axis={axis} />];
+          return [
+            <AreaChart
+              key={c.id}
+              series={closeSeries}
+              column={col}
+              as={c.id}
+              axis={axis}
+              baseline={baseline}
+              thresholds={bands}
+            />,
+          ];
         }
         // The price close gets the open-line treatment per slice (one source,
         // so uncached is cheap); everything else takes the cached end-shifted
@@ -1286,7 +1496,15 @@ function TimeSeriesChartInner({
               )
             : endSegmentsFor(panelSeries);
         return slices.map((slice, i) => (
-          <AreaChart key={`${c.id}__s${i}`} series={slice} column={col} as={c.id} axis={axis} />
+          <AreaChart
+            key={`${c.id}__s${i}`}
+            series={slice}
+            column={col}
+            as={c.id}
+            axis={axis}
+            baseline={baseline}
+            thresholds={bands}
+          />
         ));
       }
       case 'bar': {
@@ -1466,6 +1684,21 @@ function TimeSeriesChartInner({
   useEffect(() => setHoverAxis(null), [gutterSig]);
 
   const renderedRows = rows.filter((r, i) => i === 0 || r.configs.some(seriesDrawn));
+
+  // THE SNAP, resolved and handed on through a STABLE callback. Both halves
+  // matter. The cursor reports a layer's `as`, which this chart mints — so the
+  // composite labels a band and a candle produce are undone here rather than in
+  // every host (`seriesSnap`). And the callback the cursor is given never
+  // changes identity, so a host may pass an inline lambda without re-rendering
+  // the chart under the pointer; the ids are read through a ref for the same
+  // reason.
+  const snapCb = useRef(onSnap);
+  snapCb.current = onSnap;
+  const snapIds = useRef<string[]>([]);
+  snapIds.current = renderedRows.flatMap((r) => r.configs.map((c) => c.id));
+  const handleSnap = useCallback((raw: CursorSnap | null) => {
+    snapCb.current?.(raw && seriesSnap(raw, snapIds.current));
+  }, []);
   const gapSplitter = renderedRows.length > 1 && !!splitters?.length;
 
   // The live pill rides the first visible config on its named source (that config
@@ -1571,7 +1804,7 @@ function TimeSeriesChartInner({
           range={viewRange ?? undefined}
           onTimeRangeChange={onViewRangeChange}
           minDuration={minDuration}
-          cursor="crosshair"
+          editAnnotations={editBaselines && !!onBaselineChange}
           onTrackerChanged={onTracker}
           // Omitting it makes charts skip per-layer timing entirely, so an app that
           // doesn't show the diagnostics line pays nothing for them.
@@ -1581,6 +1814,17 @@ function TimeSeriesChartInner({
           rowGap={gapSplitter ? 0 : 8}
           showAxis={false}
         >
+          {/* THE CURSOR IS MOUNTED, not named. Until charts 0.71 this was
+              `cursor="crosshair"` on the container; 0.71 removed that prop and
+              every one beside it, and a container with no cursor CHILD now
+              draws no cursor at all — so the same line that deletes the prop
+              has to mount this, or the chart silently loses its crosshair.
+
+              At the container, so it covers every row: the reticle is how you
+              read a stack against one time, and a row without it would be a
+              row you cannot question. `onSnap` is the library's own conclusion
+              about which series the dot is on — see the prop. */}
+          <CrosshairCursor onSnap={onSnap ? handleSnap : undefined} />
           {renderedRows.map((row, i) => {
             const visible = row.configs.filter(seriesDrawn);
             // Visible AND its column actually folded — the drawable set. A `—`
@@ -1746,6 +1990,71 @@ function TimeSeriesChartInner({
                         />
                       ) : null,
                     )}
+                    {/* A FIXED baseline is a real mark on the chart, not a
+                        property of the fill: a rule at the level, labelled by
+                        the axis's own formatter, pinned to the axis edge, and
+                        DRAGGABLE — the drag reports the new value and the host
+                        writes it back, so the line and the fill it anchors are
+                        one thing rather than two that agree (Peter,
+                        2026-09-24). Declared with the annotations, behind every
+                        series, because it is context for them.
+
+                        `'view'` draws none: its anchor moves with the viewport,
+                        so a rule would be re-drawing itself under the pointer
+                        and inviting a drag it cannot honour. */}
+                    {row.configs
+                      .flatMap((c) => {
+                        // AREAS ONLY. `baseline` is an area's property, and a
+                        // config can carry it while drawing as something else —
+                        // an auto-compare mirror is forced to a line and keeps
+                        // every other field of its primary, so a baselined area
+                        // with a comparison drew TWO rules, one of them under a
+                        // line with no fill to anchor (seen on a running
+                        // render, 2026-09-24).
+                        if (
+                          c.style !== 'area' ||
+                          !seriesDrawn(c) ||
+                          c.baseline == null ||
+                          c.baseline === 'view'
+                        )
+                          return [];
+                        // A percentage is a level too — the reader set it, and
+                        // it has a value at every moment — so it gets the same
+                        // rule. `'view'` does not: its anchor is a data point
+                        // the fill's own edge already shows.
+                        const src = c.source ? sources[c.source] : undefined;
+                        const at =
+                          typeof c.baseline === 'number'
+                            ? c.baseline
+                            : src
+                              ? pctBaseline(
+                                  src,
+                                  configColumns(c)[0] ?? c.column,
+                                  c.baseline.pct,
+                                  viewRange?.[0],
+                                  viewRange?.[1],
+                                )
+                              : null;
+                        return at == null ? [] : [[c, at] as const];
+                      })
+                      .map(([c, at]) => (
+                        <Baseline
+                          key={`${c.id}:baseline`}
+                          id={`${c.id}:baseline`}
+                          value={at}
+                          axis={configAxisId(row.id, c)}
+                          role={baselineRole(c.id)}
+                          indicator
+                          // In edit, so its handles show and a drag lands. The
+                          // mark's own flag is not enough on its own — the
+                          // container has to be in annotation-edit mode too, or
+                          // the data cursor keeps the pointer (measured, not
+                          // assumed: hovering the rule moved the crosshair and
+                          // the mark never lit).
+                          editing={editBaselines && !!onBaselineChange}
+                          onChange={onBaselineChange ? (v) => onBaselineChange(c.id, v) : undefined}
+                        />
+                      ))}
                     {shownAnnotations.map((a) => (
                       <Marker
                         key={a.id}

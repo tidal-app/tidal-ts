@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react';
 import {
   buildPriceSeries,
@@ -15,7 +16,7 @@ import {
   type TimeSeriesChartProps,
   type TimeSeriesChartRow,
 } from './index.js';
-import type { ChartSeries, SeriesConfig } from './index.js';
+import type { ChartSeries, SeriesConfig, SeriesSnap } from './index.js';
 
 /**
  * The chart's workshop, hosted the way a CONSUMER hosts it: a literal
@@ -184,5 +185,191 @@ export const IntradayBand: Story = {
     sources: intraday.sources,
     ohlcSources: [],
     collapseWeekends: true,
+  },
+};
+
+/**
+ * **Areas, and where their fill rests.** charts 0.71 made `baseline={0}` the
+ * default; this chart picks per series, and the two readings are why.
+ *
+ * The vol area rests on the **floor**: it runs 15–55%, and pulling zero into
+ * its domain would flatten the shape into the top third of the plot. The skew
+ * area rests on **zero**, because skew is signed and the sign is the whole
+ * signal — more negative is a steeper crash premium. Rested on the floor its
+ * fill would grow as the number rose *towards* zero, drawing the deepest skew
+ * as the smallest mark.
+ *
+ * Nothing chooses this by hand: `areaBaseline` reads the drawn column.
+ */
+export const Areas: Story = {
+  args: {
+    rows: [
+      {
+        id: 'vol',
+        height: 240,
+        configs: [line('iv21', 'iv21', 'ATM Vol 21D', '#4f9cd9', { style: 'area' })],
+      },
+      {
+        id: 'skew',
+        height: 200,
+        configs: [line('skew21', 'skew21', 'Skew 21D', '#c9a06a', { style: 'area', unit: '' })],
+      },
+    ],
+  },
+};
+
+/** The host's readout, driven by the snap: which series the reticle is on,
+ *  which LAYER of it when the mark draws several, and the value already
+ *  formatted by that series' own axis.
+ *
+ *  Hover the plot. The candle row is the one to watch — with the full quote
+ *  reported, the reticle lands on a wick extreme and `part` says which of
+ *  `open` / `high` / `low` / `close` you are reading, where the raw cursor
+ *  label would have been the composite `"price high"`. */
+export const SnapReadout: Story = {
+  render: (args, { globals }) => {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const [snap, setSnap] = useState<SeriesSnap | null>(null);
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+        <div
+          style={{
+            padding: '8px 12px',
+            fontFamily: 'ui-monospace, monospace',
+            fontSize: 12,
+            color: snap ? snap.color : '#888',
+          }}
+        >
+          {snap
+            ? `${snap.id}${snap.part ? ` · ${snap.part}` : ''} — ${snap.formatted} (axis ${snap.axisId})`
+            : 'no snap — the pointer is off the plot'}
+        </div>
+        <div style={{ flex: 1, minHeight: 0 }}>
+          <Hosted
+            {...args}
+            onSnap={setSnap}
+            rows={[
+              { id: 'top', height: 260, configs: volConfigs.slice(0, 2) },
+              {
+                id: 'bottom',
+                height: 200,
+                configs: [
+                  line('price', 'close', 'Price', '#c9a94a', {
+                    axis: 'R',
+                    unit: '',
+                    source: 'price',
+                    style: 'candle',
+                  }),
+                ],
+              },
+            ]}
+            scheme={globals.scheme === 'light' ? 'light' : 'dark'}
+          />
+        </div>
+      </div>
+    );
+  },
+};
+
+/** **A baselined area.** The fill measures from the value of the first point
+ *  IN VIEW — the same anchor a rebased axis uses for a comparison — so it
+ *  reads as the move since the left edge, and re-bases as you pan.
+ *
+ *  Drawn in parts: above the baseline in the rise colour, below it in the fall
+ *  colour, flat rather than graded, with the outline switching hue at each
+ *  crossing. Which colours, and whether it splits at all, are the bar's own
+ *  controls (`colorMode` / `riseColor` / `fallColor`) defaulted from the
+ *  settings' `areas` section — so a host that reserves green and red can turn
+ *  it off in one place. */
+export const BaselinedArea: Story = {
+  args: {
+    rows: [
+      {
+        id: 'only',
+        height: 380,
+        configs: [
+          line('iv21', 'iv21', 'ATM Vol 21D', '#4f9cd9', { style: 'area', baseline: 'view' }),
+        ],
+      },
+    ],
+  },
+};
+
+/** **A FIXED baseline**, drawn as a real rule at the level and **draggable** —
+ *  grab the line and move it; the story writes the new value back, which is
+ *  what keeps the rule and the fill one thing rather than two that agree. It is
+ *  labelled by the axis's own formatter and pinned to the axis edge, and wears
+ *  its area's ink rather than the annotation register's.
+ *
+ *  Note the crosshair is GONE here: `editBaselines` is charts' annotation-edit
+ *  mode, and the cursor and a draggable mark both want the pointer. That is why
+ *  it is a mode a host turns on for the moment rather than a permanent
+ *  affordance. */
+export const FixedBaseline: Story = {
+  render: (args, { globals }) => {
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    const [level, setLevel] = useState(28);
+    return (
+      <Hosted
+        {...args}
+        onBaselineChange={(_id, v) => setLevel(Number(v.toFixed(2)))}
+        // The mode that makes it draggable — and that takes the crosshair
+        // away while it is on, which is why a host scopes it to the moment
+        // the reader is placing a level.
+        editBaselines
+        rows={[
+          {
+            id: 'only',
+            height: 380,
+            configs: [
+              line('iv21', 'iv21', 'ATM Vol 21D', '#4f9cd9', { style: 'area', baseline: level }),
+            ],
+          },
+        ]}
+        scheme={globals.scheme === 'light' ? 'light' : 'dark'}
+      />
+    );
+  },
+};
+
+/** The same series with the split turned off: one ink, still measured from the
+ *  first point in view. The baseline and the parts are separate choices. */
+export const BaselinedAreaSingle: Story = {
+  args: {
+    rows: [
+      {
+        id: 'only',
+        height: 380,
+        configs: [
+          line('iv21', 'iv21', 'ATM Vol 21D', '#4f9cd9', {
+            style: 'area',
+            baseline: 'view',
+            colorMode: 'single',
+          }),
+        ],
+      },
+    ],
+  },
+};
+
+/** **A baseline as a PERCENTAGE of what is on screen** — `{ pct: 50 }` sits
+ *  halfway between the lowest and highest drawn value in view, so it holds its
+ *  place as you pan rather than its number. Pan or zoom the x axis and watch the
+ *  rule's own chip re-read.
+ *
+ *  Measured against the DATA in view, not the plot's height: the axis rounds its
+ *  auto-fit domain out past the data and never publishes where it landed, so a
+ *  percentage of the panel would be a guess at the library's own arithmetic. */
+export const PercentBaseline: Story = {
+  args: {
+    rows: [
+      {
+        id: 'only',
+        height: 380,
+        configs: [
+          line('iv21', 'iv21', 'ATM Vol 21D', '#4f9cd9', { style: 'area', baseline: { pct: 50 } }),
+        ],
+      },
+    ],
   },
 };

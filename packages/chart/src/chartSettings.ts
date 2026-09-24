@@ -54,6 +54,9 @@ export interface ChartSettings {
   sessions: { dividers: SessionDividers; breaks: boolean };
   /** Bar-styled series (volume …): split rise/fall by direction, or single. */
   bars: SplitColorDefault;
+  /** Area-styled series WITH A BASELINE: split above/below it, or single. An
+   *  area without a baseline has nothing to split at and ignores this. */
+  areas: SplitColorDefault;
   /** Candle-styled series: split rise/fall by direction, or single. */
   candles: SplitColorDefault;
   /** Raw metric lines (vol curves, price, derived catalog metrics). */
@@ -93,6 +96,7 @@ export interface AnnotationOverride {
 export const DEFAULT_CHART_SETTINGS: ChartSettings = {
   bars: { split: true, rise: 'positive', fall: 'negative' },
   candles: { split: true, rise: 'positive', fall: 'negative' },
+  areas: { split: true, rise: 'positive', fall: 'negative' },
   metrics: { dash: 'solid', weight: 1.5 },
   derived: { dash: 'solid', weight: 0.5 },
   comparisons: { dash: 'dashed', weight: 1 },
@@ -168,6 +172,7 @@ export function mergeChartSettings(stored: unknown): ChartSettings {
   };
   return {
     bars: split(s.bars, d.bars),
+    areas: split(s.areas, d.areas),
     candles: split(s.candles, d.candles),
     metrics: lineStyle(s.metrics, d.metrics),
     derived: lineStyle(s.derived, d.derived),

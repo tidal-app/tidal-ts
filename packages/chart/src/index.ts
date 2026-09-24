@@ -89,3 +89,11 @@ export { finiteColumns, firstLast, lastRow } from './seriesFacts.js';
 // site for the library the chart is built on.
 export { createLiveValue } from '@pond-ts/charts';
 export type { TrackerInfo, TrackerSample, LiveValue } from '@pond-ts/charts';
+/** What the crosshair is snapped to, resolved to a series this chart drew —
+ *  see `TimeSeriesChartProps.onSnap`. `CursorSnap` comes with it because
+ *  `SeriesSnap` extends it. */
+export { seriesSnap, type SeriesSnap } from './snap.js';
+/** Where an area's fill rests — the two a host may need to convert between a
+ *  level and a percentage of what is on screen. */
+export { pctBaseline, viewBaseline, areaBaseline } from './TimeSeriesChart.js';
+export type { CursorSnap } from '@pond-ts/charts';

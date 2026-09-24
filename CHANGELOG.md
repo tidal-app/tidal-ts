@@ -2,6 +2,104 @@
 
 All packages release together on one version.
 
+## Unreleased
+
+- **An area can measure from a BASELINE, and draw in parts.** `SeriesConfig`
+  takes `baseline?: 'view' | number`, and the difference is whether the anchor
+  moves. **`'view'`** is the value of the first point in the viewport — the
+  anchor a rebased axis already uses for a comparison — so the area reads as
+  the move since the left edge and re-bases as you pan. **A number** is a level
+  you put there: drawn as a real horizontal rule (charts' `<Baseline>`),
+  labelled by the axis's own formatter, pinned to the axis edge, wearing its own
+  area's ink, and **draggable** — the drag reports through
+  `onBaselineChange` and the host writes it back, which is what makes the rule
+  and the fill one thing rather than two that agree.
+
+  A level can also be a **percentage of the drawn range in view** —
+  `{ pct: 50 }` sits halfway between the lowest and highest value on screen, so
+  it holds its PLACE as you pan rather than its number, and `pctBaseline` is
+  exported for a host that converts between the two units. It is measured
+  against the data in view and **not the plot's height**: the axis rounds its
+  auto-fit domain out past the data — $240–$540 around a series running
+  $237–$520 — and never publishes where it landed, so a percentage of the panel
+  would be this package guessing at the library's own arithmetic. Story
+  `PercentBaseline`.
+
+  The rule is drawn for an **area**, and for a level the reader set. Not for
+  `'view'`, whose anchor is a data point the fill's own edge already shows —
+  and not for a config that merely carries the field while drawing as something
+  else, which an auto-compare mirror does: it is forced to a line and keeps
+  every other field of its primary, so a baselined area with a comparison drew
+  two rules, one of them under a line with no fill to anchor.
+
+  Dragging needs **`editBaselines`**, charts' annotation-edit mode, and that is
+  a mode rather than a permanent affordance for a reason worth stating: charts
+  suppresses the data cursor while it is on, because the crosshair and a
+  draggable mark both want the pointer. So a host turns it on for the moment
+  the reader is placing a level — its style panel open on that series, say —
+  and off again after. Story `FixedBaseline` has it on, which is why the
+  crosshair is missing there.
+
+  It then draws in parts: above the baseline in the rise colour, below it in
+  the fall colour, flat rather than graded, with the outline switching hue at
+  each crossing. Whether it splits and which colours it uses are the bar's own
+  controls (`colorMode` / `riseColor` / `fallColor`), defaulted from a new
+  `areas` section in `ChartSettings` — so a host that reserves green and red
+  turns it off in one place. An area WITHOUT a baseline never splits: there is
+  no above and below for two colours to mean, and the fill rests where the data
+  says (`areaBaseline`). Stories `Chart/TimeSeriesChart / BaselinedArea` and
+  `BaselinedAreaSingle`.
+
+  **Migration:** `ChartSettings` gains `areas`, which `parseChartSettings`
+  defaults for any stored blob written before it existed.
+
+- **The pond family floors at `^0.71.0`** (`@pond-ts/process` exact `0.71.0`),
+  and **the cursor is MOUNTED rather than named.** 0.71 removed
+  `<ChartContainer cursor>` and the rest of the pre-0.58 cursor props in favour
+  of cursor components, and a container with no cursor child now draws **no
+  cursor at all** — so `cursor="crosshair"` becoming `<CrosshairCursor />` is
+  not a tidy-up, it is the line that keeps the chart's crosshair. It is mounted
+  at the container, so it covers every row: the reticle is how a stack is read
+  against one time.
+
+  One visible change comes with it: the reticle's **centre dot is drawn in the
+  snapped series' colour** rather than the cursor ink, so the cross shows which
+  line it is reading.
+
+- **`TimeSeriesChart` takes `onSnap`** — WHICH series the crosshair is on,
+  where `onTracker` says what every line reads. It fires only when the snapped
+  point **changes**, so it is cheap to hold in state beside a tracker that
+  fires on every move, and it is held in a ref internally so an inline callback
+  will not re-render the chart under the pointer.
+
+  The snap is **resolved to a config**, not handed over raw: `id` is the
+  config's own id and `part` names the layer within it — a band's edge, one of
+  a candle's four quotes, a split bar's falling half. The cursor reports those
+  as `"<as> <role>"` composites and `<id>__down`, which are this chart's own
+  inventions; a host keying on the raw label would match nothing on exactly the
+  marks where knowing the layer matters most. `seriesSnap` does the undoing and
+  is exported with `SeriesSnap` for a host that reads a raw cursor itself.
+
+  This is the answer to a consumer's oldest open ask. A readout listing one row
+  per series could show every value and could not emphasise the one being
+  pointed at — the chart drew the dot on it and said nothing about which it
+  was. The information never had to leave the library as geometry; it only had
+  to leave as a conclusion.
+
+- **An area's fill rests where its data says.** 0.71 made `<AreaChart baseline>`
+  default to `0`, which is right for a chart of quantities and wrong for most
+  of these axes: vol in percent and prices in dollars live nowhere near zero,
+  and pulling zero into an auto-fit domain flattens the shape the reader came
+  for. Those keep the pre-0.71 floor, so their rendering is unchanged from
+  0.2.1.
+
+  A series with a **negative** reading takes zero, because there the floor is
+  actively wrong: skew is signed and the sign is the whole signal, and rested
+  on the floor its fill grows as the number rises _towards_ zero — the deepest
+  skew drawn as the smallest mark. `areaBaseline` reads the drawn column, so
+  nothing chooses it by hand. Story `Chart/TimeSeriesChart / Areas`; the snap
+  has `SnapReadout` beside it.
+
 ## 0.2.1 — 2026-09-18
 
 The day after 0.2.0. The first embedded consumer's review found a band a bar

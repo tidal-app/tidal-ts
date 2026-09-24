@@ -194,9 +194,42 @@ export interface SeriesConfig {
   /** Stroke width (px) for `line`/`area`. Omitted ⇒ the category default from
    *  the chart settings (see {@link seriesLineWidth}). */
   lineWidth?: number;
-  /** Direction coloring for a `bar`/`candle` series: `'split'` (rise/fall pair)
-   *  vs `'single'` (the series' own `color`). Omitted ⇒ the chart settings'
-   *  default for that mark (legacy `candleColorBy` respected as a fallback). */
+  /**
+   * An `area`'s fill measures FROM A BASELINE. Two kinds, and the difference is
+   * whether the anchor moves:
+   *
+   * - `'view'` — the value of the **first point in the viewport**, so the fill
+   *   reads as the move since the left edge and RE-BASES as you pan. The same
+   *   anchor a rebased axis uses for a comparison.
+   * - `{ pct }` — a level given as a **percentage of the drawn range in view**:
+   *   `0` is the lowest value on screen, `100` the highest, `50` halfway
+   *   between them. It re-reads as you pan, so it stays in the same place
+   *   relative to what you are looking at rather than at the same number.
+   *   Measured against the DATA in view and not the plot's height — the axis
+   *   rounds its domain out past the data and never publishes where it landed,
+   *   so a percentage of the panel would be a guess (Peter, 2026-09-24).
+   * - a **number** — a level you put there and it stays. Drawn as a real
+   *   horizontal rule on the chart (charts' `<Baseline>`), labelled with the
+   *   axis's own formatter and pinned to the axis edge, and **draggable**: the
+   *   chart reports a drag through
+   *   {@link TimeSeriesChartProps.onBaselineChange} and the host writes it back
+   *   here, which is what makes the line and the fill one thing rather than two
+   *   that agree.
+   *
+   * Either way the area draws **in parts**: above the baseline in the rise
+   * colour, below it in the fall colour, flat rather than graded, and the
+   * outline switches hue at each crossing. Which colours, and whether it splits
+   * at all, are the bar's own question — {@link colorMode} / {@link riseColor} /
+   * {@link fallColor}, defaulted from the chart settings' `areas` section.
+   *
+   * Omitted ⇒ off, and the fill rests where the data says: on zero for a series
+   * with a negative reading, on the axis floor otherwise (see `areaBaseline`).
+   */
+  baseline?: 'view' | number | { readonly pct: number };
+  /** Direction coloring for a `bar`/`candle` series, or an `area` with
+   *  {@link baseline} on: `'split'` (rise/fall pair) vs `'single'` (the series'
+   *  own `color`). Omitted ⇒ the chart settings' default for that mark (legacy
+   *  `candleColorBy` respected as a fallback). */
   colorMode?: 'single' | 'split';
   /** Split-mode rise/fall color keys (palette / `positive`·`negative` market
    *  keys / raw CSS). Omitted ⇒ the chart settings' defaults. */
@@ -669,7 +702,8 @@ export function effectiveSplit(
   s: SeriesConfig,
   settings: ChartSettings = DEFAULT_CHART_SETTINGS,
 ): { mode: 'single' | 'split'; rise: string; fall: string } {
-  const def = s.style === 'candle' ? settings.candles : settings.bars;
+  const def =
+    s.style === 'candle' ? settings.candles : s.style === 'area' ? settings.areas : settings.bars;
   const legacy =
     s.style === 'candle' && s.candleColorBy != null
       ? s.candleColorBy === 'direction'
@@ -685,7 +719,13 @@ export function effectiveSplit(
         (s.colorMode ?? 'single')
       : s.style === 'bar' || s.style === 'candle'
         ? (s.colorMode ?? legacy ?? (def.split ? 'split' : 'single'))
-        : 'single';
+        : // An AREA splits only while it has a baseline to split at. Without
+          // one there is no "above" and "below" to mean anything — the fill
+          // rests on the axis floor or on zero, and two colours would be
+          // claiming a reading the mark is not making.
+          s.style === 'area' && s.baseline != null
+          ? (s.colorMode ?? (def.split ? 'split' : 'single'))
+          : 'single';
   return { mode, rise: s.riseColor ?? def.rise, fall: s.fallColor ?? def.fall };
 }
 
