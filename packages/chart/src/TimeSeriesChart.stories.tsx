@@ -270,3 +270,47 @@ export const SnapReadout: Story = {
     );
   },
 };
+
+/** **A baselined area.** The fill measures from the value of the first point
+ *  IN VIEW — the same anchor a rebased axis uses for a comparison — so it
+ *  reads as the move since the left edge, and re-bases as you pan.
+ *
+ *  Drawn in parts: above the baseline in the rise colour, below it in the fall
+ *  colour, flat rather than graded, with the outline switching hue at each
+ *  crossing. Which colours, and whether it splits at all, are the bar's own
+ *  controls (`colorMode` / `riseColor` / `fallColor`) defaulted from the
+ *  settings' `areas` section — so a host that reserves green and red can turn
+ *  it off in one place. */
+export const BaselinedArea: Story = {
+  args: {
+    rows: [
+      {
+        id: 'only',
+        height: 380,
+        configs: [
+          line('iv21', 'iv21', 'ATM Vol 21D', '#4f9cd9', { style: 'area', baseline: true }),
+        ],
+      },
+    ],
+  },
+};
+
+/** The same series with the split turned off: one ink, still measured from the
+ *  first point in view. The baseline and the parts are separate choices. */
+export const BaselinedAreaSingle: Story = {
+  args: {
+    rows: [
+      {
+        id: 'only',
+        height: 380,
+        configs: [
+          line('iv21', 'iv21', 'ATM Vol 21D', '#4f9cd9', {
+            style: 'area',
+            baseline: true,
+            colorMode: 'single',
+          }),
+        ],
+      },
+    ],
+  },
+};

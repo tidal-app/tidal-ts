@@ -194,9 +194,26 @@ export interface SeriesConfig {
   /** Stroke width (px) for `line`/`area`. Omitted ⇒ the category default from
    *  the chart settings (see {@link seriesLineWidth}). */
   lineWidth?: number;
-  /** Direction coloring for a `bar`/`candle` series: `'split'` (rise/fall pair)
-   *  vs `'single'` (the series' own `color`). Omitted ⇒ the chart settings'
-   *  default for that mark (legacy `candleColorBy` respected as a fallback). */
+  /**
+   * An `area`'s fill measures FROM A BASELINE, and the baseline is the value of
+   * the **first point in the viewport** — so the fill reads as the move since
+   * the left edge, and re-bases as you pan. The same anchor a rebased axis uses
+   * for a comparison.
+   *
+   * With it on, the area also draws **in parts**: above the baseline in the
+   * rise colour, below it in the fall colour, flat rather than graded, and the
+   * outline switches hue at each crossing. Which colours, and whether it splits
+   * at all, are the bar's own question — {@link colorMode} / {@link riseColor} /
+   * {@link fallColor}, defaulted from the chart settings' `areas` section.
+   *
+   * Omitted ⇒ off, and the fill rests where the data says: on zero for a series
+   * with a negative reading, on the axis floor otherwise (see `areaBaseline`).
+   */
+  baseline?: boolean;
+  /** Direction coloring for a `bar`/`candle` series, or an `area` with
+   *  {@link baseline} on: `'split'` (rise/fall pair) vs `'single'` (the series'
+   *  own `color`). Omitted ⇒ the chart settings' default for that mark (legacy
+   *  `candleColorBy` respected as a fallback). */
   colorMode?: 'single' | 'split';
   /** Split-mode rise/fall color keys (palette / `positive`·`negative` market
    *  keys / raw CSS). Omitted ⇒ the chart settings' defaults. */
@@ -669,7 +686,8 @@ export function effectiveSplit(
   s: SeriesConfig,
   settings: ChartSettings = DEFAULT_CHART_SETTINGS,
 ): { mode: 'single' | 'split'; rise: string; fall: string } {
-  const def = s.style === 'candle' ? settings.candles : settings.bars;
+  const def =
+    s.style === 'candle' ? settings.candles : s.style === 'area' ? settings.areas : settings.bars;
   const legacy =
     s.style === 'candle' && s.candleColorBy != null
       ? s.candleColorBy === 'direction'
@@ -685,7 +703,13 @@ export function effectiveSplit(
         (s.colorMode ?? 'single')
       : s.style === 'bar' || s.style === 'candle'
         ? (s.colorMode ?? legacy ?? (def.split ? 'split' : 'single'))
-        : 'single';
+        : // An AREA splits only while it has a baseline to split at. Without
+          // one there is no "above" and "below" to mean anything — the fill
+          // rests on the axis floor or on zero, and two colours would be
+          // claiming a reading the mark is not making.
+          s.style === 'area' && s.baseline === true
+          ? (s.colorMode ?? (def.split ? 'split' : 'single'))
+          : 'single';
   return { mode, rise: s.riseColor ?? def.rise, fall: s.fallColor ?? def.fall };
 }
 

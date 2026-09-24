@@ -717,6 +717,34 @@ export function splitBarColumns(
  * the same problem as a crossing one, and the fixture's skew is exactly that.
  * One pass over the column, stopping at the first value that settles it.
  */
+/**
+ * The value an area with `baseline` measures from: **the first point in the
+ * viewport.**
+ *
+ * The same anchor a rebased axis uses for a comparison — the fill then reads as
+ * the move since the left edge of what you are looking at, and re-bases as you
+ * pan, which is the reading a trader already has for "since the open" and
+ * "year to date". A fixed anchor is a different feature (`TDL-CMPANCHOR`), and
+ * a view-following one is what was asked for.
+ *
+ * `from` absent (auto-fit) ⇒ the series' own first drawn point, which IS the
+ * left edge then. `null` when the column has no finite value in view at all —
+ * the caller draws an ordinary area rather than measuring from nothing.
+ */
+export function viewBaseline(series: ChartSeries, column: string, from?: number): number | null {
+  const col = readNumericColumn(series, column);
+  if (!col) return null;
+  // The KEY column for the time, the way every other walk here reads it — a
+  // series' key is its time and `time` is not a column you can ask for.
+  const key = series.keyColumn() as unknown as { at(i: number): number | undefined };
+  for (let i = 0; i < col.length; i += 1) {
+    if (from != null && (key.at(i) ?? Infinity) < from) continue;
+    const v = col.read(i);
+    if (v != null && Number.isFinite(v)) return v;
+  }
+  return null;
+}
+
 export function areaBaseline(series: ChartSeries, column: string): 0 | 'floor' {
   const col = readNumericColumn(series, column);
   if (!col) return 'floor';
@@ -891,6 +919,13 @@ function TimeSeriesChartInner({
         bar[c.id] = { ...base.bar.default, fill: riseC, highlight: riseC };
         bar[`${c.id}__down`] = { ...base.bar.default, fill: fallC, highlight: fallC };
         if (c.style === 'candle') candle[c.id] = candleStyleForPair(riseC, fallC);
+        // An AREA with a baseline splits the same way, through the layer's own
+        // band ladder: one breakpoint at the baseline, so `bands` reads
+        // [below, above]. The outline switches hue at each crossing too, and
+        // the fill goes FLAT — charts drops the grade for a banded area,
+        // because the fade encoded distance-from-baseline and the bands now
+        // state which side you are on.
+        if (c.style === 'area') area[c.id] = { ...area[c.id]!, bands: [fallC, riseC] };
       } else {
         bar[c.id] = { ...base.bar.default, fill: color, highlight: color };
         // A single-color candle takes the series' one colour (a per-id style) so
@@ -1329,6 +1364,13 @@ function TimeSeriesChartInner({
     const endSeries = (c.source ? shifted.get(c.source) : undefined) ?? panelSeries;
     switch (c.style) {
       case 'area': {
+        // WITH A BASELINE: the first value in view is the anchor, and a split
+        // area bands at it. Without one, the fill rests where the data says.
+        const anchored =
+          c.baseline === true ? viewBaseline(closeSeries, col, viewRange?.[0]) : null;
+        const baseline = anchored ?? areaBaseline(closeSeries, col);
+        const bands =
+          anchored != null && effectiveSplit(c, settings).mode === 'split' ? [anchored] : undefined;
         // No `sessionBreaks` on `<AreaChart>` — the prop is LineChart-only
         // (F-charts-20), so the break is made here: one layer per live segment,
         // and the fill ends at the close and restarts at the open like the line
@@ -1347,7 +1389,8 @@ function TimeSeriesChartInner({
               column={col}
               as={c.id}
               axis={axis}
-              baseline={areaBaseline(closeSeries, col)}
+              baseline={baseline}
+              thresholds={bands}
             />,
           ];
         }
@@ -1368,7 +1411,8 @@ function TimeSeriesChartInner({
             column={col}
             as={c.id}
             axis={axis}
-            baseline={areaBaseline(slice, col)}
+            baseline={baseline}
+            thresholds={bands}
           />
         ));
       }

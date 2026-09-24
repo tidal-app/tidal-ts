@@ -4,6 +4,25 @@ All packages release together on one version.
 
 ## Unreleased
 
+- **An area can measure from a BASELINE, and draw in parts.** `SeriesConfig`
+  takes `baseline?: boolean`; with it on, the fill measures from **the value of
+  the first point in the viewport** — the anchor a rebased axis already uses
+  for a comparison — so the area reads as the move since the left edge and
+  re-bases as you pan.
+
+  It then draws in parts: above the baseline in the rise colour, below it in
+  the fall colour, flat rather than graded, with the outline switching hue at
+  each crossing. Whether it splits and which colours it uses are the bar's own
+  controls (`colorMode` / `riseColor` / `fallColor`), defaulted from a new
+  `areas` section in `ChartSettings` — so a host that reserves green and red
+  turns it off in one place. An area WITHOUT a baseline never splits: there is
+  no above and below for two colours to mean, and the fill rests where the data
+  says (`areaBaseline`). Stories `Chart/TimeSeriesChart / BaselinedArea` and
+  `BaselinedAreaSingle`.
+
+  **Migration:** `ChartSettings` gains `areas`, which `parseChartSettings`
+  defaults for any stored blob written before it existed.
+
 - **The pond family floors at `^0.71.0`** (`@pond-ts/process` exact `0.71.0`),
   and **the cursor is MOUNTED rather than named.** 0.71 removed
   `<ChartContainer cursor>` and the rest of the pre-0.58 cursor props in favour
