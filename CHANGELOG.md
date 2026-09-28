@@ -22,7 +22,9 @@ All packages release together on one version.
   the recorded id first and fall back to the column only where none is recorded
   (a preset or a persisted layout from before this release). Retuning one
   copy's study no longer touches the other copy's, and removing one copy takes
-  only its own chain.
+  only its own chain. **The same study twice on ONE parent is allowed too**,
+  deliberately: a chain never branches, so that twin is the only way to run
+  two different chains from one study.
 
   This also fixes a latent bug: `propagateRespec` refused **every** retune on a
   chart where any column was seated twice, which an unjoined pair could already
