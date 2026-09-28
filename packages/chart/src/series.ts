@@ -204,9 +204,13 @@ export interface SeriesConfig {
    * study on" has two answers. This is the answer, recorded when it was known:
    * at the moment the study was added from one particular config's button.
    *
-   * An entry absent (or naming a config that no longer exists) falls back to
-   * the column, which is how every config read before this field existed —
-   * unambiguous for them, since a column could not be seated twice then.
+   * An entry is honoured only while it still names a config that PUBLISHES
+   * that input's column. An entry absent, or naming a config that computes
+   * something else now (a stale record), falls back to the column — which is
+   * how every config written before this field is read. An entry naming a
+   * config that is GONE resolves to nothing: the parent was removed, and
+   * re-binding its orphan to whichever other config shares the column would
+   * hand it to a copy it was never on.
    */
   parentIds?: readonly (string | undefined)[];
   /** Stroke width (px) for `line`/`area`. Omitted ⇒ the category default from
@@ -748,8 +752,13 @@ export function formatSeriesValue(value: number | null, unit = ''): string {
  * and every walk used to answer by column: removal cascaded through whichever
  * copy a Map kept last, and retuning one study re-pointed the OTHER copy's
  * children at it (`TDL-CMPDUP`). The column fallback is kept for configs
- * written before `parentIds`, for which it is unambiguous — a column could not
- * be seated twice when they were made.
+ * written before `parentIds` and for inputs no config was recorded for (a
+ * study's bar columns, a pair leg that was not seated). It is a best guess
+ * where a column is seated twice — the first config publishing it wins —
+ * which is exactly the ambiguity recording a parent exists to remove.
+ *
+ * A recorded parent that is gone resolves to NOTHING rather than re-binding
+ * by column: see {@link SeriesConfig.parentIds}.
  *
  * An input with no config behind it (a raw feed column no one displays)
  * contributes nothing, as before.
@@ -759,8 +768,16 @@ export function sourcesOf(configs: readonly SeriesConfig[], c: SeriesConfig): Se
   const out: SeriesConfig[] = [];
   inputNames(c.derive).forEach((name, i) => {
     const byId = c.parentIds?.[i];
-    const recorded = byId != null ? configs.find((x) => x.id === byId && x.id !== c.id) : undefined;
-    const src = recorded ?? configs.find((x) => x.id !== c.id && x.column === name);
+    if (byId != null && byId !== c.id) {
+      const recorded = configs.find((x) => x.id === byId);
+      if (!recorded) return; // its parent is gone — an orphan, not a re-bind
+      if (recorded.column === name) {
+        out.push(recorded);
+        return;
+      }
+      // Stale: that config computes something else now. Fall through.
+    }
+    const src = configs.find((x) => x.id !== c.id && x.column === name);
     if (src) out.push(src);
   });
   return out;

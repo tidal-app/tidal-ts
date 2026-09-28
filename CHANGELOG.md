@@ -6,32 +6,44 @@ All packages release together on one version.
 
 - **One metric can be seated more than once.** A study, a compare leg and a
   split used to be refused when the column they would seat was already on the
-  chart — in another row, or under another parent — because a study named its
-  input by COLUMN, and two configs on one column made that name ambiguous. The
-  consumer, not the library, decides whether two copies make sense: price in
-  the top row and price in the bottom one, each with its own chain of studies
-  under it, is a layout a user asks for. So the refusals are gone
-  (`canAddStudy`, `canAddPair`'s joined-duplicate check, `planSplit`'s
+  chart — in another row, or under another parent — because a derived config
+  named its inputs by COLUMN, and two configs on one column made that name
+  ambiguous. The consumer, not the library, decides whether two copies make
+  sense: price in the top row and price in the bottom one, each with its own
+  chain of studies under it, is a layout a user asks for. So the refusals are
+  gone (`canAddStudy`, `canAddPair`'s joined-duplicate check, `planSplit`'s
   "taken in another row", and `propagateRespec`'s one-column-one-config check)
-  and the ambiguity is resolved instead. `SeriesConfig` gains
-  **`parentIds?`**, index-aligned with `inputNames(derive)`: the config ids a
-  derived config actually reads. `studyConfig` records it, and every walk of
-  the graph — the removal cascade, the respec propagation, the row blocks, the
-  chain tail — resolves a config's sources through the new exported
-  **`sourcesOf(configs, c)`** / **`readsFrom(configs, c, parent)`**, which take
-  the recorded id first and fall back to the column only where none is recorded
-  (a preset or a persisted layout from before this release). Retuning one
-  copy's study no longer touches the other copy's, and removing one copy takes
-  only its own chain. **The same study twice on ONE parent is allowed too**,
-  deliberately: a chain never branches, so that twin is the only way to run
-  two different chains from one study.
+  and the ambiguity is resolved instead.
 
-  This also fixes a latent bug: `propagateRespec` refused **every** retune on a
-  chart where any column was seated twice, which an unjoined pair could already
-  produce.
+  `SeriesConfig` gains **`parentIds?`**, index-aligned with
+  `inputNames(derive)`: at each input, the id of the config it was built from.
+  A study records the config it was added from, but only at the inputs that
+  read it (an ATR's high/low/close are nobody's); a spread records each leg
+  that resolved to a seated config. Every walk of the graph — the removal
+  cascade, the respec propagation, the eye, the row blocks, the chain tail, a
+  split's leg adoption — resolves a config's sources through the new exported
+  **`sourcesOf(configs, c)`** / **`readsFrom(configs, c, parent)`**:
 
-  Not yet covered: a pair's legs do not record `parentIds`, so they still
-  resolve by column.
+  - a recorded parent that still publishes the input wins;
+  - a recorded parent that computes something else now (a stale record) falls
+    back to the column;
+  - a recorded parent that is **gone** resolves to nothing — its orphan is not
+    handed to whichever other copy shares the column;
+  - with nothing recorded (a layout from before this release, or an input no
+    config was recorded for), the first config publishing the column — a best
+    guess where a column is seated twice, as it always was.
+
+  `series.patch` cannot rewrite `parentIds`. Retuning one copy's study no
+  longer touches the other copy's chain, removing one copy takes only its own,
+  and a spread over one copy stays on it.
+
+  **The same study twice on ONE parent is allowed too**, deliberately: a chain
+  never branches, so that twin is the only way to run two different chains
+  from one study.
+
+  This also fixes a latent bug in 0.2.1: once any column was seated twice —
+  which two plain `series.add`s of one metric already did — `propagateRespec`
+  refused **every** study retune on the chart, silently.
 
 ## 0.2.1 — 2026-09-18
 

@@ -2554,6 +2554,100 @@ describe('a metric seated twice (TDL-CMPDUP)', () => {
     expect(allOf(ctx, deriveId(emaOf(SMA20, 30)))).toHaveLength(0);
   });
 
+  // --- PR #16 review ---------------------------------------------------------
+  const all = (ctx: () => { rows: RowState[] }) => ctx().rows.flatMap((r) => r.configs);
+  const byId = (ctx: () => { rows: RowState[] }, id: string) => all(ctx).find((c) => c.id === id);
+
+  it('a spread over one copy’s study stays on THAT copy (HIGH)', () => {
+    const { actor, ctx, topSma, botSma, botIv } = twoCopies();
+    actor.send({
+      type: 'series.addPair',
+      a: { metricId: botSma.id },
+      b: { metricId: botIv.id },
+      op: 'ratio',
+    });
+    const spread = all(ctx).find((c) => c.derive?.op === 'ratio')!;
+    expect(spread.parentIds).toEqual([botSma.id, botIv.id]);
+
+    // Retuning the OTHER copy's SMA does not move the spread…
+    actor.send({ type: 'series.setStudyParam', id: topSma.id, name: 'period', value: 50 });
+    expect(byId(ctx, spread.id)!.column).toBe(spread.column);
+    // …retuning its own does…
+    actor.send({ type: 'series.setStudyParam', id: botSma.id, name: 'period', value: 30 });
+    expect(byId(ctx, spread.id)!.column).not.toBe(spread.column);
+    // …and removing the other copy's SMA leaves it seated. With no recorded
+    // parents the spread resolved to the FIRST SMA by column — the top one —
+    // and all three of these went to the wrong copy.
+    actor.send({ type: 'series.remove', id: topSma.id });
+    expect(byId(ctx, spread.id)).toBeDefined();
+  });
+
+  it('a study reading the BAR columns is not the child of what it was added from', () => {
+    const { actor, ctx, idOf } = start();
+    actor.send({ type: 'series.addStudy', targetId: idOf('close'), op: 'sma', period: 20 });
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    // An ATR from the SMA's button reads high/low/close — nothing the SMA
+    // publishes — so nothing about it is recorded as the SMA's.
+    actor.send({ type: 'series.addStudy', targetId: sma.id, op: 'atr', period: 14 });
+    const atr = all(ctx).find((c) => c.derive?.op === 'atr')!;
+    expect(atr).toBeDefined();
+    expect(atr.parentIds).toBeUndefined();
+    // So the SMA has no child yet, and may take one (no-branching)…
+    actor.send({ type: 'series.addStudy', targetId: sma.id, op: 'ema', period: 10 });
+    expect(all(ctx).some((c) => c.derive?.op === 'ema')).toBe(true);
+    // …and removing it does not take the ATR, which never read it.
+    actor.send({ type: 'series.remove', id: sma.id });
+    expect(byId(ctx, atr.id)).toBeDefined();
+  });
+
+  it('an orphan whose recorded parent is gone does not re-bind to the other copy', () => {
+    const { actor, ctx, idOf } = start();
+    const first = idOf('iv21');
+    actor.send({ type: 'series.add', catalogId: 'iv21', rowId: rowOf(ctx, first) });
+    const second = allOf(ctx, 'iv21').find((c) => c.id !== first)!;
+    expect(rowOf(ctx, second.id)).toBe(rowOf(ctx, first));
+    actor.send({ type: 'series.addStudy', targetId: second.id, op: 'sma', period: 20 });
+    const sma = allOf(ctx, deriveId(SMA20))[0]!;
+
+    // A raw column outlives the config that displayed it, so removing the
+    // second copy leaves its study seated…
+    actor.send({ type: 'series.remove', id: second.id });
+    expect(byId(ctx, sma.id)).toBeDefined();
+    // …but not adopted by the FIRST copy: its eye does not carry the orphan.
+    actor.send({ type: 'series.toggleVisible', id: first });
+    expect(byId(ctx, first)!.visible).toBe(false);
+    expect(byId(ctx, sma.id)!.visible).toBe(true);
+  });
+
+  it('a compare from the SECOND copy in one row pairs that copy', () => {
+    const { actor, ctx, idOf } = start();
+    const first = idOf('iv21');
+    const row = rowOf(ctx, first)!;
+    actor.send({ type: 'series.add', catalogId: 'iv21', rowId: row });
+    // The copy LATER in the row, whichever that is — a lookup by column finds
+    // the earlier one, so this is the copy it would get wrong.
+    const [earlier, later] = allOf(ctx, 'iv21');
+    actor.send({
+      type: 'series.addPair',
+      a: { metricId: later!.id, entity: 'primary' },
+      b: { metricId: later!.id, entity: 'compare' },
+      op: 'none',
+      rowId: row,
+    });
+    expect(byId(ctx, later!.id)!.group).toBeDefined();
+    expect(byId(ctx, earlier!.id)!.group).toBeUndefined();
+  });
+
+  it('a patch cannot rewrite which config a study is on', () => {
+    const { actor, ctx, topSma, botIv } = twoCopies();
+    actor.send({
+      type: 'series.patch',
+      id: topSma.id,
+      patch: { parentIds: [botIv.id] } as never,
+    });
+    expect(byId(ctx, topSma.id)!.parentIds).toEqual(topSma.parentIds);
+  });
+
   it('a config written before `parentIds` still finds its parent by column', () => {
     // A persisted chain with no recorded parents — what every preset saved
     // before this change looks like. One config per column, so the column
