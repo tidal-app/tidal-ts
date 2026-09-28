@@ -391,7 +391,7 @@ describe('terminalMachine', () => {
     expect(b.ctx().selected).toBe(iv21);
   });
 
-  it('adds a study of a series (layered on its row, expanded) and forbids the dup', () => {
+  it('adds a study of a series (layered on its row, expanded), and a second copy too', () => {
     const { actor, ctx, idOf } = start();
     actor.send({ type: 'series.addStudy', targetId: idOf('iv21'), op: 'sma', period: 20 });
     const studyId = deriveId(SMA20);
@@ -403,9 +403,15 @@ describe('terminalMachine', () => {
     expect(study.column).toBe(studyId); // the column IS the derived output…
     expect(study.id).not.toBe(studyId); // …and the identity is minted, not the spec
     expect(ctx().expanded).toBe(study.id); // opens its controls for tuning
-    // The same spec again is a no-op — one column, one config.
+    // The same spec again is a SECOND config, not a no-op (Peter, 2026-09-28:
+    // "it's up to them to make it make sense, not us") — each copy can grow a
+    // chain of its own. They share the COLUMN, because they compute the same
+    // numbers; they are told apart by id, and each records the config it is on.
     actor.send({ type: 'series.addStudy', targetId: idOf('iv21'), op: 'sma', period: 20 });
-    expect(ctx().rows[0]!.configs).toHaveLength(2);
+    const smas = ctx().rows[0]!.configs.filter((c) => c.column === studyId);
+    expect(smas).toHaveLength(2);
+    expect(new Set(smas.map((c) => c.id)).size).toBe(2);
+    for (const s of smas) expect(s.parentIds).toEqual([idOf('iv21')]);
   });
 
   it('changes a study period in place — the COLUMN moves, the identity does not', () => {
@@ -510,7 +516,7 @@ describe('terminalMachine', () => {
     expect(activeSlot(ctx().presets, ctx().rows)).toBe(0); // identity restored
   });
 
-  it('rejects a period change that is invalid, unchanged, or collides with a study', () => {
+  it('rejects a period change that is invalid or unchanged — and allows one that coincides', () => {
     const { actor, ctx, idOf } = start();
     actor.send({ type: 'series.addStudy', targetId: idOf('iv21'), op: 'sma', period: 20 });
     const id20 = deriveId(SMA20);
@@ -520,8 +526,15 @@ describe('terminalMachine', () => {
 
     actor.send({ type: 'series.addStudy', targetId: idOf('iv21'), op: 'sma', period: 50 });
     const id50 = deriveId(SMA50);
-    actor.send({ type: 'series.setStudyParam', id: idOf(id50), name: 'period', value: 20 }); // would collide with id20
-    expect(ctx().rows[0]!.configs.some((c) => c.column === id50)).toBe(true); // rejected, unchanged
+    const fifty = idOf(id50);
+    // Retuning it ONTO the other study's period now lands. It used to be
+    // refused as a collision — "one column, one config" — and that is the rule
+    // TDL-CMPDUP retires: two configs may compute the same thing, and it is the
+    // user's to decide whether that makes sense (Peter, 2026-09-28).
+    actor.send({ type: 'series.setStudyParam', id: fifty, name: 'period', value: 20 });
+    const byId = ctx().rows[0]!.configs.find((c) => c.id === fifty)!;
+    expect(byId.column).toBe(id20);
+    expect(ctx().rows[0]!.configs.filter((c) => c.column === id20)).toHaveLength(2);
   });
 
   it("PROPAGATES a period change to the studies built on it (they don't strand)", () => {
@@ -558,24 +571,24 @@ describe('terminalMachine', () => {
     expect(ctx().rows[0]!.configs[0]!.label).toBe('iv21 · SMA(20) · EMA(20)');
   });
 
-  it('refuses a period change whose propagation would collide with a seated study', () => {
+  it('allows a period change whose propagation makes two chains compute the same', () => {
     const { actor, ctx, idOf } = start();
     actor.send({ type: 'series.addStudy', targetId: idOf('iv21'), op: 'sma', period: 20 });
     actor.send({ type: 'series.addStudy', targetId: idOf('iv21'), op: 'sma', period: 50 });
     actor.send({ type: 'series.addStudy', targetId: idOf(deriveId(SMA20)), op: 'ema', period: 20 });
     actor.send({ type: 'series.addStudy', targetId: idOf(deriveId(SMA50)), op: 'ema', period: 20 });
-    const before = ctx().rows[0]!.configs.map((c) => c.column);
-    // Pushing SMA(20) to 50 would make BOTH chains compute the same two things.
-    // One column, one config — so the whole edit is refused rather than half
-    // applied or silently deduped.
+    // Pushing SMA(20) to 50 makes BOTH chains compute the same two things.
+    // That was refused — "one column, one config", a considered rule (PR #140
+    // review, MEDIUM) — and it is the rule TDL-CMPDUP reverses on Peter's
+    // principle that it is the user's to make it make sense (2026-09-28). The
+    // two chains stay distinct configs, told apart by id and recorded parent.
     const target = idOf(deriveId(SMA20));
-    actor.send({ type: 'series.setStudyParam', id: target, name: 'period', value: 50 });
-    expect(ctx().rows[0]!.configs.map((c) => c.column)).toEqual(before);
-    // …and the PANEL can see that in advance, so it disables the chip rather
-    // than swallowing the click. The refusal is about the DEPENDENT's rewrite:
-    // the target's own new column is free (PR #140 review, MEDIUM).
     const scope = ctx();
-    expect(respecAllowed(scope, target, 'period', 50)).toBe(false);
+    expect(respecAllowed(scope, target, 'period', 50)).toBe(true);
+    actor.send({ type: 'series.setStudyParam', id: target, name: 'period', value: 50 });
+    const cols = ctx().rows[0]!.configs.map((c) => c.column);
+    expect(cols.filter((c) => c === deriveId(SMA50))).toHaveLength(2);
+    expect(cols.filter((c) => c === deriveId(emaOf(SMA50, 20)))).toHaveLength(2);
     expect(respecAllowed(scope, target, 'period', 100)).toBe(true); // nothing computes that yet
     expect(respecAllowed(scope, target, 'period', 20)).toBe(false); // unchanged
     expect(respecAllowed(scope, target, 'period', 1)).toBe(false); // below the bar-count floor
@@ -861,7 +874,7 @@ describe('series.addPair (TDL-PAIR)', () => {
     expect(diff.unit).toBe('%');
   });
 
-  it('guards: legs must exist, differ, share a source; no duplicate spec', () => {
+  it('guards: legs must exist, differ, share a source — and a second copy is allowed', () => {
     const { actor, cols, leg } = start();
     actor.send({ type: 'series.add', catalogId: 'iv63' });
     const before = cols();
@@ -899,8 +912,8 @@ describe('series.addPair (TDL-PAIR)', () => {
       a: { metricId: leg('iv63') },
       b: { metricId: leg('iv21') },
       op: 'ratio',
-    }); // duplicate
-    expect(cols().filter((i) => i === deriveId(RATIO_63_21))).toHaveLength(1);
+    }); // the same spread again — seated twice now, as a study may be
+    expect(cols().filter((i) => i === deriveId(RATIO_63_21))).toHaveLength(2);
   });
 });
 
@@ -931,14 +944,15 @@ describe('series.addPair with a compare-bound B leg (TDL-PAIR stage 1)', () => {
     expect(spread.derive).toEqual(RATIO_21_CMP);
     expect(spread.label).toBe('iv21 / iv21 (cmp)');
 
-    // The role-bound spec is one identity — a duplicate is refused like any other.
+    // The role-bound spec is one COLUMN — and a second copy of it is allowed,
+    // like any other, because configs are told apart by id.
     actor.send({
       type: 'series.addPair',
       a: { metricId: leg('iv21') },
       b: { metricId: leg('iv21'), entity: 'compare' },
       op: 'ratio',
     });
-    expect(cols().filter((i) => i === id)).toHaveLength(1);
+    expect(cols().filter((i) => i === id)).toHaveLength(2);
   });
 });
 
@@ -2436,5 +2450,138 @@ describe('a spread draws in the colour the host reserves for one', () => {
       .rows.flatMap((r) => r.configs)
       .find((c) => c.derive && isPairOp(c.derive.op))!;
     expect(spread.color).toBe('amber'); // blue is the seeded iv21
+  });
+});
+
+/**
+ * **A metric seated twice** (`TDL-CMPDUP`) — price on two rows, each growing its
+ * own chain of studies (Peter, 2026-09-28).
+ *
+ * The two copies' studies SHARE A COLUMN — they compute the same numbers — so
+ * nothing a spec names can tell them apart. Every walk here resolves by the
+ * parent a study recorded when it was added (`parentIds`), and each test below
+ * is aimed at one of the places the old by-column answer went wrong: a removal
+ * cascading through the other copy, a retune re-pointing the other copy's
+ * chain, and the no-branching rule seeing the other copy's child as its own.
+ */
+describe('a metric seated twice (TDL-CMPDUP)', () => {
+  /** Every seated config computing `column`, in row order. */
+  const allOf = (ctx: () => { rows: RowState[] }, column: string) =>
+    ctx()
+      .rows.flatMap((r) => r.configs)
+      .filter((c) => c.column === column);
+  const rowOf = (ctx: () => { rows: RowState[] }, id: string) =>
+    ctx().rows.find((r) => r.configs.some((c) => c.id === id))?.id;
+
+  /** iv21 on BOTH rows, an SMA(20) on each. */
+  const twoCopies = () => {
+    const h = start();
+    h.actor.send({ type: 'series.add', catalogId: 'iv21', rowId: 'bottom' });
+    const [topIv, botIv] = allOf(h.ctx, 'iv21');
+    expect(topIv && botIv).toBeTruthy();
+    h.actor.send({ type: 'series.addStudy', targetId: topIv!.id, op: 'sma', period: 20 });
+    h.actor.send({ type: 'series.addStudy', targetId: botIv!.id, op: 'sma', period: 20 });
+    const smas = allOf(h.ctx, deriveId(SMA20));
+    const topSma = smas.find((s) => s.parentIds?.[0] === topIv!.id)!;
+    const botSma = smas.find((s) => s.parentIds?.[0] === botIv!.id)!;
+    return { ...h, topIv: topIv!, botIv: botIv!, topSma, botSma };
+  };
+
+  it('seats the same study on each copy, each on its OWN row and parent', () => {
+    const { ctx, topIv, botIv, topSma, botSma } = twoCopies();
+    expect(allOf(ctx, deriveId(SMA20))).toHaveLength(2);
+    expect(topSma.id).not.toBe(botSma.id);
+    // Each study lands beside the config it was added from — not both beside
+    // whichever copy a column lookup happened to find first.
+    expect(rowOf(ctx, topSma.id)).toBe(rowOf(ctx, topIv.id));
+    expect(rowOf(ctx, botSma.id)).toBe(rowOf(ctx, botIv.id));
+  });
+
+  it('removing one copy’s study takes ITS chain and leaves the other', () => {
+    const { actor, ctx, topSma, botSma } = twoCopies();
+    actor.send({ type: 'series.addStudy', targetId: topSma.id, op: 'ema', period: 10 });
+    actor.send({ type: 'series.addStudy', targetId: botSma.id, op: 'ema', period: 10 });
+    const ema = deriveId(emaOf(SMA20, 10));
+    expect(allOf(ctx, ema)).toHaveLength(2);
+
+    actor.send({ type: 'series.remove', id: botSma.id });
+
+    // The BOTTOM chain is gone — the SMA and the EMA built on it.
+    const left = ctx().rows.flatMap((r) => r.configs);
+    expect(left.some((c) => c.id === botSma.id)).toBe(false);
+    expect(allOf(ctx, ema)).toHaveLength(1);
+    // …and the top chain is whole. The old walk kept ONE config per column in a
+    // Map, so this removal could cascade through whichever copy it kept.
+    expect(left.some((c) => c.id === topSma.id)).toBe(true);
+    expect(allOf(ctx, ema)[0]!.parentIds).toEqual([topSma.id]);
+  });
+
+  it('retuning one copy leaves the OTHER copy’s chain computing what it did', () => {
+    const { actor, ctx, topSma, botSma } = twoCopies();
+    actor.send({ type: 'series.addStudy', targetId: topSma.id, op: 'ema', period: 10 });
+    actor.send({ type: 'series.addStudy', targetId: botSma.id, op: 'ema', period: 10 });
+
+    actor.send({ type: 'series.setStudyParam', id: topSma.id, name: 'period', value: 50 });
+
+    const byId = (id: string) =>
+      ctx()
+        .rows.flatMap((r) => r.configs)
+        .find((c) => c.id === id)!;
+    const children = (id: string) =>
+      ctx()
+        .rows.flatMap((r) => r.configs)
+        .filter((c) => c.parentIds?.[0] === id);
+    // The retuned copy, and the EMA on it, follow the new period…
+    expect(byId(topSma.id).column).toBe(deriveId(SMA50));
+    expect(children(topSma.id)[0]!.column).toBe(deriveId(emaOf(SMA50, 10)));
+    // …and the untouched copy's chain does NOT. The substitution is by column,
+    // and both EMAs read the same one; without the parent check, retuning the
+    // top SMA silently re-pointed the bottom EMA at it.
+    expect(byId(botSma.id).column).toBe(deriveId(SMA20));
+    expect(children(botSma.id)[0]!.column).toBe(deriveId(emaOf(SMA20, 10)));
+  });
+
+  it('the no-branching rule is PER COPY', () => {
+    const { actor, ctx, topSma, botSma } = twoCopies();
+    actor.send({ type: 'series.addStudy', targetId: topSma.id, op: 'ema', period: 10 });
+    // The bottom SMA has no study of its own, so one may be built on it — the
+    // top SMA's EMA reads the same column, and by column that looked like the
+    // bottom SMA already had a child.
+    actor.send({ type: 'series.addStudy', targetId: botSma.id, op: 'ema', period: 10 });
+    expect(allOf(ctx, deriveId(emaOf(SMA20, 10)))).toHaveLength(2);
+    // …and a SECOND study on the top one is still a branch, still refused.
+    actor.send({ type: 'series.addStudy', targetId: topSma.id, op: 'ema', period: 30 });
+    expect(allOf(ctx, deriveId(emaOf(SMA20, 30)))).toHaveLength(0);
+  });
+
+  it('a config written before `parentIds` still finds its parent by column', () => {
+    // A persisted chain with no recorded parents — what every preset saved
+    // before this change looks like. One config per column, so the column
+    // fallback is unambiguous for it.
+    const rows = initialRows();
+    const iv = rows[0]!.configs.find((c) => c.column === 'iv21')!;
+    const sma: SeriesConfig = {
+      ...iv,
+      id: 's-legacy-sma',
+      column: deriveId(SMA20),
+      label: 'SMA',
+      derive: SMA20,
+    };
+    const ema: SeriesConfig = {
+      ...iv,
+      id: 's-legacy-ema',
+      column: deriveId(emaOf(SMA20, 10)),
+      label: 'EMA',
+      derive: emaOf(SMA20, 10),
+    };
+    rows[0] = { ...rows[0]!, configs: [ema, sma, ...rows[0]!.configs] };
+    const { actor, ctx } = start(rows);
+    // Removing the SMA still cascades to the EMA on it.
+    actor.send({ type: 'series.remove', id: 's-legacy-sma' });
+    const left = ctx()
+      .rows.flatMap((r) => r.configs)
+      .map((c) => c.id);
+    expect(left).not.toContain('s-legacy-sma');
+    expect(left).not.toContain('s-legacy-ema');
   });
 });

@@ -2,6 +2,35 @@
 
 All packages release together on one version.
 
+## Unreleased
+
+- **One metric can be seated more than once.** A study, a compare leg and a
+  split used to be refused when the column they would seat was already on the
+  chart — in another row, or under another parent — because a study named its
+  input by COLUMN, and two configs on one column made that name ambiguous. The
+  consumer, not the library, decides whether two copies make sense: price in
+  the top row and price in the bottom one, each with its own chain of studies
+  under it, is a layout a user asks for. So the refusals are gone
+  (`canAddStudy`, `canAddPair`'s joined-duplicate check, `planSplit`'s
+  "taken in another row", and `propagateRespec`'s one-column-one-config check)
+  and the ambiguity is resolved instead. `SeriesConfig` gains
+  **`parentIds?`**, index-aligned with `inputNames(derive)`: the config ids a
+  derived config actually reads. `studyConfig` records it, and every walk of
+  the graph — the removal cascade, the respec propagation, the row blocks, the
+  chain tail — resolves a config's sources through the new exported
+  **`sourcesOf(configs, c)`** / **`readsFrom(configs, c, parent)`**, which take
+  the recorded id first and fall back to the column only where none is recorded
+  (a preset or a persisted layout from before this release). Retuning one
+  copy's study no longer touches the other copy's, and removing one copy takes
+  only its own chain.
+
+  This also fixes a latent bug: `propagateRespec` refused **every** retune on a
+  chart where any column was seated twice, which an unjoined pair could already
+  produce.
+
+  Not yet covered: a pair's legs do not record `parentIds`, so they still
+  resolve by column.
+
 ## 0.2.1 — 2026-09-18
 
 The day after 0.2.0. The first embedded consumer's review found a band a bar
