@@ -14,6 +14,8 @@ import {
   axisFormat,
   fractionTicks,
   logAllowed,
+  readsFrom,
+  sourcesOf,
   type AxisRange,
   type SeriesConfig,
 } from './series.js';
@@ -561,5 +563,51 @@ describe('fractionTicks — stacked axes agree on their rows by construction', (
     expect(fractionTicks(0, 1, 1, pct)).toEqual([]);
     expect(fractionTicks(5, 5, 3, pct)).toEqual([]);
     expect(fractionTicks(9, 1, 3, pct)).toEqual([]);
+  });
+});
+
+describe('sourcesOf / readsFrom (TDL-CMPDUP)', () => {
+  const cfg = (id: string, column: string, extra: Partial<SeriesConfig> = {}): SeriesConfig => ({
+    id,
+    label: id,
+    color: 'blue',
+    axis: 'L',
+    style: 'line',
+    visible: true,
+    column,
+    value: null,
+    ...extra,
+  });
+  const sma = { op: 'sma', inputs: ['iv21'], params: { period: 20 } } as const;
+  const a = cfg('a', 'iv21');
+  const b = cfg('b', 'iv21'); // the same column seated twice
+
+  it('a recorded parent wins over the column', () => {
+    const s = cfg('s', 'sma', { derive: sma, parentIds: ['b'] });
+    expect(sourcesOf([a, b, s], s).map((x) => x.id)).toEqual(['b']);
+    expect(readsFrom([a, b, s], s, a)).toBe(false);
+    expect(readsFrom([a, b, s], s, b)).toBe(true);
+  });
+
+  it('with nothing recorded, the first config publishing the column', () => {
+    const s = cfg('s', 'sma', { derive: sma });
+    expect(sourcesOf([a, b, s], s).map((x) => x.id)).toEqual(['a']);
+  });
+
+  it('a STALE record (the parent computes something else now) falls back to the column', () => {
+    const moved = cfg('b', 'iv63');
+    const s = cfg('s', 'sma', { derive: sma, parentIds: ['b'] });
+    expect(sourcesOf([a, moved, s], s).map((x) => x.id)).toEqual(['a']);
+  });
+
+  it('a record naming a config that is GONE resolves to nothing, not the other copy', () => {
+    const s = cfg('s', 'sma', { derive: sma, parentIds: ['b'] });
+    expect(sourcesOf([a, s], s)).toEqual([]);
+  });
+
+  it('never itself, and nothing for a raw config', () => {
+    const s = cfg('s', 'iv21', { derive: sma, parentIds: ['s'] });
+    expect(sourcesOf([s, a], s).map((x) => x.id)).toEqual(['a']);
+    expect(sourcesOf([a, b], a)).toEqual([]);
   });
 });

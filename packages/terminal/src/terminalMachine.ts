@@ -61,7 +61,14 @@ function hidesPointer(
     : new Set<string>([toggledId]);
   return cascade.has(pointer);
 }
-import { axisRangeIsEmpty, logAllowed, type PairLensOp, type SeriesGroup } from '@tidal-ts/chart';
+import {
+  axisRangeIsEmpty,
+  logAllowed,
+  type PairLensOp,
+  type SeriesGroup,
+  readsFrom,
+  sourcesOf,
+} from '@tidal-ts/chart';
 import {
   configAxisId,
   seriesAxisId,
@@ -286,7 +293,11 @@ export type TerminalEvent =
    *  arrangement fields are excluded by type: `axis`/`axisGroup` name the axis a
    *  series sits on, whose ids key `axisRanges`, so they move only through
    *  `axis.swapSide` / `axis.toggleLink`, which keep the pins coherent. */
-  | { type: 'series.patch'; id: string; patch: Partial<Omit<SeriesConfig, 'axis' | 'axisGroup'>> }
+  | {
+      type: 'series.patch';
+      id: string;
+      patch: Partial<Omit<SeriesConfig, 'axis' | 'axisGroup' | 'parentIds'>>;
+    }
   | { type: 'series.toggleVisible'; id: string }
   /** The PAIR's own eye — hides both legs at once. Each leg keeps its own
    *  `visible`, so unhiding the pair restores what each leg was rather than
@@ -376,18 +387,18 @@ const flatConfigs = (rows: readonly RowState[]): SeriesConfig[] => rows.flatMap(
  *  raw series is removed. */
 function derivedClosure(configs: readonly SeriesConfig[], rootId: string): Set<string> {
   const doomed = new Set([rootId]);
-  // Edges resolve by COLUMN (what a spec input names); the set itself holds
-  // IDS, because that is what callers filter configs and re-point pointers by.
-  const byColumn = new Map(configs.map((c) => [c.column, c]));
+  // The set holds IDS, because that is what callers filter configs and re-point
+  // pointers by — and the edges now resolve by id too (`sourcesOf`). They used
+  // to go through a `Map` keyed by column, which with a metric seated twice
+  // kept only the LAST config per column: removing one copy cascaded through
+  // the other's studies.
   for (let grew = true; grew;) {
     grew = false;
     for (const c of configs) {
       if (doomed.has(c.id) || !c.derive) continue;
       // EVERY input is an edge — a pair's B leg is as load-bearing as its A leg
-      // (PR #128 review, HIGH). An input names a raw feed column or a nested
-      // spec, and either way the config that produces it carries that name as
-      // its `column`.
-      const srcs = inputNames(c.derive).map((n) => byColumn.get(n));
+      // (PR #128 review, HIGH).
+      const srcs = sourcesOf(configs, c);
       if (srcs.some((src) => src?.derive && doomed.has(src.id))) {
         doomed.add(c.id); // derives from a doomed study ⇒ its source column will vanish
         grew = true;
@@ -426,12 +437,9 @@ function derivedClosure(configs: readonly SeriesConfig[], rootId: string): Set<s
  * A study is subordinate to what it is built on; a leg is a peer of its partner.
  * Same graph, opposite rule, so they get their own walks.
  */
-/** Whether a study already has a study built on it — the no-branching test.
- *  Edges resolve by COLUMN, which is what a spec input names. */
+/** Whether a study already has a study built on it — the no-branching test. */
 function hasStudyChild(configs: readonly SeriesConfig[], target: SeriesConfig): boolean {
-  return configs.some(
-    (c) => c.id !== target.id && c.derive && inputNames(c.derive).includes(target.column),
-  );
+  return configs.some((c) => c.id !== target.id && readsFrom(configs, c, target));
 }
 
 function studiesOn(
@@ -444,7 +452,7 @@ function studiesOn(
     grew = false;
     for (const c of configs) {
       if (set.has(c.id) || !c.derive || isCatalogColumn(c.column)) continue;
-      if (configs.some((p) => set.has(p.id) && inputNames(c.derive!).includes(p.column))) {
+      if (configs.some((p) => set.has(p.id) && readsFrom(configs, c, p))) {
         set.add(c.id);
         grew = true;
       }
@@ -474,9 +482,11 @@ function layeredOn(
         continue;
       }
       if (!c.derive || isCatalogColumn(c.column)) continue;
-      // A study names its sources by COLUMN — never by the id of the config
-      // that happens to display them.
-      if (configs.some((p) => set.has(p.id) && inputNames(c.derive!).includes(p.column))) {
+      // A study's SPEC names its sources by column, which is the data; which
+      // CONFIG it travels with is its recorded parent (`sourcesOf`). With one
+      // config per column those were the same answer, and with a metric seated
+      // twice they are not.
+      if (configs.some((p) => set.has(p.id) && readsFrom(configs, c, p))) {
         set.add(c.id);
         grew = true;
       }
@@ -540,8 +550,7 @@ export function rowBlocks(configs: readonly SeriesConfig[]): SeriesConfig[][] {
     // registry — a period-shaped test was the same question only while every
     // tunable op had one param called `period` (PR #181 review, MEDIUM).
     if (!c.derive || opParams(c.derive.op).length === 0) continue;
-    const names = inputNames(c.derive);
-    const parent = configs.find((x) => x.id !== c.id && names.includes(x.column));
+    const parent = sourcesOf(configs, c)[0];
     if (parent) parentOf.set(c.id, parent.id);
   }
   // A block is keyed by the chain's ROOT, not the immediate parent: studies are
@@ -605,7 +614,7 @@ export function studyChainTail(configs: readonly SeriesConfig[], rootId: string)
         !seen.has(c.id) &&
         !!c.derive &&
         opParams(c.derive.op).length > 0 &&
-        inputNames(c.derive).includes(cur!.column),
+        readsFrom(configs, c, cur!),
     );
     if (!next) return cur.id;
     seen.add(next.id);
@@ -755,6 +764,15 @@ function studyConfig(target: SeriesConfig, op: DeriveOp, period: number, id: str
     value: null,
     unit: shares ? target.unit : own,
     derive,
+    // WHICH config this study is on — recorded now, because this is the one
+    // moment it is known for certain: the user pressed THIS config's button.
+    // The spec above names the target by column, which is the data; this
+    // names it by id, which is the graph (`sourcesOf`). Index-ALIGNED with the
+    // spec's inputs, and only where an input actually reads the target: an
+    // ATR's inputs are the bar's high/low/close, whatever it was added from,
+    // and recording the target there made an ATR added from an SMA read as
+    // that SMA's child (PR #16 review, MEDIUM).
+    ...recordParents(derive, [target]),
   };
 }
 
@@ -771,6 +789,10 @@ interface PairLeg {
   unit: string;
   column: string;
   source: string;
+  /** The SEATED config this leg resolved to, if any — recorded on the spread
+   *  as its parent (`parentIds`), so a spread over one of two copies stays on
+   *  that copy. */
+  seatId?: string;
   /** The leg's own spec when it is derived — nested into the pair spec, so a
    *  spread of a study carries its leg's derivation with it. */
   spec?: DeriveSpec;
@@ -808,6 +830,7 @@ const resolveLeg = (context: TerminalContext, id: string): PairLeg | null => {
   const cfg = legSeat(context, id);
   if (cfg)
     return {
+      seatId: cfg.id,
       label: cfg.label,
       unit: cfg.unit ?? '',
       column: cfg.column,
@@ -985,7 +1008,29 @@ function pairConfig(
     // diff keeps the unit, a ratio is unitless, a log-ratio reads `log`.
     unit: specUnit(derive, unitOf),
     derive,
+    // A leg that resolved to a seated config is that config's child. Only an
+    // input that reads the seat AS IS is recorded: a per-leg study or a compare
+    // rebind makes the input its own computation, which no seated config
+    // publishes.
+    ...recordParents(
+      derive,
+      [a, b].flatMap((l) => (l.seatId ? [{ id: l.seatId, column: l.column }] : [])),
+    ),
   };
+}
+
+/**
+ * `parentIds` for a derived config about to be minted: at each input position,
+ * the id of the `seat` that publishes that input's column, else nothing.
+ * Returns `{}` when nothing was recorded, so a config with no seated parents
+ * carries no empty array.
+ */
+function recordParents(
+  derive: DeriveSpec,
+  seats: readonly Pick<SeriesConfig, 'id' | 'column'>[],
+): Pick<SeriesConfig, 'parentIds'> {
+  const parentIds = inputNames(derive).map((name) => seats.find((s) => s.column === name)?.id);
+  return parentIds.some((id) => id != null) ? { parentIds } : {};
 }
 
 /**
@@ -1096,7 +1141,8 @@ function pairSeats(
 }
 
 /** The column a study takes if one of its params changes — its spec re-encoded.
- *  The identity does NOT change with it; this guards column collisions only. */
+ *  The identity does NOT change with it; this only tells a real edit from a
+ *  no-op (the same column back). */
 const restudyColumn = (study: SeriesConfig, name: string, value: number): string =>
   deriveId({ ...study.derive!, params: { ...study.derive!.params, [name]: value } });
 
@@ -1107,8 +1153,10 @@ const restudyColumn = (study: SeriesConfig, name: string, value: number): string
  *
  * It has to run the whole propagation, because an edit is refusable for a
  * reason that isn't visible on the study itself: re-speccing it rewrites
- * everything built on it, and one of THOSE can land on a column another config
- * already holds — two lines computing the same thing. Before this was exported,
+ * everything built on it, and one of THOSE rewrites can be a spec the registry
+ * rejects, or move a unit incoherently. (Landing on a column another config
+ * already computes used to be a reason too; it is not since `TDL-CMPDUP` — two
+ * configs may compute the same thing.) Before this was exported,
  * such an edit simply did nothing when clicked, with no way to find out why
  * (PR #140 review, MEDIUM).
  */
@@ -1165,9 +1213,11 @@ function freeColor(
  * What splitting a pair into a leg group actually does — computed once so the
  * `rows` assigner, the `cfgSeq` counter and the guard all read the same plan.
  *
- * A leg whose column is ALREADY on the chart is **adopted** rather than
- * duplicated (one column, one config): splitting `iv63 − iv21` while `iv21` is
- * seated in its own right makes that series leg B. Everything else is created,
+ * A leg whose column is ALREADY seated in the pair's row is **adopted** rather
+ * than duplicated — the recorded leg (`parentIds`) first, else the first config
+ * on that column: splitting `iv63 − iv21` while `iv21` is seated in its own
+ * right makes that series leg B. A column seated only on another row gets a leg
+ * of its own here. Everything else is created,
  * and leg A reuses the pair's own id when it can — so the thing you were
  * looking at stays the thing you are looking at, ink, axis and pins included.
  */
@@ -1217,8 +1267,13 @@ function planSplit(
     const { column, derive } = legParts(input);
     // Adoption looks only in the pair's OWN row: a group whose legs sit in two
     // rows has no single Pair node to render (the panel is per-row), so it
-    // would draw as two one-legged pairs.
-    const seated = row.find((c) => c.id !== pair.id && c.column === column);
+    // would draw as two one-legged pairs. The RECORDED leg first: with a metric
+    // seated twice in one row, a compare added from the second copy must adopt
+    // the second copy, not whichever the column finds first (PR #16 review).
+    const byId = pair.parentIds?.[i];
+    const seated =
+      (byId != null ? row.find((c) => c.id === byId && c.column === column) : undefined) ??
+      row.find((c) => c.id !== pair.id && c.column === column);
     if (seated) {
       // …and never STEAL a leg from another pair. Two pairs sharing a leg
       // column would leave the first group with one member, which nothing can
@@ -1227,9 +1282,11 @@ function planSplit(
       else plan.adopt.push({ id: seated.id, group: { id: pair.id, side } });
       return;
     }
-    // The column is free in this row but taken in ANOTHER — creating here would
-    // put two configs on one column, which every dependency walk resolves by.
-    if (configs.some((c) => c.id !== pair.id && c.column === column)) refuse = true;
+    // The column may be seated on ANOTHER row already, and a leg is created
+    // here regardless: two configs on one column is legal now that the walks
+    // resolve by recorded parent. This refusal is what made an unjoined
+    // compare from Bottom silently do nothing when its metric lived on Top
+    // (Peter, 2026-09-28: "why can't I add this compare?").
     const id = pairIdFree ? ((pairIdFree = false), pair.id) : mintId(seq++);
     if (id !== pair.id) plan.mints += 1;
     const unit = typeof input === 'string' ? unitOf(input) : specUnit(input, unitOf);
@@ -1253,6 +1310,9 @@ function planSplit(
       unit,
       value: null,
       group: { id: pair.id, side },
+      // A leg is not a child of the pair's parents: they were the pair's
+      // inputs, and a leg's own inputs (if it is derived) are its spec's.
+      parentIds: undefined,
     });
   });
   // Both legs adopted ⇒ the pair's own config has nothing left to be, and
@@ -1418,6 +1478,12 @@ function propagateRespec(
         for (const dep of configs) {
           const moved = dep.id === c.id ? undefined : next.get(dep.id);
           if (!moved || moved.column === dep.column) continue;
+          // Only a config BUILT ON `dep` follows its retune. The substitution
+          // itself is by column, and with a metric seated twice the other copy's
+          // studies read that same column: without this, retuning one SMA
+          // re-pointed the OTHER copy's children at it, silently changing what a
+          // line the user never touched computes.
+          if (!readsFrom(configs, c, dep)) continue;
           spec = substituteInput(spec, dep.column, moved.derive);
         }
         if (spec === before) continue;
@@ -1436,9 +1502,15 @@ function propagateRespec(
   // Out of passes with rewrites still landing: the result would be a graph part
   // way through an edit. Refuse rather than apply it.
   if (!settled) return null;
-  // One column, one config — including against the configs that did NOT move.
-  const columns = configs.map((c) => next.get(c.id)?.column ?? c.column);
-  if (new Set(columns).size !== columns.length) return null;
+  // There used to be a check here that every column on the chart is unique
+  // after the edit — "one column, one config". It encoded the model this
+  // function no longer has, and it was wrong in the worst way: `canAdd` has
+  // allowed a metric to be seated twice for a while, and the moment one was,
+  // this refused EVERY retune on the chart, silently, including of studies with
+  // nothing to do with the duplicate (verified against the released machine,
+  // 2026-09-28). Two configs may share a column now; they are told apart by id
+  // and by recorded parent (`sourcesOf`), and the substitution above only
+  // follows a config's own children.
   return next;
 }
 
@@ -1756,10 +1828,9 @@ export const terminalMachine = setup({
     // Row cap (the control-panel spec: 1–3). The UI also gates on "current bottom has
     // content"; this is the hard invariant.
     canAddRow: ({ context }) => context.rows.length < MAX_ROWS,
-    // A study may be added if its target exists and the exact spec isn't already
-    // on the chart. One column, one config: a duplicate spec would fold to the
-    // same column, drawing one line twice and making the dependency walks
-    // (which resolve edges by column) ambiguous about which config owns it.
+    // A study may be added if its target exists and can take it. The same spec
+    // may already be on the chart — on another copy of the metric, or on this
+    // one (see the end of the guard).
     canAddStudy: ({ context, event }) => {
       if (event.type !== 'series.addStudy') return false;
       const target = flatConfigs(context.rows).find((c) => c.id === event.targetId);
@@ -1795,16 +1866,20 @@ export const terminalMachine = setup({
       // errors the whole actor (PR #130 review, HIGH). The machine is
       // host-driven — this guard IS the validation.
       const spec = studySpec(target, event.op, event.period);
-      if (!isValidSpec(spec)) return false;
-      const column = deriveId(spec);
-      return !flatConfigs(context.rows).some((c) => c.column === column);
+      // The same study may sit on two configs — an SMA on the price in each of
+      // two rows, each copy then growing its own chain. That was refused
+      // because every walk resolved by column and could not tell the two
+      // apart; they resolve by recorded parent now (`sourcesOf`), so it is the
+      // user's to decide whether two of something makes sense (Peter,
+      // 2026-09-28: "It's up to them to make it make sense, not us").
+      return isValidSpec(spec);
     },
     // A pair may be added if both legs exist, differ, and read the SAME data
     // source — the derive fold runs per series, so both columns must live on
     // one series (cross-source/cross-entity pairs need the join step; see
     // Tidal's pairs plan). The spread arrives UNLINKED (its own axis), so there is
-    // no unit gate — only a target row must exist and the exact spec must not
-    // already be on the chart.
+    // no unit gate — only a target row must exist. The same spec may already be
+    // on the chart (`TDL-CMPDUP`).
     canAddPair: ({ context, event }) => {
       if (event.type !== 'series.addPair') return false;
       const a = resolveLeg(context, event.a.metricId);
@@ -1837,7 +1912,7 @@ export const terminalMachine = setup({
         const row = pairRow(context, event);
         return !!(row && planAddGroup(context, event, row));
       }
-      if (flatConfigs(context.rows).some((c) => c.column === deriveId(spec))) return false;
+      // The same spread may be seated twice, on two rows — see `canAddStudy`.
       // …and a row to land on. Delegated to `pairSeats` — which the sibling
       // assigners already use — so the guard, the rows assigner and the id
       // counter cannot disagree about where a spread goes (a named row, else
@@ -2242,7 +2317,12 @@ export const terminalMachine = setup({
         event.type === 'series.patch'
           ? context.rows.map((r) => ({
               ...r,
-              configs: r.configs.map((c) => (c.id === event.id ? { ...c, ...event.patch } : c)),
+              configs: r.configs.map((c) =>
+                // `parentIds` is the graph, not a presentation field: a patch
+                // may not rewrite which config a study is on (an untyped host
+                // could still send one).
+                c.id === event.id ? { ...c, ...event.patch, parentIds: c.parentIds } : c,
+              ),
             }))
           : context.rows,
     }),

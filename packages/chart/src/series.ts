@@ -83,6 +83,7 @@ export function configColumns(c: {
 import {
   BAND_OUTPUTS,
   COMPARE_PREFIX,
+  inputNames,
   opOutputs,
   opParams,
   outputMark,
@@ -191,6 +192,27 @@ export interface SeriesConfig {
    *  spec, while `id` stands still. The render folds the op onto the source
    *  series via `applyDerived`. Absent ⇒ raw. */
   derive?: DeriveSpec;
+  /**
+   * The configs this one is BUILT ON, index-aligned with its spec's inputs
+   * (`inputNames(derive)`) — a study's one parent, a joined pair's two legs.
+   *
+   * The spec names its inputs by COLUMN, and that stays: the column is the
+   * DATA, content-addressed, computed once however many configs read it. What
+   * a column cannot say is WHICH config a derived one belongs to, and once the
+   * same metric can be seated twice — price on two rows, each with its own
+   * chain of studies — two configs share a column and "which one is this
+   * study on" has two answers. This is the answer, recorded when it was known:
+   * at the moment the study was added from one particular config's button.
+   *
+   * An entry is honoured only while it still names a config that PUBLISHES
+   * that input's column. An entry absent, or naming a config that computes
+   * something else now (a stale record), falls back to the column — which is
+   * how every config written before this field is read. An entry naming a
+   * config that is GONE resolves to nothing: the parent was removed, and
+   * re-binding its orphan to whichever other config shares the column would
+   * hand it to a copy it was never on.
+   */
+  parentIds?: readonly (string | undefined)[];
   /** Stroke width (px) for `line`/`area`. Omitted ⇒ the category default from
    *  the chart settings (see {@link seriesLineWidth}). */
   lineWidth?: number;
@@ -718,3 +740,52 @@ export function formatSeriesValue(value: number | null, unit = ''): string {
   if (unit === '$') return formatCurrency(value, 2);
   return `${value.toFixed(2)}${unit}`;
 }
+
+/**
+ * The configs `c` is BUILT ON — the one question every dependency walk asks,
+ * in the machine and in any host that draws the graph, answered in one place.
+ *
+ * By RECORDED PARENT first (`parentIds`, index-aligned with the spec's
+ * inputs), and by COLUMN only where no parent was recorded. The spec names its
+ * inputs by column, and for the data that is exactly right — but the column
+ * cannot say which config a study belongs to once a metric is seated twice,
+ * and every walk used to answer by column: removal cascaded through whichever
+ * copy a Map kept last, and retuning one study re-pointed the OTHER copy's
+ * children at it (`TDL-CMPDUP`). The column fallback is kept for configs
+ * written before `parentIds` and for inputs no config was recorded for (a
+ * study's bar columns, a pair leg that was not seated). It is a best guess
+ * where a column is seated twice — the first config publishing it wins —
+ * which is exactly the ambiguity recording a parent exists to remove.
+ *
+ * A recorded parent that is gone resolves to NOTHING rather than re-binding
+ * by column: see {@link SeriesConfig.parentIds}.
+ *
+ * An input with no config behind it (a raw feed column no one displays)
+ * contributes nothing, as before.
+ */
+export function sourcesOf(configs: readonly SeriesConfig[], c: SeriesConfig): SeriesConfig[] {
+  if (!c.derive) return [];
+  const out: SeriesConfig[] = [];
+  inputNames(c.derive).forEach((name, i) => {
+    const byId = c.parentIds?.[i];
+    if (byId != null && byId !== c.id) {
+      const recorded = configs.find((x) => x.id === byId);
+      if (!recorded) return; // its parent is gone — an orphan, not a re-bind
+      if (recorded.column === name) {
+        out.push(recorded);
+        return;
+      }
+      // Stale: that config computes something else now. Fall through.
+    }
+    const src = configs.find((x) => x.id !== c.id && x.column === name);
+    if (src) out.push(src);
+  });
+  return out;
+}
+
+/** Whether `c` is built on `p` — `sourcesOf`, asked the other way round. */
+export const readsFrom = (
+  configs: readonly SeriesConfig[],
+  c: SeriesConfig,
+  p: SeriesConfig,
+): boolean => sourcesOf(configs, c).some((s) => s.id === p.id);

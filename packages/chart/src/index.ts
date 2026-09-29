@@ -59,6 +59,8 @@ export {
   type SeriesWindow,
   type CandleVariant,
   type ColorBy,
+  readsFrom,
+  sourcesOf,
 } from './series.js';
 export {
   DEFAULT_CHART_SETTINGS,
