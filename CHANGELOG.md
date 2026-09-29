@@ -2,7 +2,10 @@
 
 All packages release together on one version.
 
-## Unreleased
+## 0.2.2 — 2026-09-29
+
+One change, asked for by the first consumer: the user, not the library,
+decides whether seating a metric twice makes sense.
 
 - **One metric can be seated more than once.** A study, a compare leg and a
   split used to be refused when the column they would seat was already on the
