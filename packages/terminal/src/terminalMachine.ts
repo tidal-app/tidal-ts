@@ -13,11 +13,13 @@ import {
   opSharesSourceAxis,
   studyTag,
   inputNames,
+  isPickedInput,
   isPairOp,
   isValidSpec,
   partStudyLabel,
   readPairParts,
   specUnit,
+  studyInputOf,
   substituteInput,
   type DeriveInput,
   type DeriveOp,
@@ -682,7 +684,10 @@ function toConfig(e: MetricEntry, id: string, axis: SeriesAxis = e.axis): Series
 /** The spec a study of `target` at `(op, period)` induces — reads the target's
  *  DATA column, or **nests** the target's own spec when the target is derived
  *  (the engine reads a string input as a raw column, so composition nests;
- *  content-addressing makes the seated copy and the nested copy one node). */
+ *  content-addressing makes the seated copy and the nested copy one node). A
+ *  MULTI-OUTPUT target is nested as one PICKED output, its primary
+ *  (`studyInputOf`) — never bare, which would read whichever output it happens
+ *  to declare first (TDL-STUDYCHAIN). */
 const studySpec = (target: SeriesConfig, op: DeriveOp, period: number): DeriveSpec => {
   // Params come from the REGISTRY, not from a list here: an op is tuned by
   // exactly what it declares, so a two-param study (a band's `period` +
@@ -709,7 +714,7 @@ const studySpec = (target: SeriesConfig, op: DeriveOp, period: number): DeriveSp
   // and `deriveId` dedupes them. That is correct — ATR(14) of the bars is one
   // series — and it is why the picker has to refuse the op where its columns
   // are absent (`opNeedsColumns`) rather than let the fold skip it silently.
-  const self = target.derive ?? target.column;
+  const self = studyInputOf(target.derive ?? target.column);
   const inputs = opInputs(op).map((r) =>
     // A target role takes the target; a bar role takes its own column. No
     // default and not a target role should be unreachable (a benchmark role is
@@ -720,7 +725,7 @@ const studySpec = (target: SeriesConfig, op: DeriveOp, period: number): DeriveSp
   return {
     op,
     ...(declared.length > 0 ? { params } : {}),
-    inputs: inputs.length > 0 ? inputs : [target.derive ?? target.column],
+    inputs: inputs.length > 0 ? inputs : [self],
   };
 };
 
@@ -741,10 +746,17 @@ function studyConfig(target: SeriesConfig, op: DeriveOp, period: number, id: str
   // group, keyed by its own id, and its own unit for the labels.
   const shares = opSharesSourceAxis(op);
   const own = specUnit(derive, (col) => (col === target.column ? (target.unit ?? '') : ''));
+  // Which output of a multi-output target this study reads, named in the label
+  // (`Price · DONCHIAN(20) · Middle · SMA(10)`) so the choice is never silent.
+  const picked = derive.inputs.find(isPickedInput);
   return {
     id,
-    ...(shares ? {} : { axisGroup: id }),
-    label: `${target.label} · ${studyTag(derive)}`, // legend chip
+    // Sharing means sharing the SOURCE's scale — which is the source's own axis
+    // group when it has one. An SMA of a MACD (or of an RSI) left out of that
+    // group landed on the row's shared axis instead, a line near zero drawn on
+    // the price's scale.
+    ...(shares ? (target.axisGroup ? { axisGroup: target.axisGroup } : {}) : { axisGroup: id }),
+    label: `${target.label}${picked ? ` · ${picked.output}` : ''} · ${studyTag(derive)}`, // legend chip
     family: target.family ?? target.label, // main line = the source's name
     tenor: target.tenor, // carry the source's tenor into the params sub-line
     // A study is the same reading, smoothed — so it takes its metric's COLOUR
@@ -852,7 +864,7 @@ const resolveLeg = (context: TerminalContext, id: string): PairLeg | null => {
  *  LEAVES (a nested spec keeps its shape but reads `cmp_` columns), so a
  *  derived compare-bound leg folds against the joined series like any other —
  *  the role is column-addressed all the way down. */
-const underCompare = (input: string | DeriveSpec): string | DeriveSpec =>
+const underCompare = (input: DeriveInput): DeriveInput =>
   typeof input === 'string'
     ? // IDEMPOTENT at the leaf: in a two-entity world "the compare of a
       // compare-reading leg" is the compare — double-prefixing minted a
@@ -860,7 +872,9 @@ const underCompare = (input: string | DeriveSpec): string | DeriveSpec =>
       input.startsWith(COMPARE_PREFIX)
       ? input
       : `${COMPARE_PREFIX}${input}`
-    : { ...input, inputs: input.inputs.map(underCompare) };
+    : isPickedInput(input)
+      ? { from: underCompare(input.from) as DeriveSpec, output: input.output }
+      : { ...input, inputs: input.inputs.map(underCompare) };
 
 /** One side of a pair as the PICKER states it (the two-sided grammar, TDL-PAIR
  *  stage 2): a metric, the workspace ROLE the leg reads — `'primary'` (default)
@@ -1194,7 +1208,7 @@ export function respecAllowed(scope: EditScope, id: string, name: string, value:
 
 /** A leg's graph input as a seated config would carry it: a raw column has no
  *  spec, a derived leg carries its own. */
-const legParts = (leg: DeriveInput): Pick<SeriesConfig, 'column' | 'derive'> =>
+const legParts = (leg: string | DeriveSpec): Pick<SeriesConfig, 'column' | 'derive'> =>
   typeof leg === 'string' ? { column: leg } : { column: deriveId(leg), derive: leg };
 
 /** The colour leg B takes when a pair splits — the first palette key neither
@@ -1244,12 +1258,17 @@ function planSplit(
   const parts = readPairParts(spec);
   const inputs = spec.inputs ?? [];
   if (!parts || inputs.length !== 2) return null;
+  // A leg that PICKS one output of a study is not a seatable series of its own
+  // (no config publishes `band#Lower` alone), so there is nothing to split into.
+  // `readPairParts` already refuses such a leg; this narrows the type.
+  if (inputs.some(isPickedInput)) return null;
+  const legs = inputs as readonly (string | DeriveSpec)[];
   // A study built ON the spread has nowhere to point once the spread stops
   // being a single line, so splitting would strand it — configured, computing a
   // column nothing folds. Refuse rather than delete the user's work silently
   // (PR #144 review, MEDIUM).
   if (derivedClosure(flatConfigs(scope.rows), pair.id).size > 1) return null;
-  const legCols = inputs.map((i) => legParts(i).column);
+  const legCols = legs.map((i) => legParts(i).column);
   // Two legs computing the same thing is a constant, not a pair — and would be
   // one config either way. (`canAddPair` refuses to build one; a persisted
   // preset could still carry it.)
@@ -1262,7 +1281,7 @@ function planSplit(
   let pairIdFree = true;
   let refuse = false;
 
-  inputs.forEach((input, i) => {
+  legs.forEach((input, i) => {
     const side: 'A' | 'B' = i === 0 ? 'A' : 'B';
     const { column, derive } = legParts(input);
     // Adoption looks only in the pair's OWN row: a group whose legs sit in two
@@ -1843,17 +1862,11 @@ export const terminalMachine = setup({
       // a preset can replay an add, so the machine is where the refusal has to
       // live — the same move `b544480` made for multi-output targets.
       if (!studyOfferable(target.source, event.op)) return false;
-      // A MULTI-OUTPUT study cannot be a study target. Its `column` is a spec id
-      // naming several columns and none of its own, so `sma(macd(...))` would
-      // read a column that does not exist: the spec is well-formed, `deriveId`
-      // names it happily, and the fold quietly produces nothing — a config
-      // sitting in the panel computing silence, which is the worst failure
-      // shape. Which output such a study should read is a real question the
-      // engine has no way to answer (a MACD's line? its histogram?), so refuse
-      // rather than guess. The `Add ▸ Study` menu hides on these too; this is
-      // the guard that covers the picker, which stays open across picks and
-      // appends to the chain TAIL.
-      if (target.derive && opIsMulti(target.derive.op)) return false;
+      // A MULTI-OUTPUT target is fine: `studySpec` reads ONE of its outputs,
+      // picked by name (its primary), so the study has a column to read and the
+      // label says which. This used to refuse a MACD, because a bare nested
+      // multi-output spec read "output 0" — and let a band through, where the
+      // same rule silently smoothed a Donchian's top edge (TDL-STUDYCHAIN).
       // A study takes at most ONE study of its own: a metric may carry several
       // study CHAINS, but a chain never branches (Peter, 2026-09-12). The panel
       // reads a chain top-down as a pipeline, and a branch has no reading in
@@ -1903,7 +1916,12 @@ export const terminalMachine = setup({
       // whatever the bindings, and two legs drawing one line if unjoined. The
       // same metric ACROSS roles (or under different studies) differs after
       // binding, so George's canonical case passes.
-      const name = (i: DeriveInput) => (typeof i === 'string' ? i : deriveId(i));
+      const name = (i: DeriveInput) =>
+        typeof i === 'string'
+          ? i
+          : isPickedInput(i)
+            ? `${deriveId(i.from)}#${i.output}`
+            : deriveId(i);
       if (name(spec.inputs[0]!) === name(spec.inputs[1]!)) return false;
       // UNJOINED: no spread is ever seated, so the test is whether the two legs
       // can be — `planAddGroup` answers that (a leg already in another group

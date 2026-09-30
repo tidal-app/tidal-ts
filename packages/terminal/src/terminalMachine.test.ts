@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createActor } from 'xstate';
 import { configAxisId, seriesDrawn, type SeriesConfig } from '@tidal-ts/chart';
-import { deriveId, isPairOp, type DeriveSpec } from '@tidal-ts/core';
+import { deriveId, isPairOp, opParams, type DeriveSpec } from '@tidal-ts/core';
 import {
   activeSlot,
   canonRows,
@@ -2195,21 +2195,77 @@ describe("a study's axis follows its UNIT, not its source", () => {
   });
 });
 
-describe('a multi-output study cannot be a study target', () => {
-  it('refuses a study OF a MACD — its column names none of its own columns', () => {
+describe('a study of a multi-output study reads ONE named output (TDL-STUDYCHAIN)', () => {
+  const all = (ctx: () => { rows: RowState[] }) => ctx().rows.flatMap((r) => r.configs);
+
+  it('a study OF a MACD reads its Line, picked, and says so in the label', () => {
     const { actor, ctx, idOf } = start();
     actor.send({ type: 'series.addStudy', targetId: idOf('close'), op: 'macd', period: 20 });
-    const macd = ctx()
-      .rows.flatMap((r) => r.configs)
-      .find((c) => c.derive?.op === 'macd')!;
+    const macd = all(ctx).find((c) => c.derive?.op === 'macd')!;
     expect(macd.style).toBe('lines');
 
-    // The spec would be well-formed and `deriveId` would name it happily — the
-    // failure is that the fold produces nothing, so without this guard the
-    // panel gains a config that computes silence. Found on a running render.
-    const before = ctx().rows.flatMap((r) => r.configs).length;
-    actor.send({ type: 'series.addStudy', targetId: macd.id, op: 'sma', period: 20 });
-    expect(ctx().rows.flatMap((r) => r.configs)).toHaveLength(before);
+    const before = all(ctx).length;
+    actor.send({ type: 'series.addStudy', targetId: macd.id, op: 'sma', period: 10 });
+    expect(all(ctx)).toHaveLength(before + 1);
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    // Never a bare nested multi-output spec: the pick is IN the spec…
+    expect(sma.derive!.inputs).toEqual([{ from: macd.derive, output: 'Line' }]);
+    // …so the column is its own (the engine names a pick `…#Line`)…
+    expect(sma.column).toBe(deriveId(sma.derive!));
+    expect(sma.column).toContain('#Line');
+    // …and the label names the output it reads.
+    expect(sma.label).toBe(`${macd.label} · Line · SMA(10)`);
+    // Recorded as the MACD's child, so the chain reads as one pipeline.
+    expect(sma.parentIds).toEqual([macd.id]);
+  });
+
+  it('a study of a Donchian reads its MIDDLE — not the Upper it declares first', () => {
+    const { actor, ctx, idOf } = start();
+    actor.send({ type: 'series.addStudy', targetId: idOf('close'), op: 'donchian', period: 20 });
+    const band = all(ctx).find((c) => c.derive?.op === 'donchian')!;
+    expect(band.style).toBe('band');
+    actor.send({ type: 'series.addStudy', targetId: band.id, op: 'sma', period: 10 });
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    expect(sma.derive!.inputs).toEqual([{ from: band.derive, output: 'Middle' }]);
+    expect(sma.label).toContain(' · Middle · SMA(10)');
+  });
+
+  it('a single-output target is still nested bare, with no output in the label', () => {
+    const { actor, ctx, idOf } = start();
+    actor.send({ type: 'series.addStudy', targetId: idOf('iv21'), op: 'sma', period: 20 });
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    actor.send({ type: 'series.addStudy', targetId: sma.id, op: 'ema', period: 10 });
+    const ema = all(ctx).find((c) => c.derive?.op === 'ema')!;
+    expect(ema.derive!.inputs).toEqual([sma.derive]);
+    expect(ema.label).toBe(`${sma.label} · EMA(10)`);
+  });
+
+  it("an axis-sharing study of an OWN-axis study joins its source's axis, not the row's", () => {
+    // An SMA shares its source's scale. Its source here, a MACD, is on its own
+    // axis (a MACD is a price MOVE, nowhere near the price's level) — so the
+    // SMA belongs on THAT axis. Landing on the row's shared axis put a line
+    // hovering near zero on the price's scale.
+    const { actor, ctx, idOf } = start();
+    actor.send({ type: 'series.addStudy', targetId: idOf('close'), op: 'macd', period: 20 });
+    const macd = all(ctx).find((c) => c.derive?.op === 'macd')!;
+    expect(macd.axisGroup).toBe(macd.id);
+    actor.send({ type: 'series.addStudy', targetId: macd.id, op: 'sma', period: 10 });
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    expect(sma.axisGroup).toBe(macd.axisGroup);
+    expect(configAxisId('bottom', sma)).toBe(configAxisId('bottom', macd));
+  });
+
+  it('retuning the MACD carries the pick: the SMA follows, still reading Line', () => {
+    const { actor, ctx, idOf } = start();
+    actor.send({ type: 'series.addStudy', targetId: idOf('close'), op: 'macd', period: 20 });
+    const macd = all(ctx).find((c) => c.derive?.op === 'macd')!;
+    actor.send({ type: 'series.addStudy', targetId: macd.id, op: 'sma', period: 10 });
+    const param = opParams('macd')[0]!.name;
+    actor.send({ type: 'series.setStudyParam', id: macd.id, name: param, value: 7 });
+    const macd2 = all(ctx).find((c) => c.id === macd.id)!;
+    expect(macd2.derive!.params![param]).toBe(7);
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    expect(sma.derive!.inputs).toEqual([{ from: macd2.derive, output: 'Line' }]);
   });
 
   it('refuses a multi-output study as a pair LEG', () => {
@@ -2250,19 +2306,6 @@ describe('a multi-output study cannot be a study target', () => {
         .rows.flatMap((r) => r.configs)
         .filter((c) => c.group).length,
     ).toBeGreaterThan(0);
-  });
-
-  it('still allows a study of a BAND-shaped study, which reads one column', () => {
-    // A band is multi-output too, but `opIsMulti` excludes it — `bandColumns`
-    // resolves its three columns and the fold has a centre line to read.
-    const { actor, ctx, idOf } = start();
-    actor.send({ type: 'series.addStudy', targetId: idOf('iv21'), op: 'sma', period: 20 });
-    const sma = ctx()
-      .rows.flatMap((r) => r.configs)
-      .find((c) => c.derive?.op === 'sma')!;
-    const before = ctx().rows.flatMap((r) => r.configs).length;
-    actor.send({ type: 'series.addStudy', targetId: sma.id, op: 'ema', period: 10 });
-    expect(ctx().rows.flatMap((r) => r.configs).length).toBe(before + 1);
   });
 });
 

@@ -143,7 +143,7 @@ export const sharesSourceAxis = (d: Descriptor): boolean =>
  * {@link catalogRun} reads the CORPUS by the catalog's own suffix, while the
  * engine names OUR column off the registry's. Logged as F-charts-27.
  */
-const PRIMARY_SUFFIX = 'Value';
+export const PRIMARY_SUFFIX = 'Value';
 
 /** The suffixes to DECLARE for a descriptor — the catalog's, except that a
  *  multi-output op's empty primary is named (see {@link PRIMARY_SUFFIX}). */
