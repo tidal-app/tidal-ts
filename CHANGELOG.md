@@ -2,6 +2,43 @@
 
 All packages release together on one version.
 
+## 0.3.0 — 2026-09-30
+
+A study of a multi-output study now says which output it reads.
+
+- **A study of a multi-output study reads ONE named output.** `DeriveInput`
+  gains a third form, **`PickedDeriveOutput`** (`{ from, output }`, the
+  engine's own `PickedOutput`), and `studyConfig` always writes one when its
+  target has several outputs, instead of nesting the target bare. A bare
+  nested multi-output spec reads its FIRST-declared output: `Middle` for
+  `bollinger` by luck, but `Upper` for `donchian`, so an SMA of a Donchian
+  channel silently smoothed its top edge. The default is the study's primary
+  (new **`primaryOutput(op)`**: `Middle` for a band, else the unnamed line
+  declared as `Value`, else the first declared), picked by the new
+  **`studyInputOf(source)`**, and the label names it:
+  `Price · DONCHIAN(20) · Middle · SMA(10)`.
+- **A MACD (or any multi-output study) can carry a study again.**
+  `canAddStudy` refused one because the bare nested spec read nothing useful;
+  with a pick there is a column to read, so the refusal is gone.
+- **The spec readers understand picks.** `inputNames` names a pick by its
+  source's column (the parent config being walked), `substituteInput` re-points
+  a pick at a retuned source and keeps its output, `specUnit` reads the picked
+  output's own unit, and `usesCompare` / `hasPairOp` see through one.
+  `readPart` steps through a pick (new `PartStudy.output`, printed by
+  `partStudyLabel` as `BOLLINGER(20, 2) · Middle`), and `isValidSpec` refuses
+  a pick of an output the op does not declare. New **`isPickedInput`** narrows
+  an input.
+- **A band as a pair leg reads its primary too.** `boundLeg` nested a band
+  bare, so `Donchian − Price` was the top edge minus the price. It now picks
+  the band's `Middle`, and an unjoined pair over a band groups the band.
+- **An axis-sharing study joins its source's OWN axis.** An SMA of a study on
+  its own scale (an RSI, a MACD) had no axis group, so it drew on the row's
+  shared axis: a line near zero on the price's scale. It now takes its
+  source's `axisGroup`.
+
+Saved layouts are untouched: a study saved as a bare nested multi-output spec
+keeps computing what it computed.
+
 ## 0.2.2 — 2026-09-29
 
 One change, asked for by the first consumer: the user, not the library,

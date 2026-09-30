@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TimeSeries } from 'pond-ts';
+import { TimeSeries, type SeriesSchema } from 'pond-ts';
 import {
   applyDerived,
   applyDerivedReport,
@@ -12,10 +12,17 @@ import {
   hasPairOp,
   readPairParts,
   readPart,
+  partStudyLabel,
   specUnit,
   usesCompare,
+  isPickedInput,
+  primaryOutput,
+  readNumericColumn,
+  studyInputOf,
   type DeriveSpec,
 } from './derive.js';
+
+const SMA_X: DeriveSpec = { op: 'sma', inputs: ['x'], params: { period: 3 } };
 
 const SCHEMA = [
   { name: 'time', kind: 'time' },
@@ -554,5 +561,181 @@ describe('hasPairOp — "this series states its own symbols"', () => {
     for (const g of [null, 'iv21', 42, { op: 'diff' }, { op: 'sma', inputs: [null] }])
       expect(() => hasPairOp(g as never)).not.toThrow();
     expect(hasPairOp({ op: 'sma', inputs: [null] } as never)).toBe(false);
+  });
+});
+
+describe('picked outputs — which output a study of a study reads (TDL-STUDYCHAIN)', () => {
+  const BAR_SCHEMA = [
+    { name: 'time', kind: 'time' },
+    { name: 'high', kind: 'number' },
+    { name: 'low', kind: 'number' },
+    { name: 'close', kind: 'number' },
+  ] as const;
+  // A drifting bar series whose high/low spread is wide enough that a
+  // Donchian's Upper, Middle and Lower are far apart.
+  const n = 40;
+  const close = Array.from({ length: n }, (_, i) => 10 + Math.sin(i / 3) * 3 + i * 0.1);
+  const bars = TimeSeries.fromColumns({
+    name: 'bars',
+    schema: BAR_SCHEMA,
+    columns: {
+      time: close.map((_, i) => i * 86_400_000),
+      high: close.map((c) => c + 2),
+      low: close.map((c) => c - 2),
+      close,
+    },
+    sort: true,
+  }) as unknown as TimeSeries<SeriesSchema>;
+  const DONCHIAN: DeriveSpec = { op: 'donchian', inputs: ['high', 'low'], params: { period: 10 } };
+  const read = (s: TimeSeries<SeriesSchema>, col: string) => {
+    const c = readNumericColumn(s, col)!;
+    expect(c).toBeDefined();
+    return c;
+  };
+  const meanOf = (s: TimeSeries<SeriesSchema>, col: string, end: number, k: number) => {
+    const c = read(s, col);
+    let sum = 0;
+    for (let i = end - k + 1; i <= end; i++) sum += c.read(i)!;
+    return sum / k;
+  };
+
+  it('primaryOutput: Middle for a band, the unnamed line, else the first declared', () => {
+    expect(primaryOutput('sma')).toBeUndefined(); // single output: nothing to pick
+    expect(primaryOutput('bollinger')).toBe('Middle');
+    expect(primaryOutput('donchian')).toBe('Middle'); // NOT Upper, which it declares first
+    expect(primaryOutput('trix')).toBe('Value'); // not its Signal
+    expect(primaryOutput('macd')).toBe('Line');
+    expect(primaryOutput('stochastic')).toBe('K');
+    expect(primaryOutput('atrBands')).toBe('Upper'); // no primary: the first, named
+  });
+
+  it('studyInputOf picks the primary of a multi-output spec and leaves others bare', () => {
+    expect(studyInputOf('iv21')).toBe('iv21');
+    expect(studyInputOf(SMA_X)).toBe(SMA_X);
+    expect(studyInputOf(DONCHIAN)).toEqual({ from: DONCHIAN, output: 'Middle' });
+  });
+
+  it('an SMA of a PICKED Donchian Middle smooths the middle, where a bare one reads Upper', () => {
+    const picked: DeriveSpec = {
+      op: 'sma',
+      inputs: [{ from: DONCHIAN, output: 'Middle' }],
+      params: { period: 5 },
+    };
+    const bare: DeriveSpec = { op: 'sma', inputs: [DONCHIAN], params: { period: 5 } };
+    const { series: out, skipped } = applyDerivedReport(bars, [DONCHIAN, picked, bare]);
+    expect(skipped).toEqual([]);
+    const d = deriveId(DONCHIAN);
+    const last = n - 1;
+    // The picked study IS a 5-bar mean of Middle…
+    expect(read(out, deriveId(picked)).read(last)).toBeCloseTo(
+      meanOf(out, `${d}Middle`, last, 5),
+      10,
+    );
+    // …and the bare one is the bug the pick fixes: a mean of the TOP edge.
+    expect(read(out, deriveId(bare)).read(last)).toBeCloseTo(meanOf(out, `${d}Upper`, last, 5), 10);
+    expect(deriveId(picked)).not.toBe(deriveId(bare));
+  });
+
+  it('a pick is part of the identity: two outputs are two columns', () => {
+    const lower: DeriveSpec = { op: 'sma', inputs: [{ from: DONCHIAN, output: 'Lower' }] };
+    const middle: DeriveSpec = { op: 'sma', inputs: [{ from: DONCHIAN, output: 'Middle' }] };
+    expect(deriveId(lower)).not.toBe(deriveId(middle));
+    expect(deriveId(lower)).toContain('#Lower');
+  });
+
+  it("inputNames names a pick by its SOURCE's column (the parent config's)", () => {
+    const s: DeriveSpec = { op: 'sma', inputs: [{ from: DONCHIAN, output: 'Lower' }] };
+    expect(inputNames(s)).toEqual([deriveId(DONCHIAN)]);
+  });
+
+  it('substituteInput re-points a pick at the retuned source and KEEPS its output', () => {
+    const s: DeriveSpec = { op: 'sma', inputs: [{ from: DONCHIAN, output: 'Lower' }] };
+    const retuned: DeriveSpec = { ...DONCHIAN, params: { period: 30 } };
+    const out = substituteInput(s, deriveId(DONCHIAN), retuned);
+    expect(out.inputs[0]).toEqual({ from: retuned, output: 'Lower' });
+    // Nested deeper: the pick's own source is rewritten through it.
+    const deep: DeriveSpec = {
+      op: 'sma',
+      inputs: [{ from: { op: 'bollinger', inputs: [SMA_X] }, output: 'Upper' }],
+    };
+    const SMA_X9: DeriveSpec = { ...SMA_X, params: { period: 9 } };
+    const deepOut = substituteInput(deep, deriveId(SMA_X), SMA_X9);
+    expect(deepOut.inputs[0]).toEqual({
+      from: { op: 'bollinger', inputs: [SMA_X9] },
+      output: 'Upper',
+    });
+    // Untouched ⇒ the same object (the cheap "did this change" test).
+    expect(substituteInput(s, 'nothing', retuned)).toBe(s);
+  });
+
+  it("specUnit reads the PICKED output's unit, not output 0's", () => {
+    // `trix` is `%` throughout, so an SMA of its Signal reads in `%` — through
+    // the pick, not by assuming output 0.
+    const s: DeriveSpec = {
+      op: 'sma',
+      inputs: [{ from: { op: 'trix', inputs: ['x'] }, output: 'Signal' }],
+    };
+    expect(specUnit(s, () => '$')).toBe('%');
+    // An `inherit` output reads through to the source column's unit.
+    const m: DeriveSpec = {
+      op: 'sma',
+      inputs: [{ from: { op: 'macd', inputs: ['x'] }, output: 'Hist' }],
+    };
+    expect(specUnit(m, () => '$')).toBe('$');
+  });
+
+  it('usesCompare / hasPairOp see through a pick', () => {
+    const cmp: DeriveSpec = {
+      op: 'sma',
+      inputs: [{ from: { op: 'bollinger', inputs: ['cmp_iv21'] }, output: 'Middle' }],
+    };
+    expect(usesCompare(cmp)).toBe(true);
+    const pair: DeriveSpec = {
+      op: 'sma',
+      inputs: [
+        {
+          from: { op: 'bollinger', inputs: [{ op: 'ratio', inputs: ['a', 'b'] }] },
+          output: 'Lower',
+        },
+      ],
+    };
+    expect(hasPairOp(pair)).toBe(true);
+  });
+
+  it('readPart steps through a pick, naming the output the chain reads on', () => {
+    const band: DeriveSpec = { op: 'bollinger', inputs: ['close'], params: { period: 20 } };
+    const leg: DeriveSpec = {
+      op: 'sma',
+      inputs: [{ from: band, output: 'Middle' }],
+      params: { period: 5 },
+    };
+    const part = readPart(leg)!;
+    expect(part.metric).toBe('close');
+    expect(part.studies.map((st) => [st.op, st.output])).toEqual([
+      ['bollinger', 'Middle'],
+      ['sma', undefined],
+    ]);
+    expect(part.studies.map(partStudyLabel)).toEqual(['BOLLINGER(20, 2) · Middle', 'SMA(5)']);
+    // A bare pick as a leg (a band read at its Middle) decomposes too.
+    expect(readPart({ from: band, output: 'Middle' })!.studies).toHaveLength(1);
+  });
+
+  it('isValidSpec refuses a pick of an output the op does not declare', () => {
+    expect(isValidSpec({ op: 'sma', inputs: [{ from: DONCHIAN, output: 'Middle' }] })).toBe(true);
+    expect(isValidSpec({ op: 'sma', inputs: [{ from: DONCHIAN, output: 'Nope' }] })).toBe(false);
+    // …at any depth.
+    const deep: DeriveSpec = {
+      op: 'ema',
+      inputs: [{ op: 'sma', inputs: [{ from: DONCHIAN, output: 'Nope' }] }],
+    };
+    expect(isValidSpec(deep)).toBe(false);
+  });
+
+  it('isPickedInput is total over persisted garbage', () => {
+    expect(isPickedInput(null)).toBe(false);
+    expect(isPickedInput('x')).toBe(false);
+    expect(isPickedInput({ from: null, output: 'Lower' })).toBe(false);
+    expect(isPickedInput({ from: DONCHIAN })).toBe(false);
+    expect(isPickedInput({ from: DONCHIAN, output: 'Lower' })).toBe(true);
   });
 });

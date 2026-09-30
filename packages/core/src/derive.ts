@@ -4,6 +4,7 @@ import {
   BAND_OUTPUTS,
   catalogOp,
   OWN_AXIS_STUDIES,
+  PRIMARY_SUFFIX,
   studyNeedsColumns,
 } from './studyCatalog.js';
 import { bollinger, ema, sma } from '@pond-ts/financial';
@@ -80,10 +81,34 @@ export type PairOp = 'diff' | 'ratio' | 'logRatio';
 export const isPairOp = (op: DeriveOp): op is PairOp =>
   op === 'diff' || op === 'ratio' || op === 'logRatio';
 
-/** An input of a spec: a raw source column name, or a **nested spec** (the
+/** ONE output of a multi-output spec, named by its declared suffix —
+ *  `@pond-ts/process`'s `PickedOutput`, narrowed to Tidal's spec. The engine
+ *  names it `${id}#${output}` and folds exactly that column, where a bare
+ *  nested multi-output spec reads its FIRST-declared output: `Middle` for
+ *  `bollinger`, but `Upper` for `donchian`, with nothing on screen saying so
+ *  (TDL-STUDYCHAIN, measured 2026-09-26). */
+export interface PickedDeriveOutput {
+  readonly from: DeriveSpec;
+  /** The output's declared suffix (`'Middle'`, `'Hist'`) — see {@link opOutputs}. */
+  readonly output: string;
+}
+
+/** An input of a spec: a raw source column name, a **nested spec** (the
  *  engine's own recursion — an id string naming another spec is NOT an input;
- *  the engine reads a string input as a raw column, so composition nests). */
-export type DeriveInput = string | DeriveSpec;
+ *  the engine reads a string input as a raw column, so composition nests), or
+ *  one picked output of a nested multi-output spec. */
+export type DeriveInput = string | DeriveSpec | PickedDeriveOutput;
+
+/** True if an input picks one output of a nested spec. Total over persisted
+ *  state, like {@link isSpecLike}. */
+export function isPickedInput(i: unknown): i is PickedDeriveOutput {
+  return (
+    typeof i === 'object' &&
+    i !== null &&
+    typeof (i as PickedDeriveOutput).output === 'string' &&
+    isSpecLike((i as PickedDeriveOutput).from)
+  );
+}
 
 /** A derive spec — structurally a `@pond-ts/process` plan `Spec`, narrowed to
  *  Tidal's op vocabulary. Content-addressed by the engine: params are
@@ -415,7 +440,16 @@ export function deriveLineage(spec: DeriveSpec): string {
 export function inputNames(spec: DeriveSpec): string[] {
   // `?? []`: persisted state is untyped at this boundary — an old-shape spec
   // (pre-`inputs`) must degrade to "no edges", never a TypeError mid-render.
-  return (spec.inputs ?? []).map((i) => (typeof i === 'string' ? i : deriveId(i)));
+  return (spec.inputs ?? []).map(inputName);
+}
+
+/** The column one input names for the dependency walks. A PICKED output names
+ *  its source's column — a multi-output config's `column` is its spec id (the
+ *  prefix its outputs hang off), and that config is the parent being walked,
+ *  whichever of its outputs is read. */
+function inputName(i: DeriveInput): string {
+  if (typeof i === 'string') return i;
+  return deriveId(isPickedInput(i) ? i.from : i);
 }
 
 /**
@@ -433,11 +467,24 @@ export function inputNames(spec: DeriveSpec): string[] {
  */
 export function substituteInput(spec: DeriveSpec, from: string, to: DeriveInput): DeriveSpec {
   let changed = false;
-  const inputs = (spec.inputs ?? []).map((i) => {
+  const inputs = (spec.inputs ?? []).map((i): DeriveInput => {
     if (typeof i === 'string') {
       if (i !== from) return i;
       changed = true;
       return to;
+    }
+    // A pick follows its source and KEEPS its output: retuning a band re-points
+    // a study of its `Lower` at the new band's `Lower`. Only a spec can be
+    // picked from, so a replacement that isn't one takes the input whole.
+    if (isPickedInput(i)) {
+      if (deriveId(i.from) === from) {
+        changed = true;
+        return typeof to === 'string' || isPickedInput(to) ? to : { from: to, output: i.output };
+      }
+      const sub = substituteInput(i.from, from, to);
+      if (sub === i.from) return i;
+      changed = true;
+      return { from: sub, output: i.output };
     }
     if (deriveId(i) === from) {
       changed = true;
@@ -460,10 +507,22 @@ export function substituteInput(spec: DeriveSpec, from: string, to: DeriveInput)
  */
 export function isValidSpec(spec: DeriveSpec): boolean {
   try {
-    return !isBrokenId(deriveId(spec));
+    return !isBrokenId(deriveId(spec)) && picksDeclared(spec);
   } catch {
     return false;
   }
+}
+
+/** True if every pick, at any depth, names an output its op DECLARES. The
+ *  engine only finds out at run time (a generic error, not a plan-layer code),
+ *  so a persisted pick of `Nope` would otherwise pass as valid and then skip
+ *  with nothing for a chip to classify it by. */
+function picksDeclared(spec: DeriveSpec): boolean {
+  return (spec.inputs ?? []).every((i) => {
+    if (typeof i === 'string') return true;
+    if (isPickedInput(i)) return opOutputs(i.from.op).includes(i.output) && picksDeclared(i.from);
+    return picksDeclared(i);
+  });
 }
 
 /**
@@ -495,7 +554,9 @@ export function hasPairOp(spec: DeriveSpec): boolean {
   if (!isSpecLike(spec)) return false;
   return (
     isPairOp(spec.op) ||
-    (spec.inputs ?? []).some((i) => typeof i !== 'string' && hasPairOp(i as DeriveSpec))
+    (spec.inputs ?? []).some(
+      (i) => typeof i !== 'string' && hasPairOp(isPickedInput(i) ? i.from : (i as DeriveSpec)),
+    )
   );
 }
 
@@ -504,7 +565,9 @@ export function hasPairOp(spec: DeriveSpec): boolean {
 export function usesCompare(spec: DeriveSpec): boolean {
   if (!isSpecLike(spec)) return false;
   return (spec.inputs ?? []).some((i) =>
-    typeof i === 'string' ? i.startsWith(COMPARE_PREFIX) : usesCompare(i as DeriveSpec),
+    typeof i === 'string'
+      ? i.startsWith(COMPARE_PREFIX)
+      : usesCompare(isPickedInput(i) ? i.from : (i as DeriveSpec)),
   );
 }
 
@@ -518,6 +581,10 @@ export function usesCompare(spec: DeriveSpec): boolean {
 export interface PartStudy {
   op: DeriveOp;
   params?: Readonly<Record<string, number>>;
+  /** The ONE output of this study the next step reads, when it has several
+   *  (a picked input — `sma` of a band's `Middle`). Absent for a single-output
+   *  study, whose only column is read. */
+  output?: string;
 }
 
 /**
@@ -545,6 +612,8 @@ export interface PairPart {
 function unCompare(input: DeriveInput): DeriveInput {
   if (typeof input === 'string')
     return input.startsWith(COMPARE_PREFIX) ? input.slice(COMPARE_PREFIX.length) : input;
+  if (isPickedInput(input))
+    return { from: unCompare(input.from) as DeriveSpec, output: input.output };
   if (!isSpecLike(input)) return input; // pathological persisted node — leave it
   return { ...input, inputs: (input.inputs ?? []).map(unCompare) };
 }
@@ -564,10 +633,23 @@ function unCompare(input: DeriveInput): DeriveInput {
 export function readPart(input: DeriveInput): PairPart | null {
   const studies: PartStudy[] = [];
   let cur = input;
-  while (isSpecLike(cur) && opHasPeriod(cur.op)) {
-    const inputs = cur.inputs ?? [];
+  for (;;) {
+    // A PICK is one output of a study: step through it as that study, noting
+    // which output the chain reads on from it (`BOLLINGER(20, 2) · Middle`).
+    const picked = isPickedInput(cur) ? cur : undefined;
+    const node = picked ? picked.from : cur;
+    if (!isSpecLike(node) || !opHasPeriod(node.op)) {
+      // A pick of an unwindowed op has no name as a part: refuse, as below.
+      if (picked) return null;
+      break;
+    }
+    const inputs = node.inputs ?? [];
     if (inputs.length !== 1) return null; // windowed but multi-input: not a chain
-    studies.unshift({ op: cur.op, params: cur.params });
+    studies.unshift({
+      op: node.op,
+      params: node.params,
+      ...(picked ? { output: picked.output } : {}),
+    });
     cur = inputs[0]!;
   }
   // Anything that isn't a plain column or a single-input metric node has no
@@ -580,7 +662,7 @@ export function readPart(input: DeriveInput): PairPart | null {
   const compare = typeof cur === 'string' ? cur !== bare : usesCompare(cur);
   return {
     metric: cur,
-    base: typeof bare === 'string' ? bare : deriveId(bare),
+    base: typeof bare === 'string' ? bare : deriveId(bare as DeriveSpec),
     entity: compare ? 'compare' : 'primary',
     studies,
   };
@@ -598,8 +680,9 @@ export const partStudyLabel = (st: PartStudy): string =>
   // `studyTag`, which reads the op's DECLARED params in order and defaults each
   // — so a band leg reads `BOLLINGER(20, 2)`. Hand-built off `params.period` it
   // read `BOLLINGER(20)`, and two bands differing only in `stdDev` produced
-  // identical leg rows (PR #181 review, HIGH).
-  studyTag({ op: st.op, inputs: [], params: st.params });
+  // identical leg rows (PR #181 review, HIGH). A picked output follows it, the
+  // same way a study's label names it.
+  studyTag({ op: st.op, inputs: [], params: st.params }) + (st.output ? ` · ${st.output}` : '');
 
 /** A pair spec's two legs as parts, or **null** if this isn't a pair op or
  *  either leg doesn't decompose. Pairs are strictly binary, so anything else
@@ -625,13 +708,24 @@ export function readPairParts(spec: DeriveSpec): readonly [PairPart, PairPart] |
  * this collapses to reading the graph's answer.
  */
 export function specUnit(spec: DeriveSpec, unitOf: (column: string) => string): string {
+  return outputUnit(spec, 0, unitOf);
+}
+
+/** {@link specUnit} for one declared output, by index — a PICKED input reads
+ *  in its own output's unit, which need not be output 0's. */
+function outputUnit(spec: DeriveSpec, index: number, unitOf: (column: string) => string): string {
   if (!isSpecLike(spec)) return ''; // total over persisted garbage — see isSpecLike
-  const declared = TIDAL_OPS.describe().find((d) => d.name === spec.op)?.outputs?.[0]?.unit;
+  const declared = TIDAL_OPS.describe().find((d) => d.name === spec.op)?.outputs?.[index]?.unit;
   if (declared == null) return '';
   if (declared !== 'inherit') return declared;
-  const units = (spec.inputs ?? []).map((i) =>
-    typeof i === 'string' ? unitOf(i) : specUnit(i, unitOf),
-  );
+  const units = (spec.inputs ?? []).map((i) => {
+    if (typeof i === 'string') return unitOf(i);
+    if (isPickedInput(i)) {
+      const at = opOutputs(i.from.op).indexOf(i.output);
+      return at < 0 ? '' : outputUnit(i.from, at, unitOf);
+    }
+    return specUnit(i, unitOf);
+  });
   const first = units[0];
   return first != null && units.every((u) => u === first) ? first : '';
 }
@@ -903,6 +997,37 @@ export function opIsBand(op: DeriveOp): boolean {
  *  lines off one spec (`style: 'lines'`), one per declared output. */
 export function opIsMulti(op: DeriveOp): boolean {
   return opOutputs(op).length > 1 && !opIsBand(op);
+}
+
+/**
+ * The output a study OF this op reads unless told otherwise — its PRIMARY, or
+ * `undefined` for a single-output op (whose column is the input as it stands).
+ *
+ * `Middle` for a band; else the output the catalog left unnamed (declared as
+ * {@link PRIMARY_SUFFIX} — `trix`'s line, not its `Signal`); else the first
+ * declared (`macd`'s `Line`, `stochastic`'s `K`). Some studies have no primary
+ * at all (`vortex`'s Plus/Minus, `elderRay`'s Bull/Bear, `atrBands`'
+ * Upper/Lower): they take the first, and the study's label names the output
+ * either way, so the choice is never silent. The rule is ours, not the
+ * catalog's — a declared primary is asked for as F-charts-29 (2).
+ */
+export function primaryOutput(op: DeriveOp): string | undefined {
+  const outs = opOutputs(op);
+  if (outs.length < 2) return undefined;
+  if (outs.includes('Middle')) return 'Middle';
+  if (outs.includes(PRIMARY_SUFFIX)) return PRIMARY_SUFFIX;
+  return outs[0];
+}
+
+/**
+ * What a study of `source` reads: the source itself, or — for a multi-output
+ * source — its {@link primaryOutput}, PICKED. Never a bare nested multi-output
+ * spec, whose reading is whichever output happens to be declared first.
+ */
+export function studyInputOf(source: string | DeriveSpec): DeriveInput {
+  if (typeof source === 'string') return source;
+  const output = primaryOutput(source.op);
+  return output === undefined ? source : { from: source, output };
 }
 
 /** `sma` → `SMA`; `realizedVol` → `Realized vol`. Acronym-ish short names go
