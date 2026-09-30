@@ -2,7 +2,7 @@
 
 All packages release together on one version.
 
-## Unreleased
+## 0.3.0 — 2026-09-30
 
 A study of a multi-output study now says which output it reads.
 
