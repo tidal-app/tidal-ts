@@ -23,8 +23,14 @@ A study of a multi-output study now says which output it reads.
 - **The spec readers understand picks.** `inputNames` names a pick by its
   source's column (the parent config being walked), `substituteInput` re-points
   a pick at a retuned source and keeps its output, `specUnit` reads the picked
-  output's own unit, and `usesCompare` / `hasPairOp` see through one. New
-  **`isPickedInput`** narrows an input. A pair leg is still never a pick.
+  output's own unit, and `usesCompare` / `hasPairOp` see through one.
+  `readPart` steps through a pick (new `PartStudy.output`, printed by
+  `partStudyLabel` as `BOLLINGER(20, 2) · Middle`), and `isValidSpec` refuses
+  a pick of an output the op does not declare. New **`isPickedInput`** narrows
+  an input.
+- **A band as a pair leg reads its primary too.** `boundLeg` nested a band
+  bare, so `Donchian − Price` was the top edge minus the price. It now picks
+  the band's `Middle`, and an unjoined pair over a band groups the band.
 - **An axis-sharing study joins its source's OWN axis.** An SMA of a study on
   its own scale (an RSI, a MACD) had no axis group, so it drew on the row's
   shared axis: a line near zero on the price's scale. It now takes its

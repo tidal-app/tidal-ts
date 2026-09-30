@@ -947,7 +947,10 @@ const unitOfColumn = (scope: EditScope) => columnUnits(scope.catalog, flatConfig
  *  metric, then the compare rebind rewrites the LEAVES — so a compare-bound
  *  studied leg computes the study over the compare columns. */
 const boundLeg = (leg: PairLeg, input: PairLegInput): { graph: DeriveInput; label: string } => {
-  let graph: DeriveInput = leg.spec ?? leg.column;
+  // A multi-output leg (a band) reads its PRIMARY output, picked, exactly as a
+  // study of it does — nested bare it read whichever output was declared first,
+  // so `Donchian − Price` was silently the TOP edge minus the price.
+  let graph: DeriveInput = studyInputOf(leg.spec ?? leg.column);
   let label = leg.label;
   if (input.study) {
     graph = { op: input.study.op, params: { period: input.study.period }, inputs: [graph] };
@@ -1207,9 +1210,13 @@ export function respecAllowed(scope: EditScope, id: string, name: string, value:
 // Splitting and re-joining are one edit read in two directions.
 
 /** A leg's graph input as a seated config would carry it: a raw column has no
- *  spec, a derived leg carries its own. */
-const legParts = (leg: string | DeriveSpec): Pick<SeriesConfig, 'column' | 'derive'> =>
-  typeof leg === 'string' ? { column: leg } : { column: deriveId(leg), derive: leg };
+ *  spec, a derived leg carries its own, and a PICKED leg is its source study —
+ *  the config that publishes the output (a band leg splits out as the band). */
+const legParts = (leg: DeriveInput): Pick<SeriesConfig, 'column' | 'derive'> => {
+  if (typeof leg === 'string') return { column: leg };
+  const spec = isPickedInput(leg) ? leg.from : leg;
+  return { column: deriveId(spec), derive: spec };
+};
 
 /** The colour leg B takes when a pair splits — the first palette key neither
  *  leg A nor anything else in the row is already using, so two fresh lines are
@@ -1258,17 +1265,12 @@ function planSplit(
   const parts = readPairParts(spec);
   const inputs = spec.inputs ?? [];
   if (!parts || inputs.length !== 2) return null;
-  // A leg that PICKS one output of a study is not a seatable series of its own
-  // (no config publishes `band#Lower` alone), so there is nothing to split into.
-  // `readPairParts` already refuses such a leg; this narrows the type.
-  if (inputs.some(isPickedInput)) return null;
-  const legs = inputs as readonly (string | DeriveSpec)[];
   // A study built ON the spread has nowhere to point once the spread stops
   // being a single line, so splitting would strand it — configured, computing a
   // column nothing folds. Refuse rather than delete the user's work silently
   // (PR #144 review, MEDIUM).
   if (derivedClosure(flatConfigs(scope.rows), pair.id).size > 1) return null;
-  const legCols = legs.map((i) => legParts(i).column);
+  const legCols = inputs.map((i) => legParts(i).column);
   // Two legs computing the same thing is a constant, not a pair — and would be
   // one config either way. (`canAddPair` refuses to build one; a persisted
   // preset could still carry it.)
@@ -1281,7 +1283,7 @@ function planSplit(
   let pairIdFree = true;
   let refuse = false;
 
-  legs.forEach((input, i) => {
+  inputs.forEach((input, i) => {
     const side: 'A' | 'B' = i === 0 ? 'A' : 'B';
     const { column, derive } = legParts(input);
     // Adoption looks only in the pair's OWN row: a group whose legs sit in two
@@ -1308,7 +1310,7 @@ function planSplit(
     // (Peter, 2026-09-28: "why can't I add this compare?").
     const id = pairIdFree ? ((pairIdFree = false), pair.id) : mintId(seq++);
     if (id !== pair.id) plan.mints += 1;
-    const unit = typeof input === 'string' ? unitOf(input) : specUnit(input, unitOf);
+    const unit = derive ? specUnit(derive, unitOf) : unitOf(column);
     // A spread arrives UNLINKED because it oscillates; its LEGS do not — they
     // are the raw metrics, and the whole point of drawing both is comparing
     // them, which needs ONE scale. So a created leg is placed like any new

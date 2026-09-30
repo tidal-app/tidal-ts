@@ -2268,6 +2268,53 @@ describe('a study of a multi-output study reads ONE named output (TDL-STUDYCHAIN
     expect(sma.derive!.inputs).toEqual([{ from: macd2.derive, output: 'Line' }]);
   });
 
+  it('a BAND as a pair leg reads its Middle — a Donchian spread is not its top edge', () => {
+    const { actor, ctx, idOf } = start();
+    actor.send({ type: 'series.addStudy', targetId: idOf('close'), op: 'donchian', period: 20 });
+    const band = all(ctx).find((c) => c.derive?.op === 'donchian')!;
+    actor.send({
+      type: 'series.addPair',
+      a: { metricId: band.id },
+      b: { metricId: 'price' },
+      op: 'diff',
+    });
+    const spread = all(ctx).find((c) => c.derive?.op === 'diff')!;
+    expect(spread).toBeDefined();
+    expect(spread.derive!.inputs[0]).toEqual({ from: band.derive, output: 'Middle' });
+  });
+
+  it('a study of a band still decomposes as a pair leg (unjoined legs group)', () => {
+    // PR #18 review, MEDIUM: the picked shape `sma(bollinger#Middle)` stopped
+    // decomposing in `readPart`, so an unjoined pair over it was refused.
+    const { actor, ctx, idOf } = start();
+    actor.send({ type: 'series.addStudy', targetId: idOf('close'), op: 'bollinger', period: 20 });
+    const band = all(ctx).find((c) => c.derive?.op === 'bollinger')!;
+    actor.send({ type: 'series.addStudy', targetId: band.id, op: 'sma', period: 5 });
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    actor.send({
+      type: 'series.addPair',
+      a: { metricId: sma.id },
+      b: { metricId: 'price' },
+      op: 'none',
+    });
+    expect(all(ctx).filter((c) => c.group)).toHaveLength(2);
+  });
+
+  it('an unjoined pair over a BAND groups the band itself', () => {
+    const { actor, ctx, idOf } = start();
+    actor.send({ type: 'series.addStudy', targetId: idOf('close'), op: 'bollinger', period: 20 });
+    const band = all(ctx).find((c) => c.derive?.op === 'bollinger')!;
+    actor.send({
+      type: 'series.addPair',
+      a: { metricId: band.id },
+      b: { metricId: 'price' },
+      op: 'none',
+    });
+    const grouped = all(ctx).filter((c) => c.group);
+    expect(grouped).toHaveLength(2);
+    expect(grouped.some((c) => c.id === band.id)).toBe(true);
+  });
+
   it('refuses a multi-output study as a pair LEG', () => {
     // Same prefix problem as a study target: the spread would read a column
     // that does not exist. `+Compare` was offered on a MACD and meant nothing.

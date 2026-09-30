@@ -507,10 +507,22 @@ export function substituteInput(spec: DeriveSpec, from: string, to: DeriveInput)
  */
 export function isValidSpec(spec: DeriveSpec): boolean {
   try {
-    return !isBrokenId(deriveId(spec));
+    return !isBrokenId(deriveId(spec)) && picksDeclared(spec);
   } catch {
     return false;
   }
+}
+
+/** True if every pick, at any depth, names an output its op DECLARES. The
+ *  engine only finds out at run time (a generic error, not a plan-layer code),
+ *  so a persisted pick of `Nope` would otherwise pass as valid and then skip
+ *  with nothing for a chip to classify it by. */
+function picksDeclared(spec: DeriveSpec): boolean {
+  return (spec.inputs ?? []).every((i) => {
+    if (typeof i === 'string') return true;
+    if (isPickedInput(i)) return opOutputs(i.from.op).includes(i.output) && picksDeclared(i.from);
+    return picksDeclared(i);
+  });
 }
 
 /**
@@ -569,6 +581,10 @@ export function usesCompare(spec: DeriveSpec): boolean {
 export interface PartStudy {
   op: DeriveOp;
   params?: Readonly<Record<string, number>>;
+  /** The ONE output of this study the next step reads, when it has several
+   *  (a picked input — `sma` of a band's `Middle`). Absent for a single-output
+   *  study, whose only column is read. */
+  output?: string;
 }
 
 /**
@@ -617,10 +633,23 @@ function unCompare(input: DeriveInput): DeriveInput {
 export function readPart(input: DeriveInput): PairPart | null {
   const studies: PartStudy[] = [];
   let cur = input;
-  while (isSpecLike(cur) && opHasPeriod(cur.op)) {
-    const inputs = cur.inputs ?? [];
+  for (;;) {
+    // A PICK is one output of a study: step through it as that study, noting
+    // which output the chain reads on from it (`BOLLINGER(20, 2) · Middle`).
+    const picked = isPickedInput(cur) ? cur : undefined;
+    const node = picked ? picked.from : cur;
+    if (!isSpecLike(node) || !opHasPeriod(node.op)) {
+      // A pick of an unwindowed op has no name as a part: refuse, as below.
+      if (picked) return null;
+      break;
+    }
+    const inputs = node.inputs ?? [];
     if (inputs.length !== 1) return null; // windowed but multi-input: not a chain
-    studies.unshift({ op: cur.op, params: cur.params });
+    studies.unshift({
+      op: node.op,
+      params: node.params,
+      ...(picked ? { output: picked.output } : {}),
+    });
     cur = inputs[0]!;
   }
   // Anything that isn't a plain column or a single-input metric node has no
@@ -651,8 +680,9 @@ export const partStudyLabel = (st: PartStudy): string =>
   // `studyTag`, which reads the op's DECLARED params in order and defaults each
   // — so a band leg reads `BOLLINGER(20, 2)`. Hand-built off `params.period` it
   // read `BOLLINGER(20)`, and two bands differing only in `stdDev` produced
-  // identical leg rows (PR #181 review, HIGH).
-  studyTag({ op: st.op, inputs: [], params: st.params });
+  // identical leg rows (PR #181 review, HIGH). A picked output follows it, the
+  // same way a study's label names it.
+  studyTag({ op: st.op, inputs: [], params: st.params }) + (st.output ? ` · ${st.output}` : '');
 
 /** A pair spec's two legs as parts, or **null** if this isn't a pair op or
  *  either leg doesn't decompose. Pairs are strictly binary, so anything else

@@ -12,6 +12,7 @@ import {
   hasPairOp,
   readPairParts,
   readPart,
+  partStudyLabel,
   specUnit,
   usesCompare,
   isPickedInput,
@@ -699,6 +700,35 @@ describe('picked outputs — which output a study of a study reads (TDL-STUDYCHA
       ],
     };
     expect(hasPairOp(pair)).toBe(true);
+  });
+
+  it('readPart steps through a pick, naming the output the chain reads on', () => {
+    const band: DeriveSpec = { op: 'bollinger', inputs: ['close'], params: { period: 20 } };
+    const leg: DeriveSpec = {
+      op: 'sma',
+      inputs: [{ from: band, output: 'Middle' }],
+      params: { period: 5 },
+    };
+    const part = readPart(leg)!;
+    expect(part.metric).toBe('close');
+    expect(part.studies.map((st) => [st.op, st.output])).toEqual([
+      ['bollinger', 'Middle'],
+      ['sma', undefined],
+    ]);
+    expect(part.studies.map(partStudyLabel)).toEqual(['BOLLINGER(20, 2) · Middle', 'SMA(5)']);
+    // A bare pick as a leg (a band read at its Middle) decomposes too.
+    expect(readPart({ from: band, output: 'Middle' })!.studies).toHaveLength(1);
+  });
+
+  it('isValidSpec refuses a pick of an output the op does not declare', () => {
+    expect(isValidSpec({ op: 'sma', inputs: [{ from: DONCHIAN, output: 'Middle' }] })).toBe(true);
+    expect(isValidSpec({ op: 'sma', inputs: [{ from: DONCHIAN, output: 'Nope' }] })).toBe(false);
+    // …at any depth.
+    const deep: DeriveSpec = {
+      op: 'ema',
+      inputs: [{ op: 'sma', inputs: [{ from: DONCHIAN, output: 'Nope' }] }],
+    };
+    expect(isValidSpec(deep)).toBe(false);
   });
 
   it('isPickedInput is total over persisted garbage', () => {
