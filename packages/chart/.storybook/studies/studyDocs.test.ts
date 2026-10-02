@@ -77,4 +77,13 @@ describe('the study catalog docs', () => {
     }
     expect(seen.sort()).toEqual([...ops].sort());
   });
+
+  it('sorts the sidebar in the same family order as the overview', () => {
+    // `preview.tsx` lists the section names by hand (Storybook reads the sort
+    // as a literal), so this is what keeps the two lists in step.
+    const preview = readFileSync(join(__dirname, '../preview.tsx'), 'utf8');
+    const listed = [...preview.matchAll(/^\s+'([^']+)',$/gm)].map((m) => m[1]!);
+    const sections = FAMILIES.map((f) => f.title.replace('Studies/', ''));
+    expect(listed.filter((name) => sections.includes(name))).toEqual(sections);
+  });
 });

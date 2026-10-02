@@ -22,6 +22,7 @@ import {
 } from '@tidal-ts/core';
 import { demoDark, demoLight } from '../demoTheme.js';
 import {
+  configColumns,
   prepareChart,
   TimeSeriesChart,
   type ChartSeries,
@@ -92,9 +93,10 @@ export function studySpec(op: string, params: Record<string, number>, input: str
 const defaults = (op: string): Record<string, number> =>
   Object.fromEntries(opParams(op).map((p) => [p.name, p.default]));
 
-/** A numeric field's legal value: bounded by the registry, whole for an
- *  integer param. Out-of-range values never reach the spec — the registry
- *  rejects them, and a rejected spec draws nothing. */
+/** A numeric field's legal value: bounded by the registry where it declares a
+ *  bound, whole for an integer param. A param with no declared bound is not
+ *  clamped — a value the study cannot use shows up as the "no values" notice
+ *  instead (see `empty` below). */
 const clampParam = (p: OpParam, v: number): number => {
   let x = p.kind === 'integer' ? Math.round(v) : v;
   if (p.min !== undefined) x = Math.max(p.min, x);
@@ -288,7 +290,14 @@ export function StudyPage({ op, scheme = 'dark' }: StudyPageProps) {
       { price: { series: data.price }, vol: { series: data.vol } },
       rows,
     );
+    // A spec can pass validation and still compute nothing: a param with no
+    // declared bound (a slow period below the fast one, a zero limit) is not
+    // refused by the registry, the study just yields no values. Say so rather
+    // than leave a blank panel.
+    const carried = prepared.facts.columns[source];
+    const empty = !configColumns(study).some((c) => carried?.has(c));
     return {
+      empty,
       sources: prepared.sources,
       rows: prepared.rows.map((r) => ({
         ...r,
@@ -329,6 +338,12 @@ export function StudyPage({ op, scheme = 'dark' }: StudyPageProps) {
           )}
           {levels.length > 0 ? <span style={S.tag}>Guide lines at {levels.join(', ')}</span> : null}
         </div>
+        {chart?.empty ? (
+          <div style={{ padding: '4px 0 8px', color: 'var(--pane-ink-strong)', fontSize: 13 }}>
+            These settings produce no values — for example a slow period shorter than the fast one,
+            or a zero or negative setting. Try values closer to the defaults.
+          </div>
+        ) : null}
         <div style={S.well}>
           {chart ? (
             <TimeSeriesChart

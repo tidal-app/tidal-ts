@@ -74,7 +74,7 @@ export const MOMENTUM: Readonly<Record<string, StudyDoc>> = {
   },
   williamsR: {
     name: 'Williams %R',
-    what: 'How far the close is below the highest high of the window, as a percentage of the range, from 0 (closed at the high) to −100 (closed at the low). It is the stochastic turned upside down.',
+    what: 'How far the close is below the highest high of the window, as a percentage of the range, from 0 (closed at the high) to −100 (closed at the low). It is the fast stochastic shifted down by 100, so the same shape on a −100 to 0 scale.',
     uses: [
       'Overbought above −20, oversold below −80.',
       'A move out of the extreme zone (for example back below −20) is often used as the actual signal.',

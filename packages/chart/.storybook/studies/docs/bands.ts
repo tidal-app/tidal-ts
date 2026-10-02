@@ -47,7 +47,7 @@ export const BANDS: Readonly<Record<string, StudyDoc>> = {
   },
   donchian: {
     name: 'Donchian Channel',
-    what: 'The highest high and the lowest low of the last N bars, plus the halfway line between them. The channel only moves when a new extreme is made, so it looks like a staircase.',
+    what: 'The highest high and the lowest low of the last N bars, plus the halfway line between them. The lines move in steps: when a new extreme is made, or when an old one drops out of the window.',
     uses: [
       'Breakout trading: buy a close above the upper line (a new N-bar high), sell below the lower line. This is the basis of the famous "Turtle" trend-following system (20-day and 55-day breakouts).',
       'Trailing stops: exit a long when price falls to a shorter channel’s lower line.',

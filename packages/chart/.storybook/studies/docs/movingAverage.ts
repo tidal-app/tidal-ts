@@ -56,7 +56,7 @@ export const MOVING_AVERAGE: Readonly<Record<string, StudyDoc>> = {
     name: 'Coppock Curve',
     what: 'Adds a 14-period and an 11-period percent rate of change together and smooths the sum with a 10-period weighted moving average. It was designed on monthly data to spot the bottoms of major stock-market declines.',
     uses: [
-      'The classic signal is a buy when the curve turns up from below zero, read on a monthly chart of a broad index.',
+      'The classic signal is a buy when the curve turns up from below zero, read on a monthly chart of a broad index. Some versions wait for it to cross back above zero instead.',
       'It was never intended as a sell signal; some traders use a downturn from above zero, but that is not the original rule.',
     ],
     params: {

@@ -39,7 +39,7 @@ export const TREND: Readonly<Record<string, StudyDoc>> = {
     params: {
       period: 'Bars in the moving average and in the standard deviation.',
       stdDev:
-        'How many standard deviations the bands sit from the middle. 2 is the convention; about 95% of closes fall inside if returns were normal.',
+        'How many standard deviations the bands sit from the middle. 2 is the convention, and keeps most closes inside the bands.',
     },
     outputs: {
       Middle: 'The simple moving average.',
@@ -61,7 +61,7 @@ export const TREND: Readonly<Record<string, StudyDoc>> = {
       MinusDi: '−DI: downward movement as a percent of true range.',
       Dx: 'DX: how one-sided the two DI lines are, 0 to 100. Noisy; ADX is its smoothed form.',
       Adx: 'ADX: smoothed DX, the trend-strength line most people mean by "ADX".',
-      Adxr: "ADXR: the average of today's ADX and the ADX one period ago. Wilder used it to rank markets by how trending they were.",
+      Adxr: "ADXR: the average of today's ADX and the ADX period − 1 bars earlier. Wilder used it to rank markets by how trending they were.",
     },
     note: 'All five lines share one panel. Most traders read just +DI, −DI and ADX together.',
   },
@@ -168,7 +168,7 @@ export const TREND: Readonly<Record<string, StudyDoc>> = {
   },
   trendIntensityIndex: {
     name: 'Trend Intensity Index (TII)',
-    what: 'Takes how far price has been from its long moving average over recent bars and reports what share of that distance was above the average, as 0 to 100. 50 means as much time and distance above as below.',
+    what: 'Takes how far price has been from its long moving average over recent bars and reports what share of that distance was above the average, as 0 to 100. 50 means price spent as much distance above the average as below it.',
     uses: [
       'Readings persistently above 80 point to a strong uptrend, below 20 a strong downtrend.',
       'Readings hovering around 50 mean there is no trend worth following.',
@@ -178,7 +178,7 @@ export const TREND: Readonly<Record<string, StudyDoc>> = {
       period: 'How many recent bars of deviation are summed. Pee used 30, half the average length.',
       maPeriod: 'Length of the simple moving average that price is measured against. Pee used 60.',
     },
-    note: 'Needs period + maPeriod bars before its first value, so the line starts later than most.',
+    note: 'Needs about period + maPeriod bars before its first value, so the line starts later than most.',
   },
   ravi: {
     name: 'Range Action Verification Index (RAVI)',
@@ -194,7 +194,7 @@ export const TREND: Readonly<Record<string, StudyDoc>> = {
   },
   swingIndex: {
     name: 'Swing Index',
-    what: "Wilder's attempt at the \"real\" price change of one bar. It blends today's close-to-close move with today's candle body and a quarter of yesterday's body, scaled by the bar's range and by how big the move was compared with the instrument's daily limit move. The result runs from −100 to +100.",
+    what: "Wilder's attempt at the \"real\" price change of one bar. It blends today's close-to-close move with today's candle body and a quarter of yesterday's body, scaled by the bar's range and by how big the move was compared with the instrument's daily limit move. The result stays within −100 to +100 as long as the limit is at least as big as the largest move; with a smaller limit it can go beyond.",
     uses: [
       'Mostly used through its running total, the Accumulative Swing Index, which is easier to read.',
       'Positive values mean the bar swung up, negative down; large values mark strong bars.',
