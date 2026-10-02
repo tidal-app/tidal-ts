@@ -156,6 +156,14 @@ export const PRESET_SLOTS = 5;
 /** Max viewport rows (the control-panel spec: 1–3, capped at 3 for now). */
 export const MAX_ROWS = 3;
 
+/**
+ * Whether a new study of `op` opens on a row of its own (TDL-OSCROW): it reads
+ * in its own units (pond's `unit` rule — only `inherit` shares its source's
+ * scale) and there is room for another row.
+ */
+const ownsRow = (context: { rows: readonly RowState[] }, op: DeriveOp): boolean =>
+  !opSharesSourceAxis(op) && context.rows.length < MAX_ROWS;
+
 /** Committed height (px) a freshly added row gets — a **fixed** strip, not a flex
  *  remainder row (`height: 0`). Exactly one remainder row is kept (the seed's
  *  top/vol panel, which absorbs slack); a second would make dragging any seam
@@ -182,6 +190,22 @@ const NEW_ROW_HEIGHT = 150;
 function withRemainder(rows: readonly RowState[]): RowState[] {
   if (rows.length === 0 || rows.some((r) => r.height === 0)) return rows as RowState[];
   return rows.map((r, i) => (i === 0 ? { ...r, height: 0 } : r));
+}
+
+/**
+ * Drop every row an edit EMPTIED (the control-panel spec: no empty rows), and
+ * keep exactly one remainder row. `after` is `before` with configs taken out
+ * or moved, row for row. A row that was already empty (a fresh `row.add`)
+ * stays: the user made it to fill. At least one row always survives.
+ *
+ * Shared by every edit that takes configs off rows — remove, group remove and a
+ * cross-row move — because an oscillator on its own row (TDL-OSCROW) means
+ * one edit can empty a row other than the one it started on.
+ */
+function pruneEmptied(before: readonly RowState[], after: readonly RowState[]): RowState[] {
+  const had = new Set(before.filter((r) => r.configs.length > 0).map((r) => r.id));
+  const kept = after.filter((r) => r.configs.length > 0 || !had.has(r.id));
+  return withRemainder(kept.length > 0 ? kept : after.slice(0, 1));
 }
 
 /**
@@ -418,8 +442,10 @@ function derivedClosure(configs: readonly SeriesConfig[], rootId: string): Set<s
 
 /**
  * `rootId` plus the **studies layered on it** within this row — the travel set for
- * a cross-row move. `addStudy` co-locates a study with its target, so moving the
- * target takes its studies along rather than leaving `Price · SMA(20)` behind.
+ * a cross-row move. A study that shares its target's scale sits on its target's
+ * row, so moving the target takes its studies along rather than leaving
+ * `Price · SMA(20)` behind. A study on a row of its own (an RSI, TDL-OSCROW)
+ * stays where it is: its row is its place, not its target's.
  *
  * Only **studies** travel, never a derived **catalog** metric (`isCatalogId`): a
  * study exists solely as a layer on the series it was added to, whereas the
@@ -2085,14 +2111,43 @@ export const terminalMachine = setup({
           mintId(context.cfgSeq),
           unitOfColumn(context),
         );
-        // Overlay on the target's row (own-row oscillators are a later step),
-        // inserted directly IN FRONT of its target — the list is front→back, so
-        // that's the target's own index. A study must read over its source (see
-        // `studyConfig`); appending would bury it at the very back.
+        // A study in its OWN units (an RSI, a MACD, an ATR) opens on a row of
+        // its own, directly under its target's row (TDL-OSCROW). On the target's
+        // row it drew over the price on a second scale, which is what the
+        // drawing plan measured for 63 of the addable studies. With the row cap
+        // reached it overlays as before, on its own axis, and can be moved later.
+        if (ownsRow(context, event.op)) {
+          // Under the target's row — and under any own-row study of the same
+          // target already there, so oscillators stack in the order added.
+          const built = studiesOn(flatConfigs(context.rows), target.id, isCatalogColumn(context));
+          const at = context.rows.reduce(
+            (last, r, i) => (r.configs.some((c) => built.has(c.id)) ? i : last),
+            -1,
+          );
+          const row: RowState = {
+            id: mintRowId(context.rowSeq),
+            height: NEW_ROW_HEIGHT,
+            configs: [cfg],
+          };
+          return withRemainder([
+            ...context.rows.slice(0, at + 1),
+            row,
+            ...context.rows.slice(at + 1),
+          ]);
+        }
+        // Otherwise overlay on the target's row, inserted directly IN FRONT of
+        // its target — the list is front→back, so that's the target's own
+        // index. A study must read over its source (see `studyConfig`);
+        // appending would bury it at the very back.
         return context.rows.map((r) => {
           const at = r.configs.findIndex((c) => c.id === target.id);
           return at < 0 ? r : { ...r, configs: reindex([...r.configs, cfg], r.configs.length, at) };
         });
+      },
+      rowSeq: ({ context, event }) => {
+        if (event.type !== 'series.addStudy') return context.rowSeq;
+        const known = flatConfigs(context.rows).some((c) => c.id === event.targetId);
+        return known && ownsRow(context, event.op) ? context.rowSeq + 1 : context.rowSeq;
       },
       // Expand the new study so its controls (period, colour) open for tuning.
       expanded: ({ context, event }) => {
@@ -2266,9 +2321,7 @@ export const terminalMachine = setup({
           ...r,
           configs: r.configs.filter((c) => !doomed.has(c.id)),
         }));
-        return mapped.some((r) => r.configs.length === 0) && mapped.length > 1
-          ? mapped.filter((r) => r.configs.length > 0)
-          : mapped;
+        return pruneEmptied(context.rows, mapped);
       },
       // The same invariant `removeSeries` states: neither pointer may point at a
       // removed series. Sibling assigners read the PRE-update context, so both
@@ -2351,13 +2404,9 @@ export const terminalMachine = setup({
             .filter((c) => !doomed.has(c.id))
             .map((c) => (c.group && orphaned.has(c.group.id) ? { ...c, group: undefined } : c)),
         }));
-        // Removing a row's last metric removes the row (the control-panel spec: no empty
-        // rows) — keep at least one.
-        const host = context.rows.find((r) => r.configs.some((c) => c.id === event.id));
-        const hostNow = host && mapped.find((r) => r.id === host.id);
-        return hostNow && hostNow.configs.length === 0 && mapped.length > 1
-          ? mapped.filter((r) => r.id !== host!.id)
-          : mapped;
+        // Not only the host row: an oscillator on its own row is in the
+        // cascade, and its row must not stay behind as an empty pane.
+        return pruneEmptied(context.rows, mapped);
       },
       // Neither pointer may point at a removed series (or a cascaded dependent).
       selected: ({ context, event }) =>
@@ -2419,10 +2468,8 @@ export const terminalMachine = setup({
           if (r.id === to.id) return { ...r, configs: [...placed, ...r.configs] };
           return r;
         });
-        // An emptied source row goes away (the control-panel spec: no empty rows) —
-        // keep at least one.
-        const emptied = mapped.find((r) => r.id === from.id && r.configs.length === 0);
-        return emptied && mapped.length > 1 ? mapped.filter((r) => r.id !== from.id) : mapped;
+        // An emptied source row goes away; the remainder row is kept.
+        return pruneEmptied(context.rows, mapped);
       },
     }),
     patchSeries: assign({
@@ -2459,10 +2506,9 @@ export const terminalMachine = setup({
         // trade from the pair eye, which keeps each leg's own state behind a
         // separate `group.hidden` flag. A pair's legs are peers; a study is
         // subordinate, so following its parent is the better default.
-        const row = context.rows.find((r) => r.configs.some((c) => c.id === event.id));
-        const cascade = row
-          ? studiesOn(row.configs, event.id, isCatalogColumn(context))
-          : new Set<string>();
+        // Across EVERY row: an oscillator on its own row is still built on
+        // this series (TDL-OSCROW).
+        const cascade = studiesOn(flatConfigs(context.rows), event.id, isCatalogColumn(context));
         return context.rows.map((r) => ({
           ...r,
           configs: r.configs.map((c) => (cascade.has(c.id) ? { ...c, visible: next } : c)),
@@ -2799,7 +2845,10 @@ export const terminalMachine = setup({
     palette: input.palette ?? [],
     spreadColor: input.spreadColor,
     axisRanges: {},
-    rowSeq: input.initialRows.length,
+    // Past every seeded `row-N`, not just the row count: a host re-seeds from a
+    // stored preset whose rows were minted in an earlier session, and a count
+    // would mint one of their ids again.
+    rowSeq: Math.max(input.initialRows.length, rowSeqAfter(input.initialRows)),
     cfgSeq: cfgSeqAfter(input.initialRows),
     selected: null,
     expanded: null,

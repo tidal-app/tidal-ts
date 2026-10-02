@@ -2,6 +2,31 @@
 
 All packages release together on one version.
 
+## 0.5.0 — 2026-10-02
+
+A study in its own units opens on a row of its own.
+
+- **`series.addStudy` places a study by its unit.** A study that reads in its
+  source's units (an SMA, a Bollinger band) still overlays its target. One that
+  reads in its own (an RSI, a MACD, an ATR — every op whose `unit` is not
+  `inherit`) now opens on a new row directly under its target's row, instead of
+  drawing over the target on a second scale. Several of them stack in the
+  order added. At `MAX_ROWS` it overlays as before, on its own axis. A study of
+  such a study (an SMA of an RSI) shares its row and scale.
+- **A cross-row move leaves an own-row study where it is.** Moving the price
+  carries the studies on its row, not the RSI on the row below. Moving the RSI
+  back onto the price's row removes the row it leaves.
+- **Every edit that takes series off rows prunes the rows it empties** —
+  `series.remove`, `group.remove` and `series.moveToRow` share one rule — and
+  keeps exactly one row that absorbs slack. A row that was already empty stays.
+  Fix: `group.remove` could leave the terminal with no rows at all, and a move
+  that emptied the top row left no row to absorb slack.
+- **Fix: duplicate row ids after a re-seed.** The row counter started at the
+  number of seeded rows, so a stack restored from a preset holding `row-2`
+  could mint `row-2` again. It now starts past every seeded row id.
+- **Hiding a series hides the studies built on it on every row**, not only on
+  its own.
+
 ## 0.4.1 — 2026-10-02
 
 - **`useSetStudyOutput()`** — the React hook that sends `series.setStudyOutput`,
