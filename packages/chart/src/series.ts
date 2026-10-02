@@ -728,9 +728,13 @@ export function effectiveSplit(
         // because green/red is reserved for market data and an indicator is not
         // that. The toggle is the asking.
         (s.colorMode ?? 'single')
-      : s.style === 'bar' || s.style === 'candle'
-        ? (s.colorMode ?? legacy ?? (def.split ? 'split' : 'single'))
-        : 'single';
+      : s.style === 'bar' && s.derive
+        ? // The same rule for a study drawn as bars (an Awesome Oscillator):
+          // an indicator, so its own colour until asked.
+          (s.colorMode ?? 'single')
+        : s.style === 'bar' || s.style === 'candle'
+          ? (s.colorMode ?? legacy ?? (def.split ? 'split' : 'single'))
+          : 'single';
   return { mode, rise: s.riseColor ?? def.rise, fall: s.fallColor ?? def.fall };
 }
 

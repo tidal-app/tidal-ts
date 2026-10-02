@@ -117,6 +117,12 @@ describe('effectiveSplit', () => {
     expect(effectiveSplit(cfg({ style: 'candle' }), settings).mode).toBe('split'); // candles unchanged
   });
 
+  it("keeps a study drawn as bars in its own colour until asked, whatever the app's bar default", () => {
+    const ao = cfg({ style: 'bar', derive: { op: 'awesomeOscillator', inputs: ['close'] } });
+    expect(effectiveSplit(ao).mode).toBe('single');
+    expect(effectiveSplit({ ...ao, colorMode: 'split' }).mode).toBe('split');
+  });
+
   it('per-series overrides beat the settings — mode and colors', () => {
     const s = cfg({ style: 'bar', colorMode: 'single' });
     expect(effectiveSplit(s).mode).toBe('single');

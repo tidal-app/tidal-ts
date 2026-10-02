@@ -174,6 +174,15 @@ const OUTPUT_MARKS: Readonly<Record<string, Readonly<Record<string, 'bar'>>>> = 
   // where the two lines cross — which is the reading most people take off a
   // MACD, and it is unavailable when the difference is drawn as a third line.
   macd: { Hist: 'bar' },
+  // Single-output histograms: the study IS the bars. Bill Williams' Awesome
+  // Oscillator and Market Facilitation Index are defined as histograms, and
+  // Chaikin Money Flow is read as bars either side of zero. Their one output has
+  // the empty suffix. `elderRay` is NOT here although its Bull/Bear are
+  // conventionally bars: drawn as two one-colour bar layers on one axis, the
+  // shorter of the pair hides under the longer whenever they share a sign.
+  awesomeOscillator: { '': 'bar' },
+  chaikinMoneyFlow: { '': 'bar' },
+  marketFacilitationIndex: { '': 'bar' },
 };
 
 /** How one declared output should be drawn. `'line'` unless the overlay says

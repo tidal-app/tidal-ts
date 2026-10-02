@@ -3141,3 +3141,20 @@ describe('row bookkeeping around own-row studies (TDL-OSCROW, PR #21 review)', (
     ]);
   });
 });
+
+describe('a single-output histogram study opens as bars', () => {
+  const all = (ctx: () => { rows: RowState[] }) => ctx().rows.flatMap((r) => r.configs);
+
+  it('an Awesome Oscillator is bars; an RSI stays a line', () => {
+    const { actor, ctx, idOf } = start();
+    actor.send({
+      type: 'series.addStudy',
+      targetId: idOf('close'),
+      op: 'awesomeOscillator',
+      period: 5,
+    });
+    actor.send({ type: 'series.addStudy', targetId: idOf('close'), op: 'rsi', period: 14 });
+    expect(all(ctx).find((c) => c.derive?.op === 'awesomeOscillator')?.style).toBe('bar');
+    expect(all(ctx).find((c) => c.derive?.op === 'rsi')?.style).toBe('line');
+  });
+});

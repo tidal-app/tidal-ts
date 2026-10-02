@@ -2,6 +2,22 @@
 
 All packages release together on one version.
 
+## 0.7.0 — 2026-10-02
+
+A histogram study opens as a histogram.
+
+- **Awesome Oscillator, Chaikin Money Flow and Market Facilitation Index open
+  as bars.** `outputMark(op, '')` is `'bar'` for them, and `series.addStudy`
+  gives a single-output study whose one output is a bar `style: 'bar'`. The
+  user can still restyle it. Elder Ray stays two lines: as two one-colour bar
+  layers on one axis, the shorter of Bull and Bear would hide under the
+  longer whenever they share a sign.
+- **A study drawn as bars keeps its own colour.** Like a MACD's histogram,
+  any derived series in `bar` style is single-coloured until its colour mode
+  is set, whatever the app's default for bars, because green and red are
+  reserved for market data. Split, its bars rise and fall with the study
+  (each against the one before), never with the price candle underneath.
+
 ## 0.6.0 — 2026-10-02
 
 An oscillator draws its guide levels.

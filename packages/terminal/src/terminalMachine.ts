@@ -9,6 +9,7 @@ import {
   opNeedsColumns,
   opIsBand,
   opIsMulti,
+  outputMark,
   opOutputs,
   TARGET_ROLES,
   opSharesSourceAxis,
@@ -822,8 +823,16 @@ function studyConfig(
     // A multi-output op can only draw as a multi-output style: its `column` is
     // a spec id naming SEVERAL columns, so every single-column style would read
     // nothing and draw an empty layer. A band is the Middle/Upper/Lower wash;
-    // anything else is N lines off one spec, one per declared output.
-    style: opIsBand(op) ? 'band' : opIsMulti(op) ? 'lines' : 'line',
+    // anything else is N lines off one spec, one per declared output. A
+    // single-output study whose one output is a histogram (an Awesome
+    // Oscillator) opens as bars; the user can still restyle it.
+    style: opIsBand(op)
+      ? 'band'
+      : opIsMulti(op)
+        ? 'lines'
+        : outputMark(op, '') === 'bar'
+          ? 'bar'
+          : 'line',
     visible: true,
     source: target.source,
     column: deriveId(derive),
