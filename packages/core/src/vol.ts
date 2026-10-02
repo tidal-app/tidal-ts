@@ -137,11 +137,12 @@ export const rvCol = (tenor: number): string => `rvcc${tenor}`;
 export const rvCenCol = (tenor: number): string => `rvccen${tenor}`;
 
 /**
- * ATM vol **slope** at a tenor — the daily skew measure, from
- * `SurfaceFixedTermHist`.
+ * ATM vol **slope** at a tenor — the daily skew measure, from the feed's
+ * fixed-term surface history.
  *
- * It is `atmVol × (skewU1 − skewD1)`: the fitted curve one grid step above ATM
- * minus one step below, in **absolute vol points**, not a ratio.
+ * It is the ATM vol times the difference between the fitted curve's relative
+ * level one grid step above ATM and one step below, in **absolute vol points**,
+ * not a ratio.
  *
  * **Negative is normal equity skew** — downside vol above upside — and more
  * negative is a steeper crash premium. Worth stating because the sign is the whole

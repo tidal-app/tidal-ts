@@ -10,7 +10,7 @@
 # finds a leak, rewrite the prose AND add the identifier here.
 set -euo pipefail
 names='spiderrock|\bwts\b|mlink|hlink|\bmars\b|\bignite\b|web-platform|srse|\bvenus\b|\bsaturn\b'
-schema='atmCen|HistoricalVolatilities|TickerHistory|LiveAtmStream|OptionRoot|\bekey\b|\bdsets?\b|nEarnCnt|expiryCount'
+schema='atmCen|HistoricalVolatilities|TickerHistory|LiveAtmStream|OptionRoot|\bekey\b|\bdsets?\b|nEarnCnt|expiryCount|SurfaceFixedTermHist|skewU1|skewD1'
 private='datasources\.md|wts-handoff|control-panel\.md|state-architecture\.md|docs/(plans|notes)/|TDL_[A-Z]+|the desk'
 pattern="$names|$schema|$private"
 # `.storybook` is in the sweep too: the workshop is published prose (a story's
