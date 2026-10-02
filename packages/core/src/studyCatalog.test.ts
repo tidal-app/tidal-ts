@@ -207,7 +207,7 @@ describe('studyCatalog — the corpus folded into the registry', () => {
     expect(opNeedsColumns('atr').sort()).toEqual(['close', 'high', 'low']);
   });
 
-  it("marks a MACD's Hist as a BAR, and everything else as a line", () => {
+  it("marks a histogram's output as a BAR, and everything else as a line", () => {
     // The catalog's answer for a MACD is complete and still insufficient: all
     // three outputs are `delta`, so `unit` correctly says "own pane,
     // zero-centred" and says nothing about two of them being lines and the
@@ -218,6 +218,11 @@ describe('studyCatalog — the corpus folded into the registry', () => {
     // Unknown ops and unknown suffixes fall through to a line rather than
     // throwing — a persisted config can name an op the corpus has dropped.
     expect(outputMark('rsi', '')).toBe('line');
+    // A single-output histogram marks its one, unsuffixed output.
+    expect(outputMark('awesomeOscillator', '')).toBe('bar');
+    expect(outputMark('chaikinMoneyFlow', '')).toBe('bar');
+    expect(outputMark('marketFacilitationIndex', '')).toBe('bar');
+    expect(outputMark('elderRay', 'Bull')).toBe('line');
     expect(outputMark('nosuchop', 'Hist')).toBe('line');
   });
 
