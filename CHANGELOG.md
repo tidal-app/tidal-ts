@@ -13,9 +13,10 @@ An oscillator draws its guide levels.
 - **The chart draws them.** Each drawn study's levels go on its own axis as a
   `<Baseline role="guide">`, once per axis and value, unlabelled and not
   selectable. A host styles them through `annotation.roles.guide` in the
-  theme it passes. A level outside the data's range is not drawn, because a
-  baseline does not take part in its axis's auto-fit; until the charts
-  library can say so, RSI's 30 or 70 can be off-screen on a calm stretch.
+  theme it passes. A level outside the data's range can fall off-screen,
+  because a baseline does not take part in its axis's auto-fit: on a calm
+  stretch RSI's 30 or 70 may sit beyond the auto-fitted axis. A level at or
+  below zero is skipped on a log axis.
 
 ## 0.5.1 — 2026-10-02
 

@@ -1771,7 +1771,11 @@ function TimeSeriesChartInner({
                         come from core's table until the catalog carries them
                         (F-charts-26 addendum). No chip: the axis already
                         prints the value. */}
-                    {guideLevels(drawable, row.id).map((g) => (
+                    {guideLevels(
+                      drawable,
+                      row.id,
+                      (a) => axisOptions?.[a]?.scaleType === 'log',
+                    ).map((g) => (
                       <Baseline
                         key={g.key}
                         id={g.key}

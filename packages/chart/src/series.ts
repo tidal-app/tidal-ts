@@ -252,12 +252,15 @@ export const configAxisId = (rowId: string, c: Pick<SeriesConfig, 'axis' | 'axis
 export function guideLevels(
   drawn: readonly SeriesConfig[],
   rowId: string,
+  isLog: (axisId: string) => boolean = () => false,
 ): { key: string; axis: string; value: number }[] {
   const out = new Map<string, { key: string; axis: string; value: number }>();
   for (const c of drawn) {
     if (!c.derive) continue;
     const axis = configAxisId(rowId, c);
     for (const value of studyLevels(c.derive.op)) {
+      // A log scale has no 0 or below (%B's 0, a zero line): skip, not NaN.
+      if (value <= 0 && isLog(axis)) continue;
       const key = `guide:${axis}:${value}`;
       if (!out.has(key)) out.set(key, { key, axis, value });
     }

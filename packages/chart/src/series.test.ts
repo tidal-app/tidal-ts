@@ -19,6 +19,7 @@ import {
   type AxisRange,
   type SeriesConfig,
   guideLevels,
+  configAxisId,
 } from './series.js';
 import { DEFAULT_CHART_SETTINGS, mergeChartSettings, type ChartSettings } from './chartSettings.js';
 import { deriveId, type DeriveSpec } from '@tidal-ts/core';
@@ -635,6 +636,19 @@ describe('guideLevels', () => {
   it('keeps the same level apart on two axes', () => {
     const split = guideLevels([rsi('a'), rsi('b', { axis: 'R' })], 'r1');
     expect(split.map((g) => g.axis)).toEqual(['r1:L', 'r1:L', 'r1:R', 'r1:R']);
+  });
+
+  it('draws on a grouped own axis', () => {
+    expect(guideLevels([rsi('a', { axisGroup: 'g1' })], 'r1').map((g) => g.axis)).toEqual([
+      configAxisId('r1', { axis: 'L', axisGroup: 'g1' }),
+      configAxisId('r1', { axis: 'L', axisGroup: 'g1' }),
+    ]);
+  });
+
+  it('skips a level at or below zero on a log axis', () => {
+    const pctB = cfg({ id: 'b', derive: { op: 'bollingerPercentB', inputs: ['close'] } });
+    expect(guideLevels([pctB], 'r1', () => true).map((g) => g.value)).toEqual([1]);
+    expect(guideLevels([pctB], 'r1').map((g) => g.value)).toEqual([0, 1]);
   });
 
   it('skips raw metrics and studies with no levels', () => {
