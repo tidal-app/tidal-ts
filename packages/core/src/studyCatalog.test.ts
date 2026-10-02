@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { TimeSeries } from 'pond-ts';
 import { STUDIES } from '@pond-ts/financial/catalog';
-import { ADOPTED_STUDIES, adoptable, isBandShape, outputMark } from './studyCatalog.js';
+import {
+  ADOPTED_STUDIES,
+  adoptable,
+  isBandShape,
+  outputMark,
+  studyLevels,
+} from './studyCatalog.js';
 
 /** The bar columns a non-`column` input role may bind to. */
 const BARS = ['open', 'high', 'low', 'close', 'volume'];
@@ -304,5 +310,26 @@ describe('studyCatalog — the corpus folded into the registry', () => {
         .map((d) => d.name)
         .sort(),
     ).toEqual(['bollinger', 'donchian', 'envelope', 'highLowBands', 'keltner', 'starcBands']);
+  });
+});
+
+describe('studyLevels (the F-charts-26 levels workaround)', () => {
+  it('names only adopted studies that sit on their own axis, levels ascending', () => {
+    const own = new Set(
+      ADOPTED_STUDIES.filter((d) => d.outputs.every((o) => o.unit !== 'inherit')).map(
+        (d) => d.name,
+      ),
+    );
+    for (const d of ADOPTED_STUDIES) {
+      const lv = studyLevels(d.name);
+      if (lv.length === 0) continue;
+      expect(own.has(d.name), d.name).toBe(true);
+      expect([...lv].sort((a, b) => a - b)).toEqual([...lv]);
+    }
+    // Every entry in the table is an adopted op: a misspelt key would silently
+    // draw nothing, so the count of ops that resolve must be the table's size.
+    expect(ADOPTED_STUDIES.filter((d) => studyLevels(d.name).length > 0)).toHaveLength(37);
+    expect(studyLevels('rsi')).toEqual([30, 70]);
+    expect(studyLevels('sma')).toEqual([]);
   });
 });

@@ -19,6 +19,7 @@ import {
   ChartRow,
   Layers,
   LineChart,
+  Baseline,
   Marker,
   Region,
   TimeAxis,
@@ -60,6 +61,7 @@ import { useMeasuredWidth } from './useMeasuredWidth.js';
 import { DEFAULT_CHART_SETTINGS, type ChartSettings } from './chartSettings.js';
 import {
   configAxisId,
+  guideLevels,
   seriesDrawn,
   DASH_PATTERN,
   effectiveSplit,
@@ -1760,6 +1762,24 @@ function TimeSeriesChartInner({
                         label={false}
                         role={a.role}
                         selectable={false}
+                      />
+                    ))}
+                    {/* GUIDE LEVELS — an oscillator's conventional lines (RSI
+                        30/70, a MACD's zero) on the study's own axis, behind
+                        every series and inert. Drawn once per axis and value,
+                        so two RSIs sharing a scale draw one pair. The levels
+                        come from core's table until the catalog carries them
+                        (F-charts-26 addendum). No chip: the axis already
+                        prints the value. */}
+                    {guideLevels(drawable, row.id).map((g) => (
+                      <Baseline
+                        key={g.key}
+                        id={g.key}
+                        value={g.value}
+                        axis={g.axis}
+                        label={false}
+                        selectable={false}
+                        role="guide"
                       />
                     ))}
                     {/* `<Layers>` z-orders by declaration (last child on top), so

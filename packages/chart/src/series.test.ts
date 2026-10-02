@@ -18,6 +18,7 @@ import {
   sourcesOf,
   type AxisRange,
   type SeriesConfig,
+  guideLevels,
 } from './series.js';
 import { DEFAULT_CHART_SETTINGS, mergeChartSettings, type ChartSettings } from './chartSettings.js';
 import { deriveId, type DeriveSpec } from '@tidal-ts/core';
@@ -609,5 +610,35 @@ describe('sourcesOf / readsFrom (TDL-CMPDUP)', () => {
     const s = cfg('s', 'iv21', { derive: sma, parentIds: ['s'] });
     expect(sourcesOf([s, a], s).map((x) => x.id)).toEqual(['a']);
     expect(sourcesOf([a, b], a)).toEqual([]);
+  });
+});
+
+describe('guideLevels', () => {
+  const rsi = (id: string, over: Partial<SeriesConfig> = {}) =>
+    cfg({ id, derive: { op: 'rsi', inputs: ['close'], params: { period: 14 } }, ...over });
+
+  it("draws a study's levels on its own axis", () => {
+    expect(guideLevels([rsi('a')], 'r1')).toEqual([
+      { key: 'guide:r1:L:30', axis: 'r1:L', value: 30 },
+      { key: 'guide:r1:L:70', axis: 'r1:L', value: 70 },
+    ]);
+  });
+
+  it('draws a shared level once per axis', () => {
+    const two = guideLevels(
+      [rsi('a'), rsi('b', { derive: { op: 'rsi', inputs: ['close'], params: { period: 20 } } })],
+      'r1',
+    );
+    expect(two.map((g) => g.value)).toEqual([30, 70]);
+  });
+
+  it('keeps the same level apart on two axes', () => {
+    const split = guideLevels([rsi('a'), rsi('b', { axis: 'R' })], 'r1');
+    expect(split.map((g) => g.axis)).toEqual(['r1:L', 'r1:L', 'r1:R', 'r1:R']);
+  });
+
+  it('skips raw metrics and studies with no levels', () => {
+    const sma = cfg({ id: 's', derive: { op: 'sma', inputs: ['close'], params: { period: 20 } } });
+    expect(guideLevels([cfg({ id: 'p' }), sma], 'r1')).toEqual([]);
   });
 });
