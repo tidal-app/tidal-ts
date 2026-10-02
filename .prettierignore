@@ -1,2 +1,4 @@
 dist/
 pnpm-lock.yaml
+website/build/
+website/.docusaurus/

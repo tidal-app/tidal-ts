@@ -1,0 +1,10 @@
+// Not used by `docusaurus start` / `build`; it types the site's own files for
+// editors and `pnpm --filter @tidal-ts/website docs:typecheck`.
+{
+  "extends": "@docusaurus/tsconfig",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "strict": true
+  },
+  "exclude": [".docusaurus", "build"]
+}

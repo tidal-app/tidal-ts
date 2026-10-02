@@ -1,0 +1,53 @@
+---
+title: Getting started
+description: Install tidal-ts and draw a price chart with a moving average and an RSI panel.
+---
+
+import CodeBlock from '@theme/CodeBlock';
+import { LiveExample } from '@site/src/components/LiveExample';
+import FirstChart from '@site/src/examples/first-chart';
+import firstChartSource from '!!raw-loader!@site/src/examples/first-chart';
+
+## Install
+
+tidal-ts needs Node 22 or later and React 18 or 19. The pond-ts packages are
+**peer dependencies**: your app installs them once, on one version, so there is
+only ever one copy of pond-ts in the bundle. Two copies break silently, because
+a series made by one copy is not recognised by the other.
+
+```bash
+npm install --save-exact @tidal-ts/core @tidal-ts/chart
+npm install pond-ts @pond-ts/financial @pond-ts/process @pond-ts/charts @pond-ts/react
+```
+
+Pin `@pond-ts/process` exactly too; it is pre-1.0. Add `@tidal-ts/terminal`
+(with `xstate` and `@xstate/react`) only if you want its state machine.
+
+## A first chart
+
+Candles, a 20-bar moving average over them, and a 14-bar RSI in a panel of its
+own. The data is the practice series that ships with `@tidal-ts/core`, a seeded
+random walk, so it draws the same picture every time.
+
+<LiveExample component={FirstChart} height={450} />
+
+<CodeBlock language="tsx" title="first-chart.tsx">
+  {firstChartSource}
+</CodeBlock>
+
+What to notice:
+
+- **A study is data, not code.** `{ op: 'rsi', inputs: ['close'], params: { period: 14 } }`
+  is the whole description. The prepare step computes it, and `deriveId` gives
+  the name of the column its values land in.
+- **The chart decides nothing about looks.** Colours sit in the configs and the
+  theme is a prop. Pass palette names instead of CSS colours and give the chart
+  a `resolveColor` to map them.
+- **Guide lines come with the study.** The RSI's 30 and 70 lines are drawn
+  because the study declares them, not because the example asked.
+
+## Next
+
+- Browse the [study catalog](studies.mdx) for every `op`, its settings and its
+  outputs.
+- Read the [chart package](packages/chart.md) for rows, axes and live updates.

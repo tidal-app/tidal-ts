@@ -18,3 +18,19 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - name: Verify (format, vocabulary, typecheck, test, build)
         run: pnpm run verify
+
+  # The docs site builds on every PR, so a broken link or a study page that no
+  # longer renders fails here rather than on the release tag that publishes it.
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
+      - run: pnpm --filter @tidal-ts/website docs:typecheck
+      - run: pnpm --filter @tidal-ts/website docs:build

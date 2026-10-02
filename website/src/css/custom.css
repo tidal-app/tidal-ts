@@ -1,0 +1,174 @@
+/**
+ * The tidal-ts look, laid over Docusaurus the way pond-ts.org lays its own.
+ *
+ * Near-black navy keeps the data forward; colour is rationed. One lavender
+ * accent carries links, actions and the study being explained; amber is the
+ * second voice; green and red are kept for market data (the candles) and never
+ * used on chrome. IBM Plex Sans for prose, Plex Mono for numbers and code.
+ *
+ * The study pages paint their own panels with the workshop's `--pane-*`
+ * ladder (packages/chart/.storybook/preview.tsx), which `StudyChart` sets on
+ * its wrapper; nothing here has to repeat those values.
+ */
+@import '@fontsource/ibm-plex-sans/400.css';
+@import '@fontsource/ibm-plex-sans/500.css';
+@import '@fontsource/ibm-plex-sans/600.css';
+@import '@fontsource/ibm-plex-sans/700.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+
+:root {
+  --tidal-bg: #f7f8fa;
+  --tidal-surface: #ffffff;
+  --tidal-surface-2: #eef1f6;
+  --tidal-ink: #0f172a;
+  --tidal-body: #334155;
+  --tidal-muted: #55607a;
+  --tidal-hairline: rgba(15, 23, 42, 0.1);
+  --tidal-accent: #5b4bc4;
+  --tidal-accent-strong: #4536a8;
+  --tidal-amber: #b4690e;
+  --tidal-footer-bg: #070b16;
+
+  --ifm-color-primary: #5b4bc4;
+  --ifm-color-primary-dark: #5143b5;
+  --ifm-color-primary-darker: #4c3fab;
+  --ifm-color-primary-darkest: #3e348d;
+  --ifm-color-primary-light: #6c5dcb;
+  --ifm-color-primary-lighter: #7567ce;
+  --ifm-color-primary-lightest: #9084d8;
+  --ifm-background-color: var(--tidal-bg);
+  --ifm-background-surface-color: var(--tidal-surface);
+  --ifm-navbar-height: 60px;
+  --ifm-navbar-background-color: rgba(247, 248, 250, 0.92);
+  --ifm-footer-background-color: var(--tidal-footer-bg);
+  --ifm-heading-color: var(--tidal-ink);
+  --ifm-font-color-base: var(--tidal-body);
+  --ifm-link-color: var(--tidal-accent-strong);
+  --ifm-font-family-base: 'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --ifm-heading-font-weight: 600;
+  --ifm-font-family-monospace: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  --ifm-code-font-size: 92%;
+  --docusaurus-highlighted-code-line-bg: rgba(169, 156, 245, 0.16);
+  --site-hero-glow: rgba(91, 75, 196, 0.14);
+  --site-hero-soft: rgba(180, 105, 14, 0.07);
+  --site-surface-border: var(--tidal-hairline);
+  --site-shadow-soft: 0 24px 60px rgba(15, 23, 42, 0.08);
+}
+
+html[data-theme='dark'] {
+  color-scheme: dark;
+
+  --tidal-bg: #0b1020;
+  --tidal-surface: #141a2b;
+  --tidal-surface-2: #1d2438;
+  --tidal-ink: #f2f5fc;
+  --tidal-body: #c4cbdd;
+  --tidal-muted: #868fa6;
+  --tidal-hairline: rgba(233, 237, 246, 0.1);
+  --tidal-accent: #a99cf5;
+  --tidal-accent-strong: #c9c0ff;
+  --tidal-amber: #f0a93f;
+
+  --ifm-color-primary: #a99cf5;
+  --ifm-color-primary-dark: #9686f2;
+  --ifm-color-primary-darker: #8c7bf1;
+  --ifm-color-primary-darkest: #6e58ec;
+  --ifm-color-primary-light: #bcb2f8;
+  --ifm-color-primary-lighter: #c6bdf9;
+  --ifm-color-primary-lightest: #e2ddfc;
+  --ifm-background-color: var(--tidal-bg);
+  --ifm-background-surface-color: var(--tidal-surface);
+  --ifm-navbar-background-color: rgba(11, 16, 32, 0.92);
+  --ifm-heading-color: var(--tidal-ink);
+  --ifm-font-color-base: var(--tidal-body);
+  --ifm-link-color: var(--tidal-accent);
+  --docusaurus-highlighted-code-line-bg: rgba(169, 156, 245, 0.16);
+  --site-hero-glow: rgba(169, 156, 245, 0.13);
+  --site-hero-soft: rgba(240, 169, 63, 0.06);
+  --site-shadow-soft: 0 24px 60px rgba(0, 0, 0, 0.4);
+}
+
+/* ---- layout chrome ---- */
+
+.hero--primary {
+  background:
+    radial-gradient(circle at top, var(--site-hero-glow), transparent 34%),
+    radial-gradient(circle at 20% 15%, var(--site-hero-soft), transparent 28%),
+    linear-gradient(
+      180deg,
+      var(--ifm-background-color) 0%,
+      var(--ifm-background-surface-color) 100%
+    );
+  color: var(--ifm-heading-color);
+}
+
+.hero__title {
+  letter-spacing: -0.02em;
+}
+
+.navbar {
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--site-surface-border);
+}
+
+.navbar__logo img {
+  display: block;
+  height: 1.8rem;
+  width: auto;
+}
+
+.footer {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* ---- components ---- */
+
+.card {
+  background: var(--ifm-background-surface-color);
+  border: 1px solid var(--site-surface-border);
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.button {
+  border-radius: 9px;
+  font-weight: 600;
+}
+
+.button.button--primary:not(.button--outline) {
+  color: #fff;
+}
+
+html[data-theme='dark'] .button.button--primary:not(.button--outline) {
+  color: #0b1020;
+}
+
+.navbar__search-input {
+  background-color: var(--tidal-surface-2);
+  border: 1px solid var(--site-surface-border);
+  border-radius: 8px;
+}
+
+.theme-code-block {
+  border-radius: 10px;
+}
+
+/* Numbers line up: the catalog's tables are mostly settings and ranges. */
+table {
+  font-variant-numeric: tabular-nums;
+}
+
+/* A study page is mostly its own component; give it the width. */
+.study-page-doc .theme-doc-markdown {
+  max-width: none;
+}
+
+/* A live example sits in a quiet well, like the study charts. */
+.tidal-example {
+  background: var(--tidal-surface);
+  border: 1px solid var(--site-surface-border);
+  border-radius: 10px;
+  padding: 8px;
+  margin-bottom: var(--ifm-leading);
+}
