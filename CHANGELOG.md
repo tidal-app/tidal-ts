@@ -2,6 +2,22 @@
 
 All packages release together on one version.
 
+## 0.6.0 — 2026-10-02
+
+An oscillator draws its guide levels.
+
+- **`studyLevels(op)`** (core) names the levels a study is read against: RSI
+  30/70, stochastic 20/80, Williams %R -80/-20, CCI -100/100, a zero line for
+  MACD, TRIX, momentum and the other centred oscillators (37 ops in all). A
+  study with no conventional levels returns `[]`.
+- **The chart draws them.** Each drawn study's levels go on its own axis as a
+  `<Baseline role="guide">`, once per axis and value, unlabelled and not
+  selectable. A host styles them through `annotation.roles.guide` in the
+  theme it passes. A level outside the data's range can fall off-screen,
+  because a baseline does not take part in its axis's auto-fit: on a calm
+  stretch RSI's 30 or 70 may sit beyond the auto-fitted axis. A level at or
+  below zero is skipped on a log axis.
+
 ## 0.5.1 — 2026-10-02
 
 - **Only a study of a metric opens on its own row.** A metric is a raw one, a

@@ -182,6 +182,73 @@ export function outputMark(op: string, suffix: string): 'line' | 'bar' {
   return OUTPUT_MARKS[op]?.[suffix] ?? 'line';
 }
 
+/**
+ * An oscillator's conventional GUIDE LEVELS — RSI's 30/70, a stochastic's
+ * 20/80, the zero line a MACD crosses — where the catalog cannot say.
+ *
+ * The descriptor carries `unit`, which places a study on its own axis, but no
+ * reference levels, so every consumer re-types them by hand. That is the
+ * F-charts-26 addendum (2026-09-26), and this table is the workaround it asks
+ * to delete: an optional `levels` on the descriptor would replace it.
+ *
+ * Each entry was checked against the study's MEASURED range on the fixture
+ * series (500 bars, three instruments, 2026-10-02) rather than against the
+ * textbook, because a scale is a convention: Williams %R runs −100…0 here, %B
+ * 0…1, and a stochastic 0…100, not 0…1. A study whose outputs do not share
+ * one scale (`aroon`'s Up/Down against its Osc) is left out rather than given
+ * levels that suit half of it.
+ */
+const STUDY_LEVELS: Readonly<Record<string, readonly number[]>> = {
+  // Bounded 0…100, overbought / oversold.
+  rsi: [30, 70],
+  stochastic: [20, 80],
+  stochasticRsi: [20, 80],
+  moneyFlowIndex: [20, 80],
+  ultimateOscillator: [30, 70],
+  intradayMomentumIndex: [30, 70],
+  schaffTrendCycle: [25, 75],
+  psychologicalLine: [25, 75],
+  // Choppy above 61.8, trending below 38.2.
+  choppinessIndex: [38.2, 61.8],
+  // Other bounded scales.
+  williamsR: [-80, -20],
+  stochasticMomentumIndex: [-40, 40],
+  chandeMomentum: [-50, 50],
+  commodityChannelIndex: [-100, 100],
+  bollingerPercentB: [0, 1],
+  // The reversal bulge: up through 27, back under 26.5.
+  massIndex: [26.5, 27],
+  vortex: [1],
+  zScore: [-2, 0, 2],
+  // Centred on zero: the crossing is the reading.
+  macd: [0],
+  trix: [0],
+  coppock: [0],
+  kst: [0],
+  priceMomentumOscillator: [0],
+  momentum: [0],
+  percentChange: [0],
+  awesomeOscillator: [0],
+  fisherTransform: [0],
+  prettyGoodOscillator: [0],
+  primeNumberOscillator: [0],
+  relativeVigorIndex: [0],
+  chandeForecastOscillator: [0],
+  trueStrengthIndex: [0],
+  elderRay: [0],
+  chaikinMoneyFlow: [0],
+  chaikinOscillator: [0],
+  twiggsMoneyFlow: [0],
+  forceIndex: [0],
+  klinger: [0],
+};
+
+/** The guide levels to draw on a study's own axis — see {@link STUDY_LEVELS}.
+ *  Empty when the study has none. */
+export function studyLevels(op: string): readonly number[] {
+  return STUDY_LEVELS[op] ?? [];
+}
+
 /** The output suffixes, which is also the order {@link catalogRun} returns them
  *  in — the engine pairs them positionally. */
 const suffixes = (d: Descriptor): string[] => d.outputs.map((o) => o.id);

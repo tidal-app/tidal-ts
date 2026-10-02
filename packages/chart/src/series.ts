@@ -87,6 +87,7 @@ import {
   opOutputs,
   opParams,
   outputMark,
+  studyLevels,
   usesCompare,
 } from '@tidal-ts/core';
 import type { DeriveSpec, SeriesWindow } from '@tidal-ts/core';
@@ -244,6 +245,28 @@ export const seriesAxisId = (rowId: string, side: SeriesAxis, group: string): st
 /** The axis a config actually scales on: its own when unlinked, else the shared. */
 export const configAxisId = (rowId: string, c: Pick<SeriesConfig, 'axis' | 'axisGroup'>): string =>
   c.axisGroup ? seriesAxisId(rowId, c.axis, c.axisGroup) : sharedAxisId(rowId, c.axis);
+
+/** The guide levels a row draws: each drawn study's {@link studyLevels} on its
+ *  own axis, once per (axis, value) — two RSIs sharing an axis draw one 30
+ *  and one 70. Drawn as `<Baseline role="guide">`; a host styles the role. */
+export function guideLevels(
+  drawn: readonly SeriesConfig[],
+  rowId: string,
+  isLog: (axisId: string) => boolean = () => false,
+): { key: string; axis: string; value: number }[] {
+  const out = new Map<string, { key: string; axis: string; value: number }>();
+  for (const c of drawn) {
+    if (!c.derive) continue;
+    const axis = configAxisId(rowId, c);
+    for (const value of studyLevels(c.derive.op)) {
+      // A log scale has no 0 or below (%B's 0, a zero line): skip, not NaN.
+      if (value <= 0 && isLog(axis)) continue;
+      const key = `guide:${axis}:${value}`;
+      if (!out.has(key)) out.set(key, { key, axis, value });
+    }
+  }
+  return [...out.values()];
+}
 
 /** Per-axis range state (the terminal machine's `axisRanges` values): `manual`
  *  pins the axis to `[min, max]`; `auto` with values present is the **preserved

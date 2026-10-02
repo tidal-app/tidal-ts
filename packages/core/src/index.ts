@@ -124,6 +124,7 @@ export {
   adoptable,
   isBandShape,
   outputMark,
+  studyLevels,
   studyNeedsColumns,
 } from './studyCatalog.js';
 
