@@ -168,6 +168,16 @@ export function useSetStudyParam(): (id: string, name: string, value: number) =>
   );
 }
 
+/** Switch which output of a multi-output source a study reads (the output
+ *  picker). Pair it with `outputAllowed` to render refused choices disabled. */
+export function useSetStudyOutput(): (id: string, output: string) => void {
+  const ref = TerminalContext.useActorRef();
+  return useCallback(
+    (id: string, output: string) => ref.send({ type: 'series.setStudyOutput', id, output }),
+    [ref],
+  );
+}
+
 /** Step a series' draw order within its row (`front`/`up`/`down`/`back`; the
  *  list is front→back, so `up` moves toward the top of the canvas stack). */
 export function useOrderSeries(): (id: string, to: 'front' | 'up' | 'down' | 'back') => void {

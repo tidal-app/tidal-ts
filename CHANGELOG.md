@@ -2,6 +2,12 @@
 
 All packages release together on one version.
 
+## 0.4.1 — 2026-10-02
+
+- **`useSetStudyOutput()`** — the React hook that sends `series.setStudyOutput`,
+  beside `useSetStudyParam()`. Left out of 0.4.0, which shipped the event and
+  `outputAllowed` without a way for a provider-based host to send it.
+
 ## 0.4.0 — 2026-10-02
 
 The output picker: a study of a multi-output study can be told which output to read.
