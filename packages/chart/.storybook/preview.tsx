@@ -125,6 +125,27 @@ const preview: Preview = {
     layout: 'fullscreen',
     backgrounds: { disable: true },
     controls: { expanded: true },
+    // The study catalog reads front page first, then the families in the
+    // order the study menu lists them (`.storybook/studies/families.ts`).
+    options: {
+      storySort: {
+        order: [
+          'Chart',
+          'Studies',
+          [
+            'Overview',
+            'Trend',
+            'Momentum',
+            'Moving-average oscillators',
+            'Bands and channels',
+            'Volatility',
+            'Volume',
+            'Statistical',
+            'Price transforms',
+          ],
+        ],
+      },
+    },
   },
 };
 
