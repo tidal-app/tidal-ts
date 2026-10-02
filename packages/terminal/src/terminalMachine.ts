@@ -71,6 +71,7 @@ import {
   logAllowed,
   type PairLensOp,
   type SeriesGroup,
+  isStudySeries,
   readsFrom,
   sourcesOf,
 } from '@tidal-ts/chart';
@@ -159,21 +160,18 @@ export const MAX_ROWS = 3;
 /**
  * Whether a new study of `op` on `target` opens on a row of its own
  * (TDL-OSCROW): it reads in its own units (pond's `unit` rule — only `inherit`
- * shares its source's scale), its target is a plain metric, and there is room
- * for another row.
+ * shares its source's scale), its target is a metric rather than a link in a
+ * study chain or a pair leg, and there is room for another row.
  */
-const ownsRow = (
-  context: { rows: readonly RowState[] },
-  target: SeriesConfig,
-  op: DeriveOp,
-): boolean =>
+const ownsRow = (context: TerminalContext, target: SeriesConfig, op: DeriveOp): boolean =>
   !opSharesSourceAxis(op) &&
-  // Only off a METRIC: a study of a study, or of a pair leg, stays with its
-  // chain. A chain is one pipeline the panel reads top-down within a row, and
-  // a compare side is one too; split across rows, the panel showed a middle
-  // link as the tail and a leg's oscillator fell out of its pair (tidal #212
-  // review). Its own axis still keeps it off its target's scale.
-  !target.derive &&
+  // Only off a METRIC — a raw one, a derived catalog metric (realized vol) or
+  // an unsplit pair's spread. A study of a STUDY, or of a pair leg, stays with
+  // its chain: a chain is one pipeline the panel reads top-down within a row,
+  // and a compare side is one too; split across rows, the panel showed a
+  // middle link as the tail and a leg's oscillator fell out of its pair (tidal
+  // #212 review). Its own axis still keeps it off its target's scale.
+  (!isStudySeries(target) || isCatalogColumn(context)(target.column)) &&
   !target.group &&
   context.rows.length < MAX_ROWS;
 
@@ -1443,21 +1441,25 @@ function planSplit(
  *  rather than dangle. */
 /** Every config a `group.remove` takes: both legs and everything layered on
  *  them — the same cascade a single remove does, run over the pair. */
-/** A row's configs plus every study built on them, on any row — what
- *  `row.remove` takes away. */
-function rowDoomed(context: TerminalContext, rowId: string): Set<string> {
-  const all = flatConfigs(context.rows);
-  const doomed = new Set<string>();
-  for (const c of context.rows.find((r) => r.id === rowId)?.configs ?? [])
-    for (const id of studiesOn(all, c.id, isCatalogColumn(context))) doomed.add(id);
-  return doomed;
-}
-
 function groupDoomed(rows: readonly RowState[], groupId: string): Set<string> {
   const all = flatConfigs(rows);
   const doomed = new Set<string>();
   for (const m of groupMembers(all, groupId))
     for (const id of derivedClosure(all, m.id)) doomed.add(id);
+  return doomed;
+}
+
+/** What `row.remove` takes: the row's configs, each with the same cascade a
+ *  single `series.remove` runs (`derivedClosure`), wherever the cascade lands.
+ *  So removing a row and removing its series one by one agree: a study of a
+ *  STUDY on the row goes with it on any row, and a study of a raw metric (an
+ *  RSI of the price on its own row) outlives it, because it reads the data,
+ *  not the config. */
+function rowDoomed(rows: readonly RowState[], rowId: string): Set<string> {
+  const all = flatConfigs(rows);
+  const doomed = new Set<string>();
+  for (const c of rows.find((r) => r.id === rowId)?.configs ?? [])
+    for (const id of derivedClosure(all, c.id)) doomed.add(id);
   return doomed;
 }
 
@@ -2837,12 +2839,11 @@ export const terminalMachine = setup({
       },
     }),
     removeRow: assign({
-      // Removing a row takes the studies built on its series with it, wherever
-      // they sit: an oscillator on its own row went with its metric's row
-      // before it had a row of its own, and must still (TDL-OSCROW).
+      // Removing a row is removing each of its series (`rowDoomed`), so a
+      // study of one of its STUDIES goes too, on whatever row it sits.
       rows: ({ context, event }) => {
         if (event.type !== 'row.remove' || context.rows.length <= 1) return context.rows;
-        const doomed = rowDoomed(context, event.id);
+        const doomed = rowDoomed(context.rows, event.id);
         const after = context.rows
           .filter((r) => r.id !== event.id)
           .map((r) => ({ ...r, configs: r.configs.filter((c) => !doomed.has(c.id)) }));
@@ -2854,13 +2855,13 @@ export const terminalMachine = setup({
       // (unlike a ticker switch) — clear both (mirrors removeSeries).
       selected: ({ context, event }) => {
         if (event.type !== 'row.remove' || context.rows.length <= 1) return context.selected;
-        return context.selected != null && rowDoomed(context, event.id).has(context.selected)
+        return context.selected != null && rowDoomed(context.rows, event.id).has(context.selected)
           ? null
           : context.selected;
       },
       expanded: ({ context, event }) => {
         if (event.type !== 'row.remove' || context.rows.length <= 1) return context.expanded;
-        return context.expanded != null && rowDoomed(context, event.id).has(context.expanded)
+        return context.expanded != null && rowDoomed(context.rows, event.id).has(context.expanded)
           ? null
           : context.expanded;
       },

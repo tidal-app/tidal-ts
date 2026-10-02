@@ -4,15 +4,18 @@ All packages release together on one version.
 
 ## 0.5.1 — 2026-10-02
 
-- **Only a study of a plain metric opens on its own row.** A study in its own
-  units of a STUDY (an RSI of an SMA) or of a pair leg now stays on its
+- **Only a study of a metric opens on its own row.** A metric is a raw one, a
+  derived catalog metric (realized vol) or an unsplit pair's spread. A study in
+  its own units of a STUDY (an RSI of an SMA) or of a pair leg now stays on its
   target's row, on its own axis, as before 0.5.0. A chain is one pipeline the
   panel reads within a row, and a compare side is one too: split across rows,
   the panel showed a middle link as the chain's tail, and a leg's oscillator
   fell out of its pair (no pair ink, no pair eye, an unwanted mirror).
-- **`row.remove` takes the studies built on the row's series with it**, on any
-  row, so an oscillator on its own row no longer outlives its metric's row,
-  and the selection and expansion clear if they pointed at one.
+- **`row.remove` is removing each of the row's series.** It runs the same
+  cascade as `series.remove`, wherever it lands, so a study of one of the row's
+  studies goes too, on any row, and the selection and expansion clear if they
+  pointed at one. A study of a raw metric outlives it, as with `series.remove`:
+  an RSI of the price on its own row stays when the price's row goes.
 
 ## 0.5.0 — 2026-10-02
 

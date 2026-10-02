@@ -3000,18 +3000,54 @@ describe('a study in its own units opens on its own row (TDL-OSCROW)', () => {
     expect(ctx().rows).toHaveLength(1);
   });
 
-  it('removing a row takes the own-row studies of its series with it', () => {
+  it('a derived catalog metric (realized vol) is a metric: its RSI gets a row', () => {
+    const { actor, ctx, idOf } = start();
+    actor.send({ type: 'series.add', catalogId: RV });
+    actor.send({ type: 'series.addStudy', targetId: idOf(RV), op: 'rsi', period: 14 });
+    const rsi = all(ctx).find((c) => c.derive?.op === 'rsi')!;
+    expect(ctx().rows).toHaveLength(3);
+    expect(ctx().rows[rowOf(ctx, rsi.id)]!.configs).toHaveLength(1);
+  });
+
+  it("removing a row is removing its series: a raw metric's own-row RSI stays", () => {
+    // The same rule `series.remove` keeps (a study of a raw metric reads the
+    // data, not the config), so the two ways of removing agree.
     const { actor, ctx, idOf } = start();
     actor.send({ type: 'series.addStudy', targetId: idOf('close'), op: 'rsi', period: 14 });
     const rsi = all(ctx).find((c) => c.derive?.op === 'rsi')!;
-    actor.send({ type: 'select', id: rsi.id });
-    expect(ctx().selected).toBe(rsi.id);
-    expect(ctx().rows).toHaveLength(3);
+    actor.send({ type: 'row.remove', id: 'bottom' });
+    expect(ctx().rows.map((r) => r.configs.map((c) => c.id))).toEqual([[idOf('iv21')], [rsi.id]]);
+    expect(ctx().rows.filter((r) => r.height === 0)).toHaveLength(1);
+  });
+
+  it('removing a row takes a study of one of its STUDIES, on any row', () => {
+    const { actor, ctx, idOf } = start();
+    actor.send({ type: 'series.addStudy', targetId: idOf('close'), op: 'sma', period: 20 });
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    actor.send({ type: 'series.addStudy', targetId: sma.id, op: 'ema', period: 5 });
+    const ema = all(ctx).find((c) => c.derive?.op === 'ema')!;
+    actor.send({ type: 'series.moveToRow', id: ema.id, rowId: 'top' });
+    actor.send({ type: 'select', id: ema.id });
     actor.send({ type: 'row.remove', id: 'bottom' });
     expect(ctx().rows.map((r) => r.configs.map((c) => c.column))).toEqual([['iv21']]);
-    expect(ctx().rows[0]!.height).toBe(0);
     expect(ctx().selected).toBeNull();
-    expect(ctx().expanded).toBeNull();
+  });
+
+  it('removing a row keeps a spread on another row that reads one of its metrics', () => {
+    const { actor, ctx } = start([
+      { id: 'top', height: 0, configs: [cfg('iv21')] },
+      { id: 'mid', height: 150, configs: [cfg('iv63')] },
+    ]);
+    actor.send({
+      type: 'series.addPair',
+      a: { metricId: 'iv63' },
+      b: { metricId: 'iv21' },
+      op: 'ratio',
+    });
+    actor.send({ type: 'row.remove', id: 'top' });
+    expect(ctx().rows.map((r) => r.configs.map((c) => c.column))).toEqual([
+      [deriveId(RATIO_63_21), 'iv63'],
+    ]);
   });
 
   it('removing a raw metric keeps its own-row study (it reads the data), and prunes its row', () => {
