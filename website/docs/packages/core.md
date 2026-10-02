@@ -28,22 +28,22 @@ The studies come from `@pond-ts/financial` and run through `@pond-ts/process`.
 The [study catalog](../studies.mdx) shows every one with a live chart. To read
 the list in code:
 
-| Function                      | Answers                                                                   |
-| ----------------------------- | ------------------------------------------------------------------------- |
-| `studyCatalog()`              | Every study on offer: its op, display label, one-line summary and family. |
-| `opParams(op)`                | Its settings, with defaults and allowed ranges.                           |
-| `opOutputs(op)`               | The lines it produces (one, or several such as `Upper` / `Lower`).        |
-| `opNeedsColumns(op)`          | Which bar columns it reads beyond the close (high, low, volume…).         |
-| `opSharesSourceAxis(op)`      | Whether it is drawn over price, or in a panel of its own.                 |
-| `studyLevels(op)`             | The guide lines it declares, such as 30 and 70 for RSI.                   |
-| `isValidSpec(spec)`           | Whether a spec's settings are legal before you draw it.                   |
-| `applyDerived(series, specs)` | Compute studies onto a series yourself, without the chart.                |
+| Function                      | Answers                                                                    |
+| ----------------------------- | -------------------------------------------------------------------------- |
+| `studyCatalog()`              | Every study on offer: its op, display label, one-line summary and family.  |
+| `opParams(op)`                | Its settings, with defaults and allowed ranges.                            |
+| `opOutputs(op)`               | The lines it produces (one, or several such as `Upper` / `Lower`).         |
+| `opNeedsColumns(op)`          | Which bar columns it reads (empty for a study of one column, such as RSI). |
+| `opSharesSourceAxis(op)`      | Whether it is drawn over price, or in a panel of its own.                  |
+| `studyLevels(op)`             | The guide lines it declares, such as 30 and 70 for RSI.                    |
+| `isValidSpec(spec)`           | Whether a spec's settings are legal before you draw it.                    |
+| `applyDerived(series, specs)` | Compute studies onto a series yourself, without the chart.                 |
 
 ## Data in
 
 - `snapshotToTimeSeries(snapshot)` turns a column-by-column payload (a name, a
   row count, a schema and one array per column) into a pond `TimeSeries`, and
-  `appendToRows` adds the rows of a later update.
+  `appendToRows` turns a later update in the same layout into rows to append.
 - `buildPriceSeries(name, rows)` builds an open/high/low/close/volume series from
   plain rows.
 - `generatePriceSeries` and `generateVolSeries` make seeded practice data for
@@ -51,10 +51,11 @@ the list in code:
 
 ## Volatility
 
-`VOL_SCHEMA` is the layout for a volatility history: at-the-money implied vol
-by tenor, historical and realized vol, and skew. `impliedCol`, `hvCol`, `rvCol`
-and `skewCol` name a column for a tenor, so code never spells column names by
-hand.
+`VOL_SCHEMA` is the layout for a volatility history. Per tenor it holds two
+at-the-money implied vol curves (`iv` and `hv`, which treat earnings days
+differently; despite the letter, `hv` is implied, not historical), realized
+vol, and skew. `impliedCol`, `hvCol`, `rvCol`, `rvCenCol` and `skewCol` name a
+column for a tenor, so code never spells column names by hand.
 
 ## Bars, sessions and time zones
 

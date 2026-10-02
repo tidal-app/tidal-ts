@@ -17,8 +17,10 @@ const onDisk = (dir: string): string[] =>
     e.isDirectory() ? onDisk(join(dir, e.name)) : [relative(ROOT, join(dir, e.name))],
   );
 
-if (process.env.WRITE_SITE_PAGES) {
-  rmSync(ROOT, { recursive: true, force: true });
+// `WRITE_SITE_PAGES=1` regenerates: stale pages are removed, the rest written.
+// The checks below then run against what was just written.
+if (process.env.WRITE_SITE_PAGES === '1') {
+  for (const path of onDisk(ROOT)) if (!(path in expected)) rmSync(join(ROOT, path));
   for (const [path, text] of Object.entries(expected)) {
     mkdirSync(dirname(join(ROOT, path)), { recursive: true });
     writeFileSync(join(ROOT, path), text);

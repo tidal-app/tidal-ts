@@ -30,6 +30,7 @@ Each line, candle series or study is one config:
 | `color`         | A CSS colour, or a key your `resolveColor` understands.                                  |
 | `label`, `unit` | What the readout and axis say.                                                           |
 | `visible`       | Hide without removing.                                                                   |
+| `value`         | The latest value, for a legend. Pass `null`; `prepareChart` fills it in.                 |
 
 Candles also take `colorMode: 'split'` with `riseColor` and `fallColor`.
 

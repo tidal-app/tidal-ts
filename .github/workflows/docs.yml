@@ -5,9 +5,13 @@ name: Docs
 # describes the version on npm, not work in flight on main. Run it by hand
 # (workflow_dispatch) for a preview of an unreleased commit.
 #
-# Hosted on GitHub Pages: the repo's Settings → Pages → Source must be
-# "GitHub Actions". Moving host or adding a custom domain is a change to
-# DOCS_URL / DOCS_BASE_URL below, not to the site.
+# Hosted on GitHub Pages. Two repo settings, once:
+#   - Settings → Pages → Source: "GitHub Actions".
+#   - Settings → Environments → github-pages → Deployment branches and tags:
+#     add a tag rule `v*`. The environment Pages creates allows only the
+#     default branch, so without the rule a release tag's deploy is refused.
+# Moving host or adding a custom domain is a change to DOCS_URL /
+# DOCS_BASE_URL below, not to the site.
 on:
   push:
     tags: ['v*']
@@ -18,9 +22,10 @@ permissions:
   pages: write
   id-token: write
 
+# Queue rather than cancel: a deploy stopped halfway can leave Pages stuck.
 concurrency:
   group: docs-deploy
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:

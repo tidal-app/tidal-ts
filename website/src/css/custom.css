@@ -7,7 +7,7 @@
  * used on chrome. IBM Plex Sans for prose, Plex Mono for numbers and code.
  *
  * The study pages paint their own panels with the workshop's `--pane-*`
- * ladder (packages/chart/.storybook/preview.tsx), which `StudyChart` sets on
+ * ladder (packages/chart/.storybook/preview.tsx), which `Study.tsx` sets on
  * its wrapper; nothing here has to repeat those values.
  */
 @import '@fontsource/ibm-plex-sans/400.css';
@@ -157,11 +157,6 @@ html[data-theme='dark'] .button.button--primary:not(.button--outline) {
 /* Numbers line up: the catalog's tables are mostly settings and ranges. */
 table {
   font-variant-numeric: tabular-nums;
-}
-
-/* A study page is mostly its own component; give it the width. */
-.study-page-doc .theme-doc-markdown {
-  max-width: none;
 }
 
 /* A live example sits in a quiet well, like the study charts. */

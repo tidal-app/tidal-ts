@@ -12,6 +12,19 @@ import { tidalCodeTheme } from './src/prism-tidal-theme';
  * domain) is an environment change, not an edit: `DOCS_URL` is the origin and
  * `DOCS_BASE_URL` the path the site lives under.
  */
+const REPO = 'https://github.com/tidal-app/tidal-ts/tree/main';
+/** The prose file each catalog family's pages are written in. */
+const PROSE_FILE: Record<string, string> = {
+  trend: 'trend',
+  momentum: 'momentum',
+  'moving-average': 'movingAverage',
+  bands: 'bands',
+  volatility: 'volatility',
+  volume: 'volume',
+  statistical: 'statistical',
+  price: 'price',
+};
+
 const url = process.env.DOCS_URL ?? 'https://tidal-app.github.io';
 const baseUrl = process.env.DOCS_BASE_URL ?? '/tidal-ts/';
 
@@ -44,7 +57,14 @@ const config: Config = {
       {
         docs: {
           sidebarPath: './sidebars.ts',
-          editUrl: 'https://github.com/tidal-app/tidal-ts/tree/main/website/',
+          // A study page's file only routes to its component; the prose a
+          // reader would want to fix lives with the workshop's catalog.
+          editUrl: ({ docPath }) => {
+            const study = /^studies\/([^/]+)\/[^/]+\.mdx$/.exec(docPath);
+            return study
+              ? `${REPO}/packages/chart/.storybook/studies/docs/${PROSE_FILE[study[1]!] ?? 'index'}.ts`
+              : `${REPO}/website/docs/${docPath}`;
+          },
         },
         blog: false,
         theme: {

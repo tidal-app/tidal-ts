@@ -9,7 +9,7 @@ description: What tidal-ts is, what is in each package, and where to start.
 tidal-ts draws financial time series: price bars, volatility curves, and the
 technical studies traders lay over them. It is built on
 [pond-ts](https://pond-ts.org), and it came out of
-[Tidal](https://github.com/tidal-app/tidal), a volatility analytics terminal, so
+Tidal, a volatility analytics terminal, so
 that other apps can draw the same chart without Tidal's controls or data layer.
 
 **Pre-1.0: pin an exact version.** All three packages ship together on one

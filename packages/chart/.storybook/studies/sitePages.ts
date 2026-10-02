@@ -34,7 +34,7 @@ export function sitePages(): Record<string, string> {
     const ops = catalog
       .filter((s) => s.family === f.family)
       .map((s) => s.op as string)
-      .sort((a, b) => (STUDY_DOCS[a]?.name ?? a).localeCompare(STUDY_DOCS[b]?.name ?? b));
+      .sort((a, b) => (STUDY_DOCS[a]?.name ?? a).localeCompare(STUDY_DOCS[b]?.name ?? b, 'en'));
     ops.forEach((op, j) => {
       const doc = STUDY_DOCS[op];
       if (!doc) return; // studyDocs.test.ts names the missing page
