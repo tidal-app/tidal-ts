@@ -118,9 +118,16 @@ describe('effectiveSplit', () => {
   });
 
   it("keeps a study drawn as bars in its own colour until asked, whatever the app's bar default", () => {
-    const ao = cfg({ style: 'bar', derive: { op: 'awesomeOscillator', inputs: ['close'] } });
+    const ao = cfg({ style: 'bar', derive: { op: 'awesomeOscillator', inputs: ['high', 'low'] } });
     expect(effectiveSplit(ao).mode).toBe('single');
     expect(effectiveSplit({ ...ao, colorMode: 'split' }).mode).toBe('split');
+    // A derived METRIC drawn as bars is not an indicator histogram: it keeps
+    // the app's bar default.
+    const rv = cfg({
+      style: 'bar',
+      derive: { op: 'realizedVol', inputs: ['close'], params: { period: 21 } },
+    });
+    expect(effectiveSplit(rv).mode).toBe('split');
   });
 
   it('per-series overrides beat the settings — mode and colors', () => {

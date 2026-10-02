@@ -1023,6 +1023,10 @@ function TimeSeriesChartInner({
       if (!src) continue;
       if (c.style === 'bar') {
         const col = c.column;
+        // A column the data does not carry (a study the engine skipped, a
+        // volume study on a series with no volume) draws nothing, as it would
+        // as a line: aggregating it throws and takes the whole chart down.
+        if (!src.schema.some((sc) => sc.name === col)) continue;
         const window = windowFor(c, src);
         const grid = sessionsFor(src);
         let agg = aggregateColumn(src, col, window, reducerFor(c), grid);

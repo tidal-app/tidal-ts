@@ -728,9 +728,10 @@ export function effectiveSplit(
         // because green/red is reserved for market data and an indicator is not
         // that. The toggle is the asking.
         (s.colorMode ?? 'single')
-      : s.style === 'bar' && s.derive
-        ? // The same rule for a study drawn as bars (an Awesome Oscillator):
-          // an indicator, so its own colour until asked.
+      : s.style === 'bar' && s.derive && outputMark(s.derive.op, '') === 'bar'
+        ? // The same rule for a histogram study (an Awesome Oscillator): an
+          // indicator, so its own colour until asked. Only those: a derived
+          // metric drawn as bars (realized vol) keeps the app's bar default.
           (s.colorMode ?? 'single')
         : s.style === 'bar' || s.style === 'candle'
           ? (s.colorMode ?? legacy ?? (def.split ? 'split' : 'single'))
