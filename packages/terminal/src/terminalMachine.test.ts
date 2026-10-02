@@ -2971,14 +2971,83 @@ describe('a study in its own units opens on its own row (TDL-OSCROW)', () => {
     expect(ctx().rowSeq).toBe(seq);
   });
 
-  it('removing a study removes its own-row study AND the row that emptied', () => {
+  it('a study in its own units OF A STUDY stays with its chain, on its own axis', () => {
+    // A chain is one pipeline the panel reads within a row; split across rows,
+    // a middle link showed as the tail (tidal #212 review).
     const { actor, ctx, idOf } = start();
     actor.send({ type: 'series.addStudy', targetId: idOf('close'), op: 'sma', period: 20 });
     const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
     actor.send({ type: 'series.addStudy', targetId: sma.id, op: 'rsi', period: 14 });
+    const rsi = all(ctx).find((c) => c.derive?.op === 'rsi')!;
+    expect(ctx().rows).toHaveLength(2);
+    expect(rowOf(ctx, rsi.id)).toBe(rowOf(ctx, sma.id));
+    expect(rsi.axisGroup).toBe(rsi.id);
+  });
+
+  it('a study in its own units OF A PAIR LEG stays with its pair', () => {
+    // A compare side is one pipeline; on another row its oscillator fell out
+    // of the pair (tidal #212 review, HIGH).
+    const { actor, ctx, idOf } = start([{ id: 'top', height: 0, configs: [cfg('iv21')] }]);
+    actor.send({ type: 'series.add', catalogId: 'iv63' });
+    actor.send({
+      type: 'series.addPair',
+      a: { metricId: 'iv63' },
+      b: { metricId: 'iv21' },
+      op: 'none',
+    });
+    const legA = all(ctx).find((c) => c.group?.side === 'A')!;
+    actor.send({ type: 'series.addStudy', targetId: legA.id, op: 'rsi', period: 14 });
+    expect(ctx().rows).toHaveLength(1);
+  });
+
+  it('a derived catalog metric (realized vol) is a metric: its RSI gets a row', () => {
+    const { actor, ctx, idOf } = start();
+    actor.send({ type: 'series.add', catalogId: RV });
+    actor.send({ type: 'series.addStudy', targetId: idOf(RV), op: 'rsi', period: 14 });
+    const rsi = all(ctx).find((c) => c.derive?.op === 'rsi')!;
     expect(ctx().rows).toHaveLength(3);
-    actor.send({ type: 'series.remove', id: sma.id });
-    expect(ctx().rows.map((r) => r.configs.map((c) => c.column))).toEqual([['iv21'], ['close']]);
+    expect(ctx().rows[rowOf(ctx, rsi.id)]!.configs).toHaveLength(1);
+  });
+
+  it("removing a row is removing its series: a raw metric's own-row RSI stays", () => {
+    // The same rule `series.remove` keeps (a study of a raw metric reads the
+    // data, not the config), so the two ways of removing agree.
+    const { actor, ctx, idOf } = start();
+    actor.send({ type: 'series.addStudy', targetId: idOf('close'), op: 'rsi', period: 14 });
+    const rsi = all(ctx).find((c) => c.derive?.op === 'rsi')!;
+    actor.send({ type: 'row.remove', id: 'bottom' });
+    expect(ctx().rows.map((r) => r.configs.map((c) => c.id))).toEqual([[idOf('iv21')], [rsi.id]]);
+    expect(ctx().rows.filter((r) => r.height === 0)).toHaveLength(1);
+  });
+
+  it('removing a row takes a study of one of its STUDIES, on any row', () => {
+    const { actor, ctx, idOf } = start();
+    actor.send({ type: 'series.addStudy', targetId: idOf('close'), op: 'sma', period: 20 });
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    actor.send({ type: 'series.addStudy', targetId: sma.id, op: 'ema', period: 5 });
+    const ema = all(ctx).find((c) => c.derive?.op === 'ema')!;
+    actor.send({ type: 'series.moveToRow', id: ema.id, rowId: 'top' });
+    actor.send({ type: 'select', id: ema.id });
+    actor.send({ type: 'row.remove', id: 'bottom' });
+    expect(ctx().rows.map((r) => r.configs.map((c) => c.column))).toEqual([['iv21']]);
+    expect(ctx().selected).toBeNull();
+  });
+
+  it('removing a row keeps a spread on another row that reads one of its metrics', () => {
+    const { actor, ctx } = start([
+      { id: 'top', height: 0, configs: [cfg('iv21')] },
+      { id: 'mid', height: 150, configs: [cfg('iv63')] },
+    ]);
+    actor.send({
+      type: 'series.addPair',
+      a: { metricId: 'iv63' },
+      b: { metricId: 'iv21' },
+      op: 'ratio',
+    });
+    actor.send({ type: 'row.remove', id: 'top' });
+    expect(ctx().rows.map((r) => r.configs.map((c) => c.column))).toEqual([
+      [deriveId(RATIO_63_21), 'iv63'],
+    ]);
   });
 
   it('removing a raw metric keeps its own-row study (it reads the data), and prunes its row', () => {
@@ -3037,14 +3106,10 @@ describe('row bookkeeping around own-row studies (TDL-OSCROW, PR #21 review)', (
       op: 'none',
     });
     const groupId = all(ctx).find((c) => c.id === a.id)!.group!.id;
-    actor.send({ type: 'series.addStudy', targetId: a.id, op: 'rsi', period: 14 });
-    expect(ctx().rows).toHaveLength(2);
     actor.send({ type: 'series.remove', id: idOf('iv21') });
     actor.send({ type: 'group.remove', groupId });
-    // The legs' row emptied and went; the RSI (reading the data) keeps its row,
-    // which takes the slack. Never zero rows.
-    expect(ctx().rows.length).toBeGreaterThan(0);
-    expect(ctx().rows.filter((r) => r.height === 0)).toHaveLength(1);
+    expect(ctx().rows).toHaveLength(1);
+    expect(ctx().rows[0]!.height).toBe(0);
   });
 
   it('a re-seeded stack mints row ids past the ones it already holds', () => {
