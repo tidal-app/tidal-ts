@@ -742,7 +742,13 @@ const studySpec = (target: SeriesConfig, op: DeriveOp, period: number): DeriveSp
  *  source's params) with the op·period appended — e.g. `Price · SMA · 20`,
  *  `ATM Vol · 21D · SMA · 20` — so the lineage is legible. Warm default colour so
  *  it reads over its source; the user recolours. */
-function studyConfig(target: SeriesConfig, op: DeriveOp, period: number, id: string): SeriesConfig {
+function studyConfig(
+  target: SeriesConfig,
+  op: DeriveOp,
+  period: number,
+  id: string,
+  unitOf: (column: string) => string,
+): SeriesConfig {
   const derive = studySpec(target, op, period);
   // Only an `inherit` op may share its source's scale (pond's rule, shipped
   // with the catalog's `unit`). An RSI is bounded 0..100 and a vol reading is
@@ -751,7 +757,12 @@ function studyConfig(target: SeriesConfig, op: DeriveOp, period: number, id: str
   // render before this. A study that reads in its own units gets its own axis
   // group, keyed by its own id, and its own unit for the labels.
   const shares = opSharesSourceAxis(op);
-  const own = specUnit(derive, (col) => (col === target.column ? (target.unit ?? '') : ''));
+  // The target's own unit for its column, and the scope's for everything else
+  // (a bar's high/low read as its close) — the SAME resolution a re-spec uses,
+  // so adding a study and retuning it can never disagree about its unit.
+  const own = specUnit(derive, (col) =>
+    col === target.column ? (target.unit ?? '') : unitOf(col),
+  );
   // Which output of a multi-output target this study reads, named in the label
   // (`Price · DONCHIAN(20) · Middle · SMA(10)`) so the choice is never silent.
   const picked = derive.inputs.find(isPickedInput);
@@ -1222,23 +1233,31 @@ export function respecAllowed(scope: EditScope, id: string, name: string, value:
 /**
  * Whether a study can switch to reading `output` of its multi-output source —
  * shared by the guard and the host, so a refused choice renders disabled (the
- * {@link respecAllowed} contract). Refused when the study reads no such source,
- * the source does not declare `output`, it is already the one read, or the
- * rewrite of everything built on the study would be incoherent: a spec the
- * registry rejects, or a unit that no longer fits the shared axis it sits on
- * (an SMA of a regression's `R2` is unitless, its source's axis is not).
+ * {@link respecAllowed} contract). Refused when the study reads no such source
+ * (a pair's legs included: see `studyPick`), the source does not declare
+ * `output`, it is already the one read, or the rewrite would be incoherent: a
+ * spec the registry rejects, a shared axis left holding two units, or a study
+ * on its SOURCE's axis changing unit — an SMA of a regression's `R2` is
+ * unitless and would be drawn on the regression's `$` scale.
+ *
+ * Total: it runs in a guard, where a throw kills the actor.
  */
 export function outputAllowed(scope: EditScope, id: string, output: string): boolean {
-  const configs = flatConfigs(scope.rows);
-  const target = configs.find((c) => c.id === id);
-  if (!target?.derive) return false;
-  const pick = studyPick(target.derive);
-  if (!pick || !opOutputs(pick.from.op).includes(output)) return false;
-  if (pick.explicit && pick.output === output) return false;
-  // Validate BEFORE naming: this runs in a guard, where a throw kills the actor.
-  if (!isValidSpec(withStudyOutput(target.derive, output))) return false;
-  const next = propagateRespec(configs, id, respecOutput(target, output), unitOfColumn(scope));
-  return next !== null && unitsStayCoherent(scope.rows, next);
+  try {
+    const configs = flatConfigs(scope.rows);
+    const target = configs.find((c) => c.id === id);
+    if (!target?.derive) return false;
+    const pick = studyPick(target.derive);
+    if (!pick || !opOutputs(pick.from.op).includes(output)) return false;
+    if (pick.explicit && pick.output === output) return false;
+    if (!isValidSpec(withStudyOutput(target.derive, output))) return false;
+    const next = propagateRespec(configs, id, respecOutput(target, output), unitOfColumn(scope));
+    if (next === null || !unitsStayCoherent(scope.rows, next)) return false;
+    const borrowed = target.axisGroup != null && target.axisGroup !== target.id;
+    return !(borrowed && next.get(id)!.unit !== (target.unit ?? ''));
+  } catch {
+    return false;
+  }
 }
 
 // --- fn() = None: the LEG GROUP ----------------------------------------------
@@ -1476,11 +1495,13 @@ function respecOutput(study: SeriesConfig, output: string): SeriesConfig {
   const derive = withStudyOutput(prev, output);
   const tag = ` · ${studyTag(prev)}`;
   const named = ` · ${pick.output}${tag}`;
-  const base = study.label.endsWith(named)
-    ? study.label.slice(0, -named.length)
-    : study.label.endsWith(tag)
-      ? study.label.slice(0, -tag.length)
-      : (study.family ?? study.label);
+  // `label` is untyped persisted state; a missing one must not throw here.
+  const label = typeof study.label === 'string' ? study.label : '';
+  const base = label.endsWith(named)
+    ? label.slice(0, -named.length)
+    : label.endsWith(tag)
+      ? label.slice(0, -tag.length)
+      : (study.family ?? label);
   return { ...study, column: deriveId(derive), derive, label: `${base} · ${output}${tag}` };
 }
 
@@ -2057,7 +2078,13 @@ export const terminalMachine = setup({
         // Every assigner in this `assign` sees the SAME pre-update context, so
         // the id minted here and the one `expanded`/`cfgSeq` compute below all
         // agree without threading a value between them.
-        const cfg = studyConfig(target, event.op, event.period, mintId(context.cfgSeq));
+        const cfg = studyConfig(
+          target,
+          event.op,
+          event.period,
+          mintId(context.cfgSeq),
+          unitOfColumn(context),
+        );
         // Overlay on the target's row (own-row oscillators are a later step),
         // inserted directly IN FRONT of its target — the list is front→back, so
         // that's the target's own index. A study must read over its source (see

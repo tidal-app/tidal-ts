@@ -2418,6 +2418,58 @@ describe('the output picker: which output a study reads (TDL-STUDYCHAIN step 2)'
     expect(all(ctx).find((c) => c.id === band.id)!.unit).toBe('$');
   });
 
+  it('a PAIR is not offered the picker, even with a picked band leg', () => {
+    const { actor, ctx, idOf } = start();
+    actor.send({ type: 'series.addStudy', targetId: idOf('close'), op: 'donchian', period: 20 });
+    const band = all(ctx).find((c) => c.derive?.op === 'donchian')!;
+    actor.send({
+      type: 'series.addPair',
+      a: { metricId: band.id },
+      b: { metricId: 'price' },
+      op: 'diff',
+    });
+    const pair = all(ctx).find((c) => c.derive?.op === 'diff')!;
+    expect(outputAllowed(ctx(), pair.id, 'Upper')).toBe(false);
+    actor.send({ type: 'series.setStudyOutput', id: pair.id, output: 'Upper' });
+    expect(all(ctx).find((c) => c.id === pair.id)).toEqual(pair);
+  });
+
+  it('a study on its SOURCE axis may not switch to an output in another unit', () => {
+    const { actor, ctx, idOf } = start();
+    actor.send({
+      type: 'series.addStudy',
+      targetId: idOf('close'),
+      op: 'linearRegression',
+      period: 20,
+    });
+    const reg = all(ctx).find((c) => c.derive?.op === 'linearRegression')!;
+    actor.send({ type: 'series.addStudy', targetId: reg.id, op: 'sma', period: 10 });
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    expect(sma.axisGroup).toBe(reg.axisGroup);
+    expect(outputAllowed(ctx(), sma.id, 'R2')).toBe(false); // unitless on a $ scale
+    expect(outputAllowed(ctx(), sma.id, 'Slope')).toBe(true); // same unit
+  });
+
+  it('a seated study with no label (persisted garbage) is refused, never kills the actor', () => {
+    const { ctx, sma } = macdWithSma();
+    const rows = ctx().rows.map((r) => ({
+      ...r,
+      configs: r.configs.map((c) => (c.id === sma.id ? ({ ...c, label: undefined } as never) : c)),
+    }));
+    const h = start(rows);
+    h.actor.send({ type: 'series.setStudyOutput', id: sma.id, output: 'Hist' });
+    expect(h.actor.getSnapshot().status).toBe('active');
+  });
+
+  it('adding a study of high/low and retuning it agree about its unit', () => {
+    const { actor, ctx, idOf } = start();
+    actor.send({ type: 'series.addStudy', targetId: idOf('close'), op: 'atr', period: 14 });
+    const atr = all(ctx).find((c) => c.derive?.op === 'atr')!;
+    expect(atr.unit).toBe('$');
+    actor.send({ type: 'series.setStudyParam', id: atr.id, name: 'period', value: 20 });
+    expect(all(ctx).find((c) => c.id === atr.id)!.unit).toBe('$');
+  });
+
   it('a study saved BARE (before picks) reads output 0, and switching writes a pick', () => {
     const band: DeriveSpec = { op: 'donchian', inputs: ['high', 'low'], params: { period: 20 } };
     const bare: DeriveSpec = { op: 'sma', inputs: [band], params: { period: 10 } };

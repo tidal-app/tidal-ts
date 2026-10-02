@@ -12,8 +12,8 @@ The output picker: a study of a multi-output study can be told which output to r
   segment follows, and everything built on the study is carried, like a param
   retune. **`outputAllowed(scope, id, output)`** is the shared gate, so a host
   can render a refused choice disabled: it refuses an output the source does
-  not declare, the one already read, and a switch whose unit would not fit
-  the shared axis the study sits on.
+  not declare, the one already read, a pair (its legs are its construction),
+  and a switch whose unit would not fit the axis the study sits on.
 - **`studyPick(spec)` / `withStudyOutput(spec, output)`** (core) read and
   rewrite which output a study reads. A study saved before 0.3.0, which nests
   its source bare, reports its first-declared output (`explicit: false`), and
@@ -23,7 +23,10 @@ The output picker: a study of a multi-output study can be told which output to r
   had no unit (no catalog entry names them), so a re-spec of a Donchian, an
   ATR band or anything built on one computed its unit as unitless against a
   seated `$`, and the unit gate refused every period change. They now read in
-  the `close`'s unit.
+  the `close`'s unit, on the add path and the re-spec path alike (an ATR was
+  seated unitless and became `$` on its first retune).
+- `readPart` steps through a pick of a study with no `period` param (a
+  MACD), so a pair over an SMA of a MACD's Line keeps its leg rows.
 
 ## 0.3.0 — 2026-09-30
 

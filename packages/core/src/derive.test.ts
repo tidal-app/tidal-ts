@@ -722,6 +722,17 @@ describe('picked outputs — which output a study of a study reads (TDL-STUDYCHA
     expect(readPart({ from: band, output: 'Middle' })!.studies).toHaveLength(1);
   });
 
+  it('readPart steps through a pick of a study with no `period` (a MACD)', () => {
+    const macd: DeriveSpec = { op: 'macd', inputs: ['close'] };
+    const leg: DeriveSpec = { op: 'sma', inputs: [{ from: macd, output: 'Line' }] };
+    const part = readPart(leg)!;
+    expect(part.metric).toBe('close');
+    expect(part.studies.map((st) => [st.op, st.output])).toEqual([
+      ['macd', 'Line'],
+      ['sma', undefined],
+    ]);
+  });
+
   it('isValidSpec refuses a pick of an output the op does not declare', () => {
     expect(isValidSpec({ op: 'sma', inputs: [{ from: DONCHIAN, output: 'Middle' }] })).toBe(true);
     expect(isValidSpec({ op: 'sma', inputs: [{ from: DONCHIAN, output: 'Nope' }] })).toBe(false);

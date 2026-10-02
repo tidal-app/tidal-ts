@@ -638,9 +638,12 @@ export function readPart(input: DeriveInput): PairPart | null {
     // which output the chain reads on from it (`BOLLINGER(20, 2) · Middle`).
     const picked = isPickedInput(cur) ? cur : undefined;
     const node = picked ? picked.from : cur;
-    if (!isSpecLike(node) || !opHasPeriod(node.op)) {
-      // A pick of an unwindowed op has no name as a part: refuse, as below.
-      if (picked) return null;
+    // A PICKED source is a study whether or not it declares a `period`: only a
+    // multi-output study can be picked from, and a MACD's knobs are
+    // `fastPeriod`/`slowPeriod`/`signalPeriod`. Requiring `period` left a pair
+    // over an SMA of a MACD's Line rendering flat (tidal #210 review).
+    if (!isSpecLike(node) || (!picked && !opHasPeriod(node.op))) {
+      if (picked) return null; // a pick of garbage: refuse, as below
       break;
     }
     const inputs = node.inputs ?? [];
@@ -1039,7 +1042,10 @@ export interface StudyPick {
  * output picker's question: the choices are `opOutputs(pick.from.op)`.
  */
 export function studyPick(spec: DeriveSpec): StudyPick | undefined {
-  if (!isSpecLike(spec)) return undefined;
+  // A PAIR is not a study: its legs may be picks (a band leg reads its
+  // Middle), but which output a leg reads is the pair's construction, and one
+  // picker over two legs would only ever reach the first.
+  if (!isSpecLike(spec) || isPairOp(spec.op)) return undefined;
   const inputs = spec.inputs ?? [];
   for (let index = 0; index < inputs.length; index++) {
     const i = inputs[index];
