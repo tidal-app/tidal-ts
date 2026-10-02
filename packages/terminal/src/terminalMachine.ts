@@ -157,12 +157,25 @@ export const PRESET_SLOTS = 5;
 export const MAX_ROWS = 3;
 
 /**
- * Whether a new study of `op` opens on a row of its own (TDL-OSCROW): it reads
- * in its own units (pond's `unit` rule — only `inherit` shares its source's
- * scale) and there is room for another row.
+ * Whether a new study of `op` on `target` opens on a row of its own
+ * (TDL-OSCROW): it reads in its own units (pond's `unit` rule — only `inherit`
+ * shares its source's scale), its target is a plain metric, and there is room
+ * for another row.
  */
-const ownsRow = (context: { rows: readonly RowState[] }, op: DeriveOp): boolean =>
-  !opSharesSourceAxis(op) && context.rows.length < MAX_ROWS;
+const ownsRow = (
+  context: { rows: readonly RowState[] },
+  target: SeriesConfig,
+  op: DeriveOp,
+): boolean =>
+  !opSharesSourceAxis(op) &&
+  // Only off a METRIC: a study of a study, or of a pair leg, stays with its
+  // chain. A chain is one pipeline the panel reads top-down within a row, and
+  // a compare side is one too; split across rows, the panel showed a middle
+  // link as the tail and a leg's oscillator fell out of its pair (tidal #212
+  // review). Its own axis still keeps it off its target's scale.
+  !target.derive &&
+  !target.group &&
+  context.rows.length < MAX_ROWS;
 
 /** Committed height (px) a freshly added row gets — a **fixed** strip, not a flex
  *  remainder row (`height: 0`). Exactly one remainder row is kept (the seed's
@@ -1430,6 +1443,16 @@ function planSplit(
  *  rather than dangle. */
 /** Every config a `group.remove` takes: both legs and everything layered on
  *  them — the same cascade a single remove does, run over the pair. */
+/** A row's configs plus every study built on them, on any row — what
+ *  `row.remove` takes away. */
+function rowDoomed(context: TerminalContext, rowId: string): Set<string> {
+  const all = flatConfigs(context.rows);
+  const doomed = new Set<string>();
+  for (const c of context.rows.find((r) => r.id === rowId)?.configs ?? [])
+    for (const id of studiesOn(all, c.id, isCatalogColumn(context))) doomed.add(id);
+  return doomed;
+}
+
 function groupDoomed(rows: readonly RowState[], groupId: string): Set<string> {
   const all = flatConfigs(rows);
   const doomed = new Set<string>();
@@ -2116,7 +2139,7 @@ export const terminalMachine = setup({
         // row it drew over the price on a second scale, which is what the
         // drawing plan measured for 63 of the addable studies. With the row cap
         // reached it overlays as before, on its own axis, and can be moved later.
-        if (ownsRow(context, event.op)) {
+        if (ownsRow(context, target, event.op)) {
           // Under the target's row — and under any own-row study of the same
           // target already there, so oscillators stack in the order added.
           const built = studiesOn(flatConfigs(context.rows), target.id, isCatalogColumn(context));
@@ -2146,8 +2169,8 @@ export const terminalMachine = setup({
       },
       rowSeq: ({ context, event }) => {
         if (event.type !== 'series.addStudy') return context.rowSeq;
-        const known = flatConfigs(context.rows).some((c) => c.id === event.targetId);
-        return known && ownsRow(context, event.op) ? context.rowSeq + 1 : context.rowSeq;
+        const target = flatConfigs(context.rows).find((c) => c.id === event.targetId);
+        return target && ownsRow(context, target, event.op) ? context.rowSeq + 1 : context.rowSeq;
       },
       // Expand the new study so its controls (period, colour) open for tuning.
       expanded: ({ context, event }) => {
@@ -2814,23 +2837,32 @@ export const terminalMachine = setup({
       },
     }),
     removeRow: assign({
-      rows: ({ context, event }) =>
-        event.type === 'row.remove' && context.rows.length > 1
-          ? // Removing the remainder row would leave the stack with none, so the
-            // first survivor takes over as the one that absorbs slack.
-            withRemainder(context.rows.filter((r) => r.id !== event.id))
-          : context.rows,
+      // Removing a row takes the studies built on its series with it, wherever
+      // they sit: an oscillator on its own row went with its metric's row
+      // before it had a row of its own, and must still (TDL-OSCROW).
+      rows: ({ context, event }) => {
+        if (event.type !== 'row.remove' || context.rows.length <= 1) return context.rows;
+        const doomed = rowDoomed(context, event.id);
+        const after = context.rows
+          .filter((r) => r.id !== event.id)
+          .map((r) => ({ ...r, configs: r.configs.filter((c) => !doomed.has(c.id)) }));
+        // Removing the remainder row would leave the stack with none, so the
+        // first survivor takes over as the one that absorbs slack.
+        return pruneEmptied(context.rows, after);
+      },
       // Removing a row drops its series for good, so a pointer into it can't return
       // (unlike a ticker switch) — clear both (mirrors removeSeries).
       selected: ({ context, event }) => {
         if (event.type !== 'row.remove' || context.rows.length <= 1) return context.selected;
-        const row = context.rows.find((r) => r.id === event.id);
-        return row?.configs.some((c) => c.id === context.selected) ? null : context.selected;
+        return context.selected != null && rowDoomed(context, event.id).has(context.selected)
+          ? null
+          : context.selected;
       },
       expanded: ({ context, event }) => {
         if (event.type !== 'row.remove' || context.rows.length <= 1) return context.expanded;
-        const row = context.rows.find((r) => r.id === event.id);
-        return row?.configs.some((c) => c.id === context.expanded) ? null : context.expanded;
+        return context.expanded != null && rowDoomed(context, event.id).has(context.expanded)
+          ? null
+          : context.expanded;
       },
     }),
   },

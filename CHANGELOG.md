@@ -2,6 +2,18 @@
 
 All packages release together on one version.
 
+## 0.5.1 — 2026-10-02
+
+- **Only a study of a plain metric opens on its own row.** A study in its own
+  units of a STUDY (an RSI of an SMA) or of a pair leg now stays on its
+  target's row, on its own axis, as before 0.5.0. A chain is one pipeline the
+  panel reads within a row, and a compare side is one too: split across rows,
+  the panel showed a middle link as the chain's tail, and a leg's oscillator
+  fell out of its pair (no pair ink, no pair eye, an unwanted mirror).
+- **`row.remove` takes the studies built on the row's series with it**, on any
+  row, so an oscillator on its own row no longer outlives its metric's row,
+  and the selection and expansion clear if they pointed at one.
+
 ## 0.5.0 — 2026-10-02
 
 A study in its own units opens on a row of its own.
