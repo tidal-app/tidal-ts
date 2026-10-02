@@ -2,6 +2,29 @@
 
 All packages release together on one version.
 
+## 0.4.0 — 2026-10-02
+
+The output picker: a study of a multi-output study can be told which output to read.
+
+- **`series.setStudyOutput { id, output }`** switches the output a study reads
+  (a MACD's `Line` to its `Hist`, a band's `Middle` to its `Lower`) in place.
+  The study keeps its identity (ink, axis, selection), the label's output
+  segment follows, and everything built on the study is carried, like a param
+  retune. **`outputAllowed(scope, id, output)`** is the shared gate, so a host
+  can render a refused choice disabled: it refuses an output the source does
+  not declare, the one already read, and a switch whose unit would not fit
+  the shared axis the study sits on.
+- **`studyPick(spec)` / `withStudyOutput(spec, output)`** (core) read and
+  rewrite which output a study reads. A study saved before 0.3.0, which nests
+  its source bare, reports its first-declared output (`explicit: false`), and
+  switching it writes a pick, so an old silent Donchian chain can be fixed
+  from the picker.
+- **Fix: a study reading high/low could not be retuned.** `open`/`high`/`low`
+  had no unit (no catalog entry names them), so a re-spec of a Donchian, an
+  ATR band or anything built on one computed its unit as unitless against a
+  seated `$`, and the unit gate refused every period change. They now read in
+  the `close`'s unit.
+
 ## 0.3.0 — 2026-09-30
 
 A study of a multi-output study now says which output it reads.

@@ -1019,6 +1019,47 @@ export function primaryOutput(op: DeriveOp): string | undefined {
   return outs[0];
 }
 
+/** Where a study's pick sits: the input's position and the output it reads. */
+export interface StudyPick {
+  /** Index into the spec's top-level `inputs`. */
+  index: number;
+  /** The multi-output spec the output belongs to. */
+  from: DeriveSpec;
+  /** The output read — a declared suffix of `from.op`. */
+  output: string;
+  /** False when the input is a BARE nested multi-output spec (a layout saved
+   *  before 0.3.0): it reads its first-declared output, said here, and
+   *  {@link withStudyOutput} turns it into a pick. */
+  explicit: boolean;
+}
+
+/**
+ * Which output of a multi-output source a study reads, or `undefined` when it
+ * reads no multi-output source (a raw column, a single-output study). The
+ * output picker's question: the choices are `opOutputs(pick.from.op)`.
+ */
+export function studyPick(spec: DeriveSpec): StudyPick | undefined {
+  if (!isSpecLike(spec)) return undefined;
+  const inputs = spec.inputs ?? [];
+  for (let index = 0; index < inputs.length; index++) {
+    const i = inputs[index];
+    if (isPickedInput(i)) return { index, from: i.from, output: i.output, explicit: true };
+    if (isSpecLike(i) && opOutputs(i.op).length > 1)
+      return { index, from: i, output: opOutputs(i.op)[0]!, explicit: false };
+  }
+  return undefined;
+}
+
+/** `spec` reading `output` of its multi-output source instead — the same spec
+ *  when it has none ({@link studyPick}). A bare nested source becomes a pick. */
+export function withStudyOutput(spec: DeriveSpec, output: string): DeriveSpec {
+  const pick = studyPick(spec);
+  if (!pick) return spec;
+  const inputs = [...spec.inputs];
+  inputs[pick.index] = { from: pick.from, output };
+  return { ...spec, inputs };
+}
+
 /**
  * What a study of `source` reads: the source itself, or — for a multi-output
  * source — its {@link primaryOutput}, PICKED. Never a bare nested multi-output

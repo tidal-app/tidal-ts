@@ -9,6 +9,7 @@ import {
   opNeedsColumns,
   opIsBand,
   opIsMulti,
+  opOutputs,
   TARGET_ROLES,
   opSharesSourceAxis,
   studyTag,
@@ -20,7 +21,9 @@ import {
   readPairParts,
   specUnit,
   studyInputOf,
+  studyPick,
   substituteInput,
+  withStudyOutput,
   type DeriveInput,
   type DeriveOp,
   type DeriveSpec,
@@ -282,6 +285,9 @@ export type TerminalEvent =
    *  whatever its op declares — a band carries `period` AND `stdDev` — so the
    *  event names the knob rather than assuming there is only one. */
   | { type: 'series.setStudyParam'; id: string; name: string; value: number }
+  /** Which output of a multi-output source a study reads (`Middle`, `Hist`) —
+   *  the output picker. `output` is one of the source op's declared suffixes. */
+  | { type: 'series.setStudyOutput'; id: string; output: string }
   /** Draw-order (z) within the series' own row. The row's config list is
    *  **front→back** — index 0 paints on top (the render reverses for
    *  `<Layers>`), so `up` moves toward the front. */
@@ -933,12 +939,22 @@ export const columnUnits = (
   const units = new Map<string, string>();
   for (const c of configs) units.set(c.column, c.unit ?? '');
   for (const e of catalog) units.set(entryColumn(e), e.unit);
+  // A bar's open/high/low are prices like its close, but no catalog entry
+  // names them — they are inputs, never series. Unknown, they read unitless,
+  // so every study reading high/low (a Donchian, an ATR band) computed its unit
+  // as '' on a RE-spec while it was seated as '$': the unit gate then refused
+  // every retune of it, silently (found building the output picker).
+  for (const part of BAR_PRICE_PARTS)
+    if (!units.has(part)) units.set(part, units.get('close') ?? '');
   return (column: string): string =>
     units.get(column) ??
     (column.startsWith(COMPARE_PREFIX)
       ? (units.get(column.slice(COMPARE_PREFIX.length)) ?? '')
       : '');
 };
+
+/** The bar columns that read in the same unit as the bar's `close`. */
+const BAR_PRICE_PARTS = ['open', 'high', 'low'] as const;
 
 const unitOfColumn = (scope: EditScope) => columnUnits(scope.catalog, flatConfigs(scope.rows));
 
@@ -1203,6 +1219,28 @@ export function respecAllowed(scope: EditScope, id: string, name: string, value:
   return next !== null && unitsStayCoherent(scope.rows, next);
 }
 
+/**
+ * Whether a study can switch to reading `output` of its multi-output source —
+ * shared by the guard and the host, so a refused choice renders disabled (the
+ * {@link respecAllowed} contract). Refused when the study reads no such source,
+ * the source does not declare `output`, it is already the one read, or the
+ * rewrite of everything built on the study would be incoherent: a spec the
+ * registry rejects, or a unit that no longer fits the shared axis it sits on
+ * (an SMA of a regression's `R2` is unitless, its source's axis is not).
+ */
+export function outputAllowed(scope: EditScope, id: string, output: string): boolean {
+  const configs = flatConfigs(scope.rows);
+  const target = configs.find((c) => c.id === id);
+  if (!target?.derive) return false;
+  const pick = studyPick(target.derive);
+  if (!pick || !opOutputs(pick.from.op).includes(output)) return false;
+  if (pick.explicit && pick.output === output) return false;
+  // Validate BEFORE naming: this runs in a guard, where a throw kills the actor.
+  if (!isValidSpec(withStudyOutput(target.derive, output))) return false;
+  const next = propagateRespec(configs, id, respecOutput(target, output), unitOfColumn(scope));
+  return next !== null && unitsStayCoherent(scope.rows, next);
+}
+
 // --- fn() = None: the LEG GROUP ----------------------------------------------
 // With no transform a pair has no single line and therefore no single ink, so
 // it stops being one config and becomes TWO — each an ordinary series with its
@@ -1426,6 +1464,24 @@ function respecParam(study: SeriesConfig, name: string, value: number): SeriesCo
     derive,
     label: `${base} · ${studyTag(derive)}`,
   };
+}
+
+/** Re-spec a study to read another output of its source, **in place** — the
+ *  identity stands, like {@link respecParam}. The label's output segment is
+ *  swapped (`… · Line · SMA(10)` → `… · Hist · SMA(10)`); a study saved before
+ *  its label named one gains it. */
+function respecOutput(study: SeriesConfig, output: string): SeriesConfig {
+  const prev = study.derive!;
+  const pick = studyPick(prev)!;
+  const derive = withStudyOutput(prev, output);
+  const tag = ` · ${studyTag(prev)}`;
+  const named = ` · ${pick.output}${tag}`;
+  const base = study.label.endsWith(named)
+    ? study.label.slice(0, -named.length)
+    : study.label.endsWith(tag)
+      ? study.label.slice(0, -tag.length)
+      : (study.family ?? study.label);
+  return { ...study, column: deriveId(derive), derive, label: `${base} · ${output}${tag}` };
 }
 
 /**
@@ -1948,6 +2004,8 @@ export const terminalMachine = setup({
     // rewritten spec and returns false rather than throwing — which also covers
     // the actor-killing hazard `canAddStudy` guards (a throwing guard kills the
     // actor, and the `>= 2` pre-check does not cover the registry's max).
+    canSetStudyOutput: ({ context, event }) =>
+      event.type === 'series.setStudyOutput' && outputAllowed(context, event.id, event.output),
     canSetStudyParam: ({ context, event }) =>
       event.type === 'series.setStudyParam' &&
       respecAllowed(context, event.id, event.name, event.value),
@@ -2110,6 +2168,14 @@ export const terminalMachine = setup({
     // no pointer moves: every config keeps its identity, so selection,
     // expansion, ink, axis membership and range pins all survive (they used to
     // be destroyed, and the dependents deleted outright).
+    setStudyOutput: assign({
+      rows: ({ context, event }) => {
+        if (event.type !== 'series.setStudyOutput') return context.rows;
+        const target = flatConfigs(context.rows).find((c) => c.id === event.id);
+        if (!target?.derive) return context.rows;
+        return applyRespec(context, event.id, respecOutput(target, event.output));
+      },
+    }),
     setStudyParam: assign({
       rows: ({ context, event }) => {
         if (event.type !== 'series.setStudyParam') return context.rows;
@@ -2738,6 +2804,7 @@ export const terminalMachine = setup({
       }),
     },
     'series.setStudyParam': { guard: 'canSetStudyParam', actions: 'setStudyParam' },
+    'series.setStudyOutput': { guard: 'canSetStudyOutput', actions: 'setStudyOutput' },
     'series.order': { actions: 'orderSeries' },
     'series.reindex': { actions: 'orderSeries' },
     'series.moveToRow': { guard: 'canMoveToRow', actions: 'moveSeriesToRow' },

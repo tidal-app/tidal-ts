@@ -59,6 +59,7 @@ export {
   axisMoveAllowed,
   linkToggleAllowed,
   respecAllowed,
+  outputAllowed,
   studyChainTail,
   studyOfferable,
   SOURCE_COLUMNS,

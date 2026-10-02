@@ -19,6 +19,8 @@ import {
   primaryOutput,
   readNumericColumn,
   studyInputOf,
+  studyPick,
+  withStudyOutput,
   type DeriveSpec,
 } from './derive.js';
 
@@ -729,6 +731,27 @@ describe('picked outputs — which output a study of a study reads (TDL-STUDYCHA
       inputs: [{ op: 'sma', inputs: [{ from: DONCHIAN, output: 'Nope' }] }],
     };
     expect(isValidSpec(deep)).toBe(false);
+  });
+
+  it('studyPick reads a pick, a BARE multi-output source as output 0, and nothing else', () => {
+    const picked: DeriveSpec = { op: 'sma', inputs: [{ from: DONCHIAN, output: 'Lower' }] };
+    expect(studyPick(picked)).toEqual({
+      index: 0,
+      from: DONCHIAN,
+      output: 'Lower',
+      explicit: true,
+    });
+    const bare: DeriveSpec = { op: 'sma', inputs: [DONCHIAN] };
+    expect(studyPick(bare)).toEqual({ index: 0, from: DONCHIAN, output: 'Upper', explicit: false });
+    expect(studyPick(SMA_X)).toBeUndefined();
+    expect(studyPick({ op: 'ema', inputs: [SMA_X] })).toBeUndefined();
+    expect(studyPick(null as unknown as DeriveSpec)).toBeUndefined();
+  });
+
+  it('withStudyOutput rewrites the pick (a bare source becomes one) and leaves others alone', () => {
+    const bare: DeriveSpec = { op: 'sma', inputs: [DONCHIAN], params: { period: 5 } };
+    expect(withStudyOutput(bare, 'Middle').inputs).toEqual([{ from: DONCHIAN, output: 'Middle' }]);
+    expect(withStudyOutput(SMA_X, 'Middle')).toBe(SMA_X);
   });
 
   it('isPickedInput is total over persisted garbage', () => {
