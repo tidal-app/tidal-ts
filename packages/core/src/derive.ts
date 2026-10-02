@@ -638,9 +638,12 @@ export function readPart(input: DeriveInput): PairPart | null {
     // which output the chain reads on from it (`BOLLINGER(20, 2) · Middle`).
     const picked = isPickedInput(cur) ? cur : undefined;
     const node = picked ? picked.from : cur;
-    if (!isSpecLike(node) || !opHasPeriod(node.op)) {
-      // A pick of an unwindowed op has no name as a part: refuse, as below.
-      if (picked) return null;
+    // A PICKED source is a study whether or not it declares a `period`: only a
+    // multi-output study can be picked from, and a MACD's knobs are
+    // `fastPeriod`/`slowPeriod`/`signalPeriod`. Requiring `period` left a pair
+    // over an SMA of a MACD's Line rendering flat (tidal #210 review).
+    if (!isSpecLike(node) || (!picked && !opHasPeriod(node.op))) {
+      if (picked) return null; // a pick of garbage: refuse, as below
       break;
     }
     const inputs = node.inputs ?? [];
@@ -1017,6 +1020,50 @@ export function primaryOutput(op: DeriveOp): string | undefined {
   if (outs.includes('Middle')) return 'Middle';
   if (outs.includes(PRIMARY_SUFFIX)) return PRIMARY_SUFFIX;
   return outs[0];
+}
+
+/** Where a study's pick sits: the input's position and the output it reads. */
+export interface StudyPick {
+  /** Index into the spec's top-level `inputs`. */
+  index: number;
+  /** The multi-output spec the output belongs to. */
+  from: DeriveSpec;
+  /** The output read — a declared suffix of `from.op`. */
+  output: string;
+  /** False when the input is a BARE nested multi-output spec (a layout saved
+   *  before 0.3.0): it reads its first-declared output, said here, and
+   *  {@link withStudyOutput} turns it into a pick. */
+  explicit: boolean;
+}
+
+/**
+ * Which output of a multi-output source a study reads, or `undefined` when it
+ * reads no multi-output source (a raw column, a single-output study). The
+ * output picker's question: the choices are `opOutputs(pick.from.op)`.
+ */
+export function studyPick(spec: DeriveSpec): StudyPick | undefined {
+  // A PAIR is not a study: its legs may be picks (a band leg reads its
+  // Middle), but which output a leg reads is the pair's construction, and one
+  // picker over two legs would only ever reach the first.
+  if (!isSpecLike(spec) || isPairOp(spec.op)) return undefined;
+  const inputs = spec.inputs ?? [];
+  for (let index = 0; index < inputs.length; index++) {
+    const i = inputs[index];
+    if (isPickedInput(i)) return { index, from: i.from, output: i.output, explicit: true };
+    if (isSpecLike(i) && opOutputs(i.op).length > 1)
+      return { index, from: i, output: opOutputs(i.op)[0]!, explicit: false };
+  }
+  return undefined;
+}
+
+/** `spec` reading `output` of its multi-output source instead — the same spec
+ *  when it has none ({@link studyPick}). A bare nested source becomes a pick. */
+export function withStudyOutput(spec: DeriveSpec, output: string): DeriveSpec {
+  const pick = studyPick(spec);
+  if (!pick) return spec;
+  const inputs = [...spec.inputs];
+  inputs[pick.index] = { from: pick.from, output };
+  return { ...spec, inputs };
 }
 
 /**
