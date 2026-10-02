@@ -1,0 +1,61 @@
+.heroBanner {
+  flex-direction: column;
+  padding: 4.5rem 0 2.5rem;
+}
+
+.heroContent {
+  align-items: center;
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+}
+
+.heroEyebrow {
+  font-family: var(--ifm-font-family-monospace);
+  font-size: 0.8rem;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--tidal-amber);
+}
+
+.heroSubtitle {
+  font-size: 1.2rem;
+  max-width: 40rem;
+  margin: 0.75rem auto 0;
+  color: var(--ifm-font-color-base);
+}
+
+.buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+  margin-top: 1.75rem;
+}
+
+.heroChart {
+  max-width: 980px;
+  width: 100%;
+  margin-top: 2.5rem;
+  text-align: left;
+}
+
+.features {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1.25rem;
+  padding: 2.5rem 0 4rem;
+}
+
+.feature {
+  color: var(--ifm-font-color-base);
+}
+
+.feature:hover {
+  text-decoration: none;
+  border-color: var(--ifm-color-primary);
+}
+
+.feature p {
+  margin: 0;
+}

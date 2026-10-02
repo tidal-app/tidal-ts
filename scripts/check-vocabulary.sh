@@ -10,14 +10,15 @@
 # finds a leak, rewrite the prose AND add the identifier here.
 set -euo pipefail
 names='spiderrock|\bwts\b|mlink|hlink|\bmars\b|\bignite\b|web-platform|srse|\bvenus\b|\bsaturn\b'
-schema='atmCen|HistoricalVolatilities|TickerHistory|LiveAtmStream|OptionRoot|\bekey\b|\bdsets?\b|nEarnCnt|expiryCount'
+schema='atmCen|HistoricalVolatilities|TickerHistory|LiveAtmStream|OptionRoot|\bekey\b|\bdsets?\b|nEarnCnt|expiryCount|SurfaceFixedTermHist|skewU1|skewD1'
 private='datasources\.md|wts-handoff|control-panel\.md|state-architecture\.md|docs/(plans|notes)/|TDL_[A-Z]+|the desk'
 pattern="$names|$schema|$private"
 # `.storybook` is in the sweep too: the workshop is published prose (a story's
 # doc block renders in Docs) and its files are as public as `src`. It was
 # outside the sweep until a review pointed out that ~45 lines of new prose
-# had landed in an ungated file (PR #9).
-if grep -rniE "$pattern" packages/*/src packages/*/.storybook packages/*/package.json README.md CHANGELOG.md CLAUDE.md test .github scripts --exclude=check-vocabulary.sh; then
+# had landed in an ungated file (PR #9). The docs site's own files (`website/`,
+# not its dependencies or build) are published the same way and swept with it.
+if grep -rniE "$pattern" packages/*/src packages/*/.storybook packages/*/package.json website/docs website/src website/docusaurus.config.ts website/sidebars.ts website/package.json README.md CHANGELOG.md CLAUDE.md test .github scripts --exclude=check-vocabulary.sh; then
   echo "vocabulary gate: the lines above identify an employer's stack" >&2
   exit 1
 fi

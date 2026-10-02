@@ -75,6 +75,13 @@ mechanical facts (params, bounds, outputs, guide levels) are read off the
 registry; the prose lives in `packages/chart/.storybook/studies/docs/`, and
 `studyDocs.test.ts` fails when a study is offered without a page.
 
+The **docs site** lives in `website/` (Docusaurus, like pond-ts.org). Its
+study pages render the same `StudyPage` the workshop does; the MDX files that
+route to them are generated, and `sitePages.test.ts` fails when they drift
+from the registry (`WRITE_SITE_PAGES=1 pnpm --filter @tidal-ts/chart test`
+rewrites them). `pnpm --filter @tidal-ts/website docs:start` serves it
+locally; the Docs workflow publishes it on each release tag.
+
 `pnpm verify` includes a **vocabulary gate**: this is a public repo, and the
 stack of the company its first consumers work for is never named in it. Say
 what the library needs; keep the measurements; drop the names.

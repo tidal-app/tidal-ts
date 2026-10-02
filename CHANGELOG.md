@@ -2,6 +2,14 @@
 
 All packages release together on one version.
 
+## Unreleased
+
+- **A docs site** (`website/`, Docusaurus, modelled on pond-ts.org): an
+  overview, getting started with a live example, a page per package, and the
+  study catalog with a live chart per study. Published to GitHub Pages with
+  Storybook under `/storybook` when a release tag is pushed. No package code
+  changes beyond one reworded comment in core.
+
 ## 0.7.0 — 2026-10-02
 
 A histogram study opens as a histogram.

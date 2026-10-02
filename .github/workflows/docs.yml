@@ -1,0 +1,63 @@
+name: Docs
+
+# Publishes the docs site (website/) with Storybook beside it under /storybook,
+# the way pond-ts.org is published: on release tags, so the live site always
+# describes the version on npm, not work in flight on main. Run it by hand
+# (workflow_dispatch) for a preview of an unreleased commit.
+#
+# Hosted on GitHub Pages. Two repo settings, once:
+#   - Settings → Pages → Source: "GitHub Actions".
+#   - Settings → Environments → github-pages → Deployment branches and tags:
+#     add a tag rule `v*`. The environment Pages creates allows only the
+#     default branch, so without the rule a release tag's deploy is refused.
+# Moving host or adding a custom domain is a change to DOCS_URL /
+# DOCS_BASE_URL below, not to the site.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Queue rather than cancel: a deploy stopped halfway can leave Pages stuck.
+concurrency:
+  group: docs-deploy
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      DOCS_URL: https://tidal-app.github.io
+      DOCS_BASE_URL: /tidal-ts/
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # The study pages render the chart from source but import @tidal-ts/core
+      # through its built package, so the packages build first.
+      - run: pnpm run build
+      - name: Build the site
+        run: pnpm --filter @tidal-ts/website docs:build
+      - name: Build Storybook into the site
+        run: pnpm --filter @tidal-ts/chart build-storybook --quiet -o "$GITHUB_WORKSPACE/website/build/storybook"
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/build
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

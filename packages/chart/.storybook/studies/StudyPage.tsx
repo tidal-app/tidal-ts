@@ -1,4 +1,4 @@
-import { useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import {
   DEMO_INSTRUMENTS,
   deriveId,
@@ -55,6 +55,9 @@ const FALL = { dark: '#e5534b', light: '#b91c1c' } as const;
 
 const PRICE_H = 260;
 const STUDY_H = 170;
+/** The chart's drawn height before it mounts, so the page does not jump. The
+ *  time axis adds a strip under the rows. */
+const chartHeight = (shares: boolean): number => PRICE_H + STUDY_H + (shares ? 20 : 30);
 
 /** The hand-declared op that reads a VARIANCE, not a price: it is drawn from
  *  the vol fixture's daily close-to-close variance instead. */
@@ -212,6 +215,10 @@ export function StudyPage({ op, scheme = 'dark' }: StudyPageProps) {
   const declared = useMemo(() => opParams(op), [op]);
   const [params, setParams] = useState<Record<string, number>>(() => defaults(op));
   const [hover, setHover] = useState<TrackerInfo | null>(null);
+  // The canvas chart draws only in a browser. A docs site renders this page on
+  // the server too, so the prose is in the HTML and the chart joins on mount.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const bars = doc?.bars ?? DEFAULT_BARS;
 
   const data = useMemo(() => {
@@ -345,7 +352,9 @@ export function StudyPage({ op, scheme = 'dark' }: StudyPageProps) {
           </div>
         ) : null}
         <div style={S.well}>
-          {chart ? (
+          {!mounted ? (
+            <div style={{ height: chartHeight(shares) }} />
+          ) : chart ? (
             <TimeSeriesChart
               rows={chart.rows}
               sources={chart.sources}

@@ -11,6 +11,11 @@
     },
     "test": {
       "dependsOn": ["^build"]
+    },
+    "@tidal-ts/chart#test": {
+      "dependsOn": ["^build"],
+      "inputs": ["$TURBO_DEFAULT$", "$TURBO_ROOT$/website/docs/studies/**"],
+      "passThroughEnv": ["WRITE_SITE_PAGES"]
     }
   }
 }

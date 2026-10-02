@@ -1,0 +1,58 @@
+{
+  "name": "@tidal-ts/website",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The tidal-ts docs site: the packages, and the study catalog with a live chart per study.",
+  "scripts": {
+    "docusaurus": "docusaurus",
+    "docs:start": "docusaurus start --port 3009",
+    "docs:build": "docusaurus build",
+    "docs:serve": "docusaurus serve",
+    "docs:clear": "docusaurus clear",
+    "docs:typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@docusaurus/core": "3.10.2",
+    "@docusaurus/faster": "3.10.2",
+    "@docusaurus/preset-classic": "3.10.2",
+    "@docusaurus/theme-common": "3.10.2",
+    "@easyops-cn/docusaurus-search-local": "^0.55.2",
+    "@fontsource/ibm-plex-mono": "^5.2.7",
+    "@fontsource/ibm-plex-sans": "^5.2.7",
+    "@mdx-js/react": "^3.0.0",
+    "@pond-ts/charts": "^0.70.0",
+    "@pond-ts/financial": "^0.70.0",
+    "@pond-ts/process": "0.70.0",
+    "@pond-ts/react": "^0.70.0",
+    "@tidal-ts/chart": "workspace:*",
+    "@tidal-ts/core": "workspace:*",
+    "clsx": "^2.0.0",
+    "pond-ts": "^0.70.0",
+    "prism-react-renderer": "^2.3.0",
+    "raw-loader": "^4.0.2",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@docusaurus/module-type-aliases": "3.10.2",
+    "@docusaurus/tsconfig": "3.10.2",
+    "@docusaurus/types": "3.10.2",
+    "@types/react": "^18.3.18",
+    "typescript": "^5.7.2"
+  },
+  "browserslist": {
+    "production": [
+      ">0.5%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 3 chrome version",
+      "last 3 firefox version",
+      "last 5 safari version"
+    ]
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

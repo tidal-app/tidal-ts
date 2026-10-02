@@ -1,7 +1,12 @@
 packages:
   - 'packages/*'
+  - 'website'
 
 # pnpm 11 blocks dependency build scripts unless listed. esbuild's postinstall
-# fetches its platform binary; nothing else here needs to run one.
+# fetches its platform binary. core-js's only prints a funding banner, and
+# @swc/core's only checks for the native binary its optional dependency
+# already installed (the docs site's bundler).
 allowBuilds:
   esbuild: true
+  core-js: false
+  '@swc/core': false

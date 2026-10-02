@@ -61,7 +61,16 @@ const firstSentence = (text: string): string => {
   return m ? m[0] : text;
 };
 
-export function StudyOverview() {
+/** Where a study's page lives. The workshop links to its own story; a docs
+ *  site passes its own route. `_top` because a story renders in an iframe. */
+const storybookHref = (title: string, op: string): string => `./?path=/story/${storyId(title, op)}`;
+
+export interface StudyOverviewProps {
+  /** The link for one study's page, from its family's story title and op. */
+  hrefFor?: (familyTitle: string, op: string) => string;
+}
+
+export function StudyOverview({ hrefFor }: StudyOverviewProps = {}) {
   const offered = studyCatalog();
   const offeredNames = new Set(offered.map((s) => s.op));
   const missing = STUDIES.filter((d) => !offeredNames.has(d.name));
@@ -92,7 +101,11 @@ export function StudyOverview() {
               const doc = STUDY_DOCS[s.op];
               return (
                 <div key={s.op} style={S.row}>
-                  <a style={S.link} href={`./?path=/story/${storyId(f.title, s.op)}`} target="_top">
+                  <a
+                    style={S.link}
+                    href={(hrefFor ?? storybookHref)(f.title, s.op)}
+                    target={hrefFor ? undefined : '_top'}
+                  >
                     {doc?.name ?? s.op}
                   </a>
                   <span style={S.muted}>{doc ? firstSentence(doc.what) : s.summary}</span>
