@@ -1023,6 +1023,10 @@ function TimeSeriesChartInner({
       if (!src) continue;
       if (c.style === 'bar') {
         const col = c.column;
+        // A column the data does not carry (a study the engine skipped, a
+        // volume study on a series with no volume) draws nothing, as it would
+        // as a line: aggregating it throws and takes the whole chart down.
+        if (!src.schema.some((sc) => sc.name === col)) continue;
         const window = windowFor(c, src);
         const grid = sessionsFor(src);
         let agg = aggregateColumn(src, col, window, reducerFor(c), grid);
@@ -1030,7 +1034,9 @@ function TimeSeriesChartInner({
         // (one fill per series; F-charts-12) — split the column into `__up`/`__dn`
         // halves and draw them as two layers. Same grid, or the halves misalign.
         if (effectiveSplit(c, settings).mode === 'split')
-          agg = splitBarColumns(agg, col, src, ohlc.has(c.source), window, grid);
+          // A study's bars rise and fall with the STUDY, never with the price
+          // candle under them: only a raw column reads the source's open/close.
+          agg = splitBarColumns(agg, col, src, ohlc.has(c.source) && !c.derive, window, grid);
         bar.set(c.id, agg);
       }
       // A candle at the data's NATIVE interval feeds the raw point-keyed series
