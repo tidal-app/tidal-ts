@@ -193,6 +193,22 @@ function withRemainder(rows: readonly RowState[]): RowState[] {
 }
 
 /**
+ * Drop every row an edit EMPTIED (the control-panel spec: no empty rows), and
+ * keep exactly one remainder row. `after` is `before` with configs taken out
+ * or moved, row for row. A row that was already empty (a fresh `row.add`)
+ * stays: the user made it to fill. At least one row always survives.
+ *
+ * Shared by every edit that takes configs off rows — remove, group remove and a
+ * cross-row move — because an oscillator on its own row (TDL-OSCROW) means
+ * one edit can empty a row other than the one it started on.
+ */
+function pruneEmptied(before: readonly RowState[], after: readonly RowState[]): RowState[] {
+  const had = new Set(before.filter((r) => r.configs.length > 0).map((r) => r.id));
+  const kept = after.filter((r) => r.configs.length > 0 || !had.has(r.id));
+  return withRemainder(kept.length > 0 ? kept : after.slice(0, 1));
+}
+
+/**
  * Config identity. A seated config's `id` is minted here and never derived from
  * what it computes: `s-3` keys selection, expansion, the chart theme, axis
  * membership and the user's overrides, and it survives every edit to the
@@ -2101,7 +2117,13 @@ export const terminalMachine = setup({
         // drawing plan measured for 63 of the addable studies. With the row cap
         // reached it overlays as before, on its own axis, and can be moved later.
         if (ownsRow(context, event.op)) {
-          const at = context.rows.findIndex((r) => r.configs.some((c) => c.id === target.id));
+          // Under the target's row — and under any own-row study of the same
+          // target already there, so oscillators stack in the order added.
+          const built = studiesOn(flatConfigs(context.rows), target.id, isCatalogColumn(context));
+          const at = context.rows.reduce(
+            (last, r, i) => (r.configs.some((c) => built.has(c.id)) ? i : last),
+            -1,
+          );
           const row: RowState = {
             id: mintRowId(context.rowSeq),
             height: NEW_ROW_HEIGHT,
@@ -2299,9 +2321,7 @@ export const terminalMachine = setup({
           ...r,
           configs: r.configs.filter((c) => !doomed.has(c.id)),
         }));
-        return mapped.some((r) => r.configs.length === 0) && mapped.length > 1
-          ? mapped.filter((r) => r.configs.length > 0)
-          : mapped;
+        return pruneEmptied(context.rows, mapped);
       },
       // The same invariant `removeSeries` states: neither pointer may point at a
       // removed series. Sibling assigners read the PRE-update context, so both
@@ -2384,17 +2404,9 @@ export const terminalMachine = setup({
             .filter((c) => !doomed.has(c.id))
             .map((c) => (c.group && orphaned.has(c.group.id) ? { ...c, group: undefined } : c)),
         }));
-        // A row this removal empties goes too (the control-panel spec: no empty
-        // rows) — keep at least one. Not only the host row: an oscillator on
-        // its own row is in the cascade, and its row must not stay behind as an
-        // empty pane (TDL-OSCROW).
-        const emptied = new Set(
-          mapped
-            .filter((r, i) => r.configs.length === 0 && context.rows[i]!.configs.length > 0)
-            .map((r) => r.id),
-        );
-        const kept = mapped.filter((r) => !emptied.has(r.id));
-        return kept.length > 0 ? withRemainder(kept) : mapped.slice(0, 1);
+        // Not only the host row: an oscillator on its own row is in the
+        // cascade, and its row must not stay behind as an empty pane.
+        return pruneEmptied(context.rows, mapped);
       },
       // Neither pointer may point at a removed series (or a cascaded dependent).
       selected: ({ context, event }) =>
@@ -2456,10 +2468,8 @@ export const terminalMachine = setup({
           if (r.id === to.id) return { ...r, configs: [...placed, ...r.configs] };
           return r;
         });
-        // An emptied source row goes away (the control-panel spec: no empty rows) —
-        // keep at least one.
-        const emptied = mapped.find((r) => r.id === from.id && r.configs.length === 0);
-        return emptied && mapped.length > 1 ? mapped.filter((r) => r.id !== from.id) : mapped;
+        // An emptied source row goes away; the remainder row is kept.
+        return pruneEmptied(context.rows, mapped);
       },
     }),
     patchSeries: assign({
@@ -2835,7 +2845,10 @@ export const terminalMachine = setup({
     palette: input.palette ?? [],
     spreadColor: input.spreadColor,
     axisRanges: {},
-    rowSeq: input.initialRows.length,
+    // Past every seeded `row-N`, not just the row count: a host re-seeds from a
+    // stored preset whose rows were minted in an earlier session, and a count
+    // would mint one of their ids again.
+    rowSeq: Math.max(input.initialRows.length, rowSeqAfter(input.initialRows)),
     cfgSeq: cfgSeqAfter(input.initialRows),
     selected: null,
     expanded: null,
