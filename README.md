@@ -68,6 +68,13 @@ fixed curve vocabulary with a hard cap, one coloured y-axis column per active
 curve, a couple of derived curves, and a control surface the pane owns. It is
 the opposite of an open-ended terminal, and it is what the chart is for.
 
+The **Studies** section is the study catalog: an overview of every study the
+menu offers, then one page per study with a live chart you can retune, what it
+measures, how traders use it, and what each setting and output means. The
+mechanical facts (params, bounds, outputs, guide levels) are read off the
+registry; the prose lives in `packages/chart/.storybook/studies/docs/`, and
+`studyDocs.test.ts` fails when a study is offered without a page.
+
 `pnpm verify` includes a **vocabulary gate**: this is a public repo, and the
 stack of the company its first consumers work for is never named in it. Say
 what the library needs; keep the measurements; drop the names.
