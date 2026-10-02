@@ -18,6 +18,7 @@ export {
   useCompareAll,
   useAddStudy,
   useSetStudyParam,
+  useSetStudyOutput,
   useOrderSeries,
   useReindexSeries,
   useMoveSeriesToRow,
