@@ -2,6 +2,26 @@
 
 All packages release together on one version.
 
+## 0.5.0 — 2026-10-02
+
+A study in its own units opens on a row of its own.
+
+- **`series.addStudy` places a study by its unit.** A study that reads in its
+  source's units (an SMA, a Bollinger band) still overlays its target. One that
+  reads in its own (an RSI, a MACD, an ATR — every op whose `unit` is not
+  `inherit`) now opens on a new row directly under its target's row, instead of
+  drawing over the target on a second scale. At `MAX_ROWS` it overlays as
+  before, on its own axis. A study of such a study (an SMA of an RSI) shares its
+  row and scale.
+- **A cross-row move leaves an own-row study where it is.** Moving the price
+  carries the studies on its row, not the RSI on the row below. Moving the RSI
+  back onto the price's row removes the row it leaves.
+- **Removal prunes every row it empties**, not only the removed series' row, so
+  removing a study whose own-row study goes with it leaves no empty pane. A
+  removal that empties the top row now hands the slack to the next row.
+- **Hiding a series hides the studies built on it on every row**, not only on
+  its own.
+
 ## 0.4.1 — 2026-10-02
 
 - **`useSetStudyOutput()`** — the React hook that sends `series.setStudyOutput`,
