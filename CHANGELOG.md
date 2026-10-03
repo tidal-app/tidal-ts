@@ -4,11 +4,11 @@ All packages release together on one version.
 
 ## Unreleased
 
-- **A docs site** (`website/`, Docusaurus, modelled on pond-ts.org): an
-  overview, getting started with a live example, a page per package, and the
-  study catalog with a live chart per study. Published to GitHub Pages with
-  Storybook under `/storybook` when a release tag is pushed. No package code
-  changes beyond one reworded comment in core.
+- **Each package has a README on npm**: what it is, the install command with
+  the pond versions it needs, a short example, and links to the docs site.
+  `homepage` now points at the package's docs page.
+- **The docs site lists the pond-ts packages tidal-ts is built on**, with
+  links to their docs, on the overview and in the sidebar.
 
 ## 0.7.0 — 2026-10-02
 
@@ -31,6 +31,11 @@ A histogram study opens as a histogram.
   throwing out of the chart, as a line already did: an Awesome Oscillator
   whose fast period is set above its slow one, or a volume study on a series
   with no volume.
+- **A docs site** (`website/`, Docusaurus, modelled on pond-ts.org): an
+  overview, getting started with a live example, a page per package, and the
+  study catalog with a live chart per study. Published to GitHub Pages with
+  Storybook under `/storybook` when a release tag is pushed. No package code
+  changes beyond one reworded comment in core.
 
 ## 0.6.0 — 2026-10-02
 

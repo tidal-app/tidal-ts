@@ -9,7 +9,7 @@
     "url": "git+https://github.com/tidal-app/tidal-ts.git",
     "directory": "packages/terminal"
   },
-  "homepage": "https://github.com/tidal-app/tidal-ts#readme",
+  "homepage": "https://tidal-app.github.io/tidal-ts/docs/packages/terminal/",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

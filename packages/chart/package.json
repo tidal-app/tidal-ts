@@ -9,7 +9,7 @@
     "url": "git+https://github.com/tidal-app/tidal-ts.git",
     "directory": "packages/chart"
   },
-  "homepage": "https://github.com/tidal-app/tidal-ts#readme",
+  "homepage": "https://tidal-app.github.io/tidal-ts/docs/packages/chart/",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
