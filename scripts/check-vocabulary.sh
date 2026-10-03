@@ -18,7 +18,7 @@ pattern="$names|$schema|$private"
 # outside the sweep until a review pointed out that ~45 lines of new prose
 # had landed in an ungated file (PR #9). The docs site's own files (`website/`,
 # not its dependencies or build) are published the same way and swept with it.
-if grep -rniE "$pattern" packages/*/src packages/*/.storybook packages/*/package.json website/docs website/src website/docusaurus.config.ts website/sidebars.ts website/package.json README.md CHANGELOG.md CLAUDE.md test .github scripts --exclude=check-vocabulary.sh; then
+if grep -rniE "$pattern" packages/*/src packages/*/.storybook packages/*/package.json packages/*/README.md website/docs website/src website/docusaurus.config.ts website/sidebars.ts website/package.json README.md CHANGELOG.md CLAUDE.md test .github scripts --exclude=check-vocabulary.sh; then
   echo "vocabulary gate: the lines above identify an employer's stack" >&2
   exit 1
 fi

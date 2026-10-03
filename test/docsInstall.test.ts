@@ -3,36 +3,46 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * The docs site's install command names the pond versions, because a bare
+ * The install commands in the docs name the pond versions, because a bare
  * `npm install pond-ts` takes the newest release and npm then refuses it
- * against this family's older peer range. So the command has to move with the
- * peers: this fails when a release changes a pond peer and the docs still name
- * the old one.
+ * against this family's older peer range. So each command has to move with
+ * the peers: this fails when a release changes a pond peer and a page still
+ * names the old one, or stops naming one the package needs.
  */
 const ROOT = join(__dirname, '..');
-const page = readFileSync(join(ROOT, 'website/docs/getting-started.mdx'), 'utf8');
-const peers: Record<string, string> = {};
-for (const p of ['core', 'chart']) {
-  const pkg = JSON.parse(readFileSync(join(ROOT, `packages/${p}/package.json`), 'utf8'));
-  Object.assign(peers, pkg.peerDependencies);
-}
-const pond = Object.entries(peers).filter(([name]) => /^(pond-ts|@pond-ts\/)/.test(name));
-/** `{ name: spec }` for every `name@spec` the page's npm commands install. */
-const named = Object.fromEntries(
-  [...page.matchAll(/(?:^|\s)((?:@[\w-]+\/)?[\w-]+)@([~^]?[\d.]+)/gm)].map((m) => [m[1]!, m[2]!]),
-);
+const read = (path: string) => readFileSync(join(ROOT, path), 'utf8');
+const pondPeers = (...pkgs: string[]): [string, string][] => {
+  const peers: Record<string, string> = {};
+  for (const p of pkgs)
+    Object.assign(peers, JSON.parse(read(`packages/${p}/package.json`)).peerDependencies);
+  return Object.entries(peers).filter(([name]) => /^(pond-ts|@pond-ts\/)/.test(name));
+};
 
-describe('the getting started install command', () => {
+/** Each page, and the packages whose pond peers its install command must name. */
+const PAGES: [string, string[]][] = [
+  ['website/docs/getting-started.mdx', ['core', 'chart']],
+  ['packages/core/README.md', ['core']],
+  ['packages/chart/README.md', ['core', 'chart']],
+];
+
+/** `^0.70.0` on a 0.x line means 0.70.x, which `~0.70.0` installs; an exact
+ *  peer must be installed exactly. */
+const installSpec = (range: string) => (range.startsWith('^0.') ? `~${range.slice(1)}` : range);
+
+describe.each(PAGES)('the install command in %s', (path, pkgs) => {
+  const named = Object.fromEntries(
+    [...read(path).matchAll(/(?:^|\s)((?:@[\w-]+\/)?[\w-]+)@([~^]?[\d.]+)/gm)].map((m) => [
+      m[1]!,
+      m[2]!,
+    ]),
+  );
+  const peers = pondPeers(...pkgs);
+
   it('reads the peers (the test is not vacuous)', () => {
-    expect(pond.length).toBeGreaterThan(3);
+    expect(peers.length).toBeGreaterThan(1);
   });
 
-  it.each(pond)('names %s at the version the packages ask for', (name, range) => {
-    const spec = named[name];
-    expect(spec, `${name} is not named in the install command`).toBeDefined();
-    // `^0.70.0` on a 0.x line means 0.70.x, which `~0.70.0` installs; an exact
-    // peer must be installed exactly.
-    const expected = range.startsWith('^0.') ? `~${range.slice(1)}` : range;
-    expect(spec).toBe(expected);
+  it.each(peers)('names %s at the version the packages ask for', (name, range) => {
+    expect(named[name], `${name} is not named in the install command`).toBe(installSpec(range));
   });
 });

@@ -25,6 +25,21 @@ version number.
 
 The dependency runs one way: `terminal` uses `chart`, `chart` uses `core`.
 
+## Built on pond-ts
+
+tidal-ts is a layer over these [pond-ts](https://pond-ts.org) packages. They are
+peer dependencies, so your app installs them itself (see
+[Getting started](getting-started.mdx) for the versions).
+
+| Package                                                                  | What tidal-ts uses it for                                                                     | Docs                                                     |
+| ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| [`pond-ts`](https://www.npmjs.com/package/pond-ts)                       | The `TimeSeries` every chart and study reads: typed columns, windows, alignment, aggregation. | [pond-ts (core)](https://pond-ts.org/docs/pond-ts)       |
+| [`@pond-ts/financial`](https://www.npmjs.com/package/@pond-ts/financial) | The technical studies themselves, trading calendars and session-aligned bars.                 | [@pond-ts/financial](https://pond-ts.org/docs/financial) |
+| [`@pond-ts/charts`](https://www.npmjs.com/package/@pond-ts/charts)       | The canvas drawing: candles, lines, bands, bars, axes, cursors and annotations.               | [@pond-ts/charts](https://pond-ts.org/docs/charts)       |
+
+`@pond-ts/process` (runs studies as content-addressed specs) and
+`@pond-ts/react` (React hooks for live series) are peers too.
+
 ## How the pieces fit
 
 1. **Your app fetches the data.** tidal-ts never makes a network call. You turn

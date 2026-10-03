@@ -16,6 +16,17 @@ const sidebars: SidebarsConfig = {
       items: ['packages/core', 'packages/chart', 'packages/terminal'],
     },
     {
+      // The pond-ts packages tidal-ts is built on, on pond-ts's own site.
+      type: 'category',
+      label: 'Built on pond-ts',
+      collapsed: false,
+      items: [
+        { type: 'link', label: 'pond-ts (core)', href: 'https://pond-ts.org/docs/pond-ts' },
+        { type: 'link', label: '@pond-ts/financial', href: 'https://pond-ts.org/docs/financial' },
+        { type: 'link', label: '@pond-ts/charts', href: 'https://pond-ts.org/docs/charts' },
+      ],
+    },
+    {
       type: 'category',
       label: 'Study catalog',
       collapsed: false,
