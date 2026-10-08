@@ -64,7 +64,10 @@ prepareChart(
     vol: {
       series: dailyVol,
       compare: dailyVolOfOther,
-      hold: { grid: minuteBars.keyColumn().begin, grainMs: 86_400_000 },
+      hold: {
+        grid: minuteBars.keyColumn().begin.subarray(0, minuteBars.length),
+        grainMs: 86_400_000,
+      },
     },
   },
   rows,
@@ -75,6 +78,13 @@ Studies and the comparison join run on the daily rows, so a 20-bar average is
 20 days. The result is then held across the grid: each row holds from its key
 for `grainMs`, and a day with no row stays a gap. Name the same source in
 `coarseSources` so the chart does not break the held line at every session.
+
+- Pass enough daily history for the longest study to warm up before the grid
+  starts. Rows before the grid cost nothing in the result.
+- The comparison joins on the daily keys, so key both series the same way. A
+  day the source has no row for is a gap in the comparison too.
+- A day that arrives twice counts once: the later row replaces the earlier one
+  before any study reads it.
 
 ## Drawing: `TimeSeriesChart`
 

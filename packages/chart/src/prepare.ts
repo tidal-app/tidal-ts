@@ -55,11 +55,26 @@ export interface SourceInput {
  * grain is ~250 rows a year where the same join after the hold is ~100,000.
  *
  * A host passes the source and its comparison **unheld**. The chart's
- * `coarseSources` names the same keys, for drawing.
+ * `coarseSources` names the same keys, for drawing. Four things follow:
+ *
+ * - **A restated row wins before anything reads it.** Rows sharing a key are
+ *   reduced to the last one before the join and the studies, so a study never
+ *   counts a restatement as an extra bar.
+ * - **The comparison joins on the coarse keys**, exactly as it does unheld: a
+ *   day the source has no row for is a gap in the comparison too, and a
+ *   comparison keyed at another time of day (04:00 against 00:00) matches
+ *   nothing. Pass both at the same grain, keyed the same way.
+ * - **Warm-up comes from the coarse rows.** A 20-day study needs 20 coarse
+ *   rows before the grid starts; rows before the grid cost nothing in the
+ *   result. Pass the source with the look-back its longest study needs.
+ * - **The hold throws** on a value column it cannot carry (anything but
+ *   `number` and `string`), where a study that cannot fold is skipped. No
+ *   study emits such a column today.
  */
 export interface SourceHold {
   /** The axis's timestamps, ascending: the fine source's keys.
-   *  `series.keyColumn().begin` hands them over without a copy. */
+   *  `series.keyColumn().begin.subarray(0, series.length)` hands them over
+   *  without a copy (a key buffer may be longer than its series). */
   grid: ArrayLike<number>;
   /** The coarse source's bar length in ms. A row holds from its key for this
    *  long, or until the next row starts; past that a grid point is a gap. */
@@ -86,6 +101,16 @@ export interface SourceFacts {
   /** Per source: the last bar, as a plain row. Absent for an empty series. */
   last: Record<string, Readonly<Record<string, number>>>;
 }
+
+/** The series with one row per key, the last of each run: a restatement
+ *  replaces the row before it. The key scan is cheap, so a series without
+ *  duplicates, which is nearly all of them, is returned as it is. */
+const lastPerKey = (series: ChartSeries): ChartSeries => {
+  const keys = (series.keyColumn() as unknown as { begin: Float64Array }).begin;
+  for (let i = 1; i < series.length; i += 1)
+    if (keys[i] === keys[i - 1]) return series.dedupe({ keep: 'last' }) as unknown as ChartSeries;
+  return series;
+};
 
 const specsBySource = (configs: readonly SeriesConfig[]): Record<string, DeriveSpec[]> => {
   const m: Record<string, DeriveSpec[]> = {};
@@ -147,15 +172,19 @@ export function foldSources(
   const out: Record<string, ChartSeries> = {};
   for (const [key, input] of Object.entries(inputs)) {
     const mine = specs[key] ?? [];
-    let series = input.series;
+    // A coarse source is folded before it is held, so a restated row has to go
+    // first, or the join pairs it with nothing and a study counts it as a bar
+    // (the hold alone would only pick the later row after both had happened).
+    let series = input.hold ? lastPerKey(input.series) : input.series;
+    const compare = input.hold && input.compare ? lastPerKey(input.compare) : input.compare;
     // A compare-bound leg needs the compare entity's columns on the PRIMARY
     // series before the fold — a left exact-key join, every conflicting column
     // prefixed. Only when asked and the compare series exists; otherwise the
     // fold's own skip leaves the spread as a gap (compare off ⇒ not drawn).
     // Rename-then-join lives in core (`joinUnderPrefix`; F-charts-14 for why
     // not the library's `onConflict: 'prefix'`).
-    if (input.compare && (rawCompare.has(key) || mine.some(usesCompare)))
-      series = joinUnderPrefix(series, input.compare);
+    if (compare && (rawCompare.has(key) || mine.some(usesCompare)))
+      series = joinUnderPrefix(series, compare);
     const folded = applyDerived(series, mine);
     out[key] = input.hold ? holdAcrossGrid(folded, input.hold.grid, input.hold.grainMs) : folded;
   }

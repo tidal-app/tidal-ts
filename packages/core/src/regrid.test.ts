@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { TimeSeries } from 'pond-ts';
+import { joinUnderPrefix } from './join.js';
 import { holdAcrossGrid, holdVolAcrossGrid } from './regrid.js';
 import { buildVolSeries, VOL_SCHEMA } from './vol.js';
 
@@ -158,8 +159,14 @@ describe('holdAcrossGrid', () => {
   ];
   const out = holdAcrossGrid(folded, grid, DAY);
 
-  it('keeps every column, not just the vol schema, and the schema as it was', () => {
-    expect(out.schema).toEqual(folded.schema);
+  it('keeps every column, not just the vol schema, each one optional', () => {
+    // Optional because the hold makes gaps: `iv21` was declared required, and a
+    // required column with a gap would be refused by pond's row and JSON inputs.
+    expect(out.schema).toEqual([
+      folded.schema[0],
+      ...folded.schema.slice(1).map((c) => ({ ...c, required: false })),
+    ]);
+    expect(() => TimeSeries.fromJSON(out.toJSON())).not.toThrow();
     expect(at(out, 'iv21')).toEqual([23, 23, 25, undefined, 27]);
     expect(at(out, 'cmp_iv21')).toEqual([31, 31, undefined, undefined, 33]);
     expect(at(out, 'p1:sma(iv21;period=2)')).toEqual([undefined, undefined, 24, undefined, 26]);
@@ -209,8 +216,46 @@ describe('holdAcrossGrid', () => {
     expect(at(holdAcrossGrid(restated, [min('2026-05-18', 14)], DAY), 'v')).toEqual([24.5]);
   });
 
-  it('is a no-op with nothing to hold onto', () => {
-    expect(holdAcrossGrid(folded, [], DAY)).toBe(folded);
+  it('always lands on the grid: an empty grid is empty, an empty series is all gaps', () => {
+    // Never the coarse series handed back: its midnight keys would reach the axis.
+    const none = holdAcrossGrid(folded, [], DAY);
+    expect(none.length).toBe(0);
+    expect(none.schema.map((c) => c.name)).toEqual(folded.schema.map((c) => c.name));
+    const nothing = holdAcrossGrid(folded.slice(0, 0), grid, DAY);
+    expect(at(nothing, 'iv21')).toEqual(grid.map(() => undefined));
+  });
+
+  it('reads a missing cell as a gap, not as the raw buffer’s 0', () => {
+    // An unmatched row of a join stores 0 in the column's buffer and marks it
+    // missing only in the validity bits, so a hold reading the raw buffer would
+    // invent a 0.
+    const other = TimeSeries.fromColumns({
+      name: 'cmp',
+      schema: [
+        { name: 'time', kind: 'time' },
+        { name: 'iv21', kind: 'number' },
+      ] as const,
+      columns: { time: [d('2026-05-18')], iv21: [31] },
+    });
+    const joined = joinUnderPrefix(
+      folded.select('iv21') as unknown as Parameters<typeof joinUnderPrefix>[0],
+      other as unknown as Parameters<typeof joinUnderPrefix>[1],
+    );
+    expect(at(holdAcrossGrid(joined, grid, DAY), 'cmp_iv21')).toEqual([
+      31,
+      31,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+  });
+
+  it('refuses a grain or a grid it cannot use', () => {
+    expect(() => holdAcrossGrid(folded, grid, 0)).toThrow(/grainMs/);
+    expect(() => holdAcrossGrid(folded, grid, NaN)).toThrow(/grainMs/);
+    expect(() => holdAcrossGrid(folded, [grid[1]!, grid[0]!], DAY)).toThrow(/ascending/);
+    // `Infinity` is a plain as-of hold: the missing day carries the day before.
+    expect(at(holdAcrossGrid(folded, grid, Infinity), 'iv21')).toEqual([23, 23, 25, 25, 27]);
   });
 
   it('refuses what it cannot hold rather than dropping it', () => {

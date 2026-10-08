@@ -1,4 +1,10 @@
-import { TimeSeries, type SeriesSchema } from 'pond-ts';
+import {
+  TimeSeries,
+  type ColumnDef,
+  type SeriesSchema,
+  type ValueColumn,
+  type ValueColumnsForSchema,
+} from 'pond-ts';
 import { buildVolSeries, VOL_SCHEMA, type VolSeries } from './vol.js';
 
 /**
@@ -35,6 +41,30 @@ const dayOf = (t: number): number => Math.floor(t / DAY_MS) * DAY_MS;
 /** The structural column read the hold needs, in the erased schema. */
 type HeldColumn = { at(i: number): unknown };
 
+type OptionalColumn<C extends ValueColumn> =
+  C extends ColumnDef<infer N, infer K> ? ColumnDef<N, K> & { readonly required: false } : never;
+type OptionalColumns<Cs extends readonly ValueColumn[]> = number extends Cs['length']
+  ? OptionalColumn<Cs[number]>[]
+  : Cs extends readonly [infer H, ...infer T]
+    ? H extends ValueColumn
+      ? T extends readonly ValueColumn[]
+        ? [OptionalColumn<H>, ...OptionalColumns<T>]
+        : []
+      : []
+    : [];
+
+/**
+ * The schema {@link holdAcrossGrid} returns: the input's, with every value
+ * column optional. A hold makes gaps by design (a day with no row), so a column
+ * declared required would be lying, and pond's row and JSON inputs would refuse
+ * the series. pond's own `join` and `align` mark their output columns optional
+ * for the same reason.
+ */
+export type HeldSchema<S extends SeriesSchema> = readonly [
+  S[0],
+  ...OptionalColumns<ValueColumnsForSchema<S>>,
+];
+
 /**
  * Re-key `coarse` onto `grid`, holding each row across the grid points inside
  * its own bar. **Every column comes through**, whatever the schema: the vol
@@ -52,9 +82,11 @@ type HeldColumn = { at(i: number): unknown };
  * So a grid point takes the **last row at or before it**, provided it is still
  * inside that row's bar; past the bar it is a gap. That makes three promises:
  *
- * - **No look-ahead.** A grid point never reads a bar that starts after it,
- *   whatever the coarse bars' phase. (Flooring both sides to a multiple of
- *   `grainMs` would break this for an hourly bar that starts at :30.)
+ * - **A grid point never reads a bar that starts after it**, whatever the
+ *   coarse bars' phase. (Flooring both sides to a multiple of `grainMs` would
+ *   hand 14:10 the hourly bar that opens at 14:30.) It reads a bar from the
+ *   bar's start, so a daily value keyed at midnight is visible from that day's
+ *   open, as it is on a daily chart.
  * - **A gap stays a gap.** A day the coarse series has no row for is `NaN`
  *   (`undefined` for a string column) across that day, not the day before's
  *   value carried on. "Nothing published for this session" is not "the same
@@ -62,23 +94,24 @@ type HeldColumn = { at(i: number): unknown };
  * - **A restatement wins.** Rows sharing a key: the later one holds.
  *
  * It assumes the coarse keys mark the **start** of each bar, which is how a
- * daily series keyed at midnight reads.
+ * daily series keyed at midnight reads. `grainMs` may be larger than a bar (a
+ * calendar month, a day that is 23 hours long): the next row still ends the
+ * hold. `Infinity` makes it a plain as-of hold, with no gaps.
  *
- * `grid` must be ascending — a series' own keys are; `series.keyColumn().begin`
- * hands them over without a copy. The coarse series must be keyed by `time`,
- * and its value columns must be `number` or `string` (what
- * `TimeSeries.fromColumns` can take back); anything else throws, naming the
+ * The result has exactly one row per grid point: an empty grid gives an empty
+ * series, and an empty coarse series gives all gaps. Value columns come back
+ * optional ({@link HeldSchema}).
+ *
+ * `grid` must be ascending — a series' own keys are. The coarse series must be
+ * keyed by `time`, and its value columns must be `number` or `string` (what
+ * `TimeSeries.fromColumns` can take back). Anything else throws, naming the
  * column, rather than dropping it.
- *
- * Returns `coarse` unchanged when there is nothing to hold onto: an empty grid
- * or an empty series.
  */
 export function holdAcrossGrid<S extends SeriesSchema>(
   coarse: TimeSeries<S>,
   grid: ArrayLike<number>,
   grainMs: number,
-): TimeSeries<S> {
-  if (grid.length === 0 || coarse.length === 0) return coarse;
+): TimeSeries<HeldSchema<S>> {
   const [keySpec, ...valueSpecs] = coarse.schema as unknown as readonly {
     name: string;
     kind: string;
@@ -87,16 +120,26 @@ export function holdAcrossGrid<S extends SeriesSchema>(
     throw new Error(
       `holdAcrossGrid: "${coarse.name}" is keyed by ${keySpec!.kind}; only a time key can be held`,
     );
+  if (!(grainMs > 0))
+    throw new Error(`holdAcrossGrid: grainMs must be a positive number of ms, not ${grainMs}`);
 
   // One walk of both key buffers: for each grid point, the source row it holds
   // (`-1` for a gap). Shared by every column below, so the per-column work is a
-  // plain gather.
+  // plain gather. `coarse.length`, not the buffer's: a key buffer may be longer
+  // than the series it belongs to.
   const keys = (coarse.keyColumn() as unknown as { begin: Float64Array }).begin;
+  const n = coarse.length;
   const rows = new Int32Array(grid.length);
   let j = -1;
+  let prev = -Infinity;
   for (let i = 0; i < grid.length; i += 1) {
     const t = grid[i]!;
-    while (j + 1 < keys.length && keys[j + 1]! <= t) j += 1;
+    if (!(t >= prev))
+      throw new Error(
+        `holdAcrossGrid: the grid must be ascending; point ${i} (${t}) follows ${prev}`,
+      );
+    prev = t;
+    while (j + 1 < n && keys[j + 1]! <= t) j += 1;
     rows[i] = j >= 0 && t < keys[j]! + grainMs ? j : -1;
   }
 
@@ -109,8 +152,8 @@ export function holdAcrossGrid<S extends SeriesSchema>(
       // Through `at`, not `toFloat64Array()`: the raw buffer does not mark a
       // missing cell (a join's unmatched row reads 0 there). The coarse side is
       // the short one, so this is a few hundred reads.
-      const values = new Float64Array(coarse.length);
-      for (let r = 0; r < coarse.length; r += 1) {
+      const values = new Float64Array(n);
+      for (let r = 0; r < n; r += 1) {
         const v = src.at(r);
         values[r] = typeof v === 'number' ? v : NaN;
       }
@@ -134,11 +177,12 @@ export function holdAcrossGrid<S extends SeriesSchema>(
     }
   }
   type FromColumnsInput = Parameters<typeof TimeSeries.fromColumns>[0];
+  const schema = [keySpec, ...valueSpecs.map((c) => ({ ...c, required: false }))];
   return TimeSeries.fromColumns({
     name: coarse.name,
-    schema: coarse.schema as unknown as FromColumnsInput['schema'],
+    schema: schema as unknown as FromColumnsInput['schema'],
     columns: columns as unknown as FromColumnsInput['columns'],
-  }) as unknown as TimeSeries<S>;
+  }) as unknown as TimeSeries<HeldSchema<S>>;
 }
 
 /**

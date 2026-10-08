@@ -242,7 +242,70 @@ describe('a coarse source folds at its own grain, then holds across the axis', (
     expect(carries(sourceFacts({ vol: out }), mirror)).toBe(true);
   });
 
-  it('the hold changes no fold key: it is a fact of the inputs, not of the configs', () => {
-    expect(foldKey([study, mirror])).toBe(foldKey([mirror, study]));
+  // Four sessions, one grid point each, for the edge cases below.
+  const four = (name: string, days: number[], values: number[]): ChartSeries =>
+    TimeSeries.fromColumns({
+      name,
+      schema: [
+        { name: 'time', kind: 'time' },
+        { name: 'iv21', kind: 'number' },
+      ] as const,
+      columns: { time: days.map((d) => day0 + d * DAY), iv21: values },
+    }) as unknown as ChartSeries;
+  const noon = Float64Array.from([0, 1, 2, 3], (d) => day0 + d * DAY + 12 * 3_600_000);
+  const sma2: DeriveSpec = { op: 'sma', inputs: ['iv21'], params: { period: 2 } };
+  const edge = (series: ChartSeries, compare: ChartSeries) =>
+    foldSources({ vol: { series, compare, hold: { grid: noon, grainMs: DAY } } }, [
+      cfg({ id: 's-2', source: 'vol', column: deriveId(sma2), derive: sma2 }),
+      mirror,
+    ]).vol!;
+  const cmp4 = four('cmp', [0, 1, 2, 3], [10, 20, 30, 40]);
+
+  it('a restated row replaces the one before it, before the join and the studies read it', () => {
+    // Day 1 arrives twice. Joined as it is, the second copy pairs with nothing
+    // (a gap in the comparison for the whole day) and the study counts it as a
+    // bar of its own (2.25 where the day's average is 1.75).
+    const restated = four('vol', [0, 1, 1, 2, 3], [1, 2, 2.5, 3, 4]);
+    const held = edge(restated, cmp4);
+    expect(read(held, 'iv21')).toEqual([1, 2.5, 3, 4]);
+    expect(read(held, 'cmp_iv21')).toEqual([10, 20, 30, 40]);
+    expect(read(held, deriveId(sma2))).toEqual([NaN, 1.75, 2.75, 3.5]);
+    // The same on the comparison's side: its later row is the one joined.
+    const cmpRestated = four('cmp', [0, 1, 1, 2, 3], [10, 20, 25, 30, 40]);
+    expect(read(edge(four('vol', [0, 1, 2, 3], [1, 2, 3, 4]), cmpRestated), 'cmp_iv21')).toEqual([
+      10, 25, 30, 40,
+    ]);
+  });
+
+  it('the comparison joins on the coarse keys, as it does unheld', () => {
+    // A day the source lacks is a gap in the comparison too.
+    const missing = four('vol', [0, 2, 3], [1, 3, 4]);
+    expect(read(edge(missing, cmp4), 'cmp_iv21')).toEqual([10, NaN, 30, 40]);
+    // A comparison keyed at another time of day matches nothing.
+    const at4 = TimeSeries.fromColumns({
+      name: 'cmp',
+      schema: [
+        { name: 'time', kind: 'time' },
+        { name: 'iv21', kind: 'number' },
+      ] as const,
+      columns: {
+        time: [0, 1, 2, 3].map((d) => day0 + d * DAY + 4 * 3_600_000),
+        iv21: [1, 2, 3, 4],
+      },
+    }) as unknown as ChartSeries;
+    expect(read(edge(four('vol', [0, 1, 2, 3], [1, 2, 3, 4]), at4), 'cmp_iv21')).toEqual([
+      NaN,
+      NaN,
+      NaN,
+      NaN,
+    ]);
+  });
+
+  it('an empty grid gives an empty source, never the coarse keys on the axis', () => {
+    const empty = foldSources(
+      { vol: { series: vol, hold: { grid: new Float64Array(0), grainMs: DAY } } },
+      [study],
+    ).vol!;
+    expect(empty.length).toBe(0);
   });
 });
