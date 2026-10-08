@@ -1,6 +1,6 @@
 {
   "name": "@tidal-ts/core",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": false,
   "description": "Financial time-series vocabulary on pond-ts: the study/derive seam, the vol schema, bar windows, the columnar adapter and session helpers.",
   "license": "MIT",
@@ -37,14 +37,14 @@
     "access": "public"
   },
   "peerDependencies": {
-    "@pond-ts/financial": "^0.70.0",
-    "@pond-ts/process": "0.70.0",
-    "pond-ts": "^0.70.0"
+    "@pond-ts/financial": "^0.72.0",
+    "@pond-ts/process": "0.72.0",
+    "pond-ts": "^0.72.0"
   },
   "devDependencies": {
-    "@pond-ts/financial": "^0.70.0",
-    "@pond-ts/process": "0.70.0",
-    "pond-ts": "^0.70.0",
+    "@pond-ts/financial": "^0.72.0",
+    "@pond-ts/process": "0.72.0",
+    "pond-ts": "^0.72.0",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
   }

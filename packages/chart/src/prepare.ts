@@ -1,4 +1,10 @@
-import { applyDerived, COMPARE_PREFIX, joinUnderPrefix, usesCompare } from '@tidal-ts/core';
+import {
+  applyDerived,
+  COMPARE_PREFIX,
+  holdAcrossGrid,
+  joinUnderPrefix,
+  usesCompare,
+} from '@tidal-ts/core';
 import type { DeriveSpec } from '@tidal-ts/core';
 import { configColumns, type SeriesConfig } from './series.js';
 import type { ChartSeries } from './types.js';
@@ -14,7 +20,9 @@ import { finiteColumns, lastRow } from './seriesFacts.js';
  *
  * 1. {@link foldSources} — join the comparison series under the compare prefix
  *    where a config asks for it, then fold every study spec onto its source so
- *    the derived columns exist before the chart reads them.
+ *    the derived columns exist before the chart reads them. A source coarser
+ *    than the axis is folded at its own grain and then held across the axis
+ *    ({@link SourceHold}).
  * 2. {@link sourceFacts} — read, columnar, which columns actually carry data
  *    and what the latest bar holds.
  * 3. {@link assembleRows} — per row, the configs the data can honour (plus the
@@ -30,6 +38,47 @@ import { finiteColumns, lastRow } from './seriesFacts.js';
 export interface SourceInput {
   series: ChartSeries;
   compare?: ChartSeries | null;
+  /** Set when `series` (and `compare`) are coarser than the axis: a daily
+   *  curve on an intraday chart. Pass them at their own grain. */
+  hold?: SourceHold;
+}
+
+/**
+ * How a source **coarser than the axis** meets it: a daily curve on a
+ * one-minute chart.
+ *
+ * The fold runs at the source's own grain, and its result (the raw columns,
+ * the joined comparison's, every study's) is then held across `grid`
+ * (`holdAcrossGrid`). The order is the point. A study of a daily series is a
+ * study of days: a 20-bar average of the curve held across minutes would be a
+ * 20-minute window over one flat day. And a comparison joined at the source's
+ * grain is ~250 rows a year where the same join after the hold is ~100,000.
+ *
+ * A host passes the source and its comparison **unheld**. The chart's
+ * `coarseSources` names the same keys, for drawing. Four things follow:
+ *
+ * - **A restated row wins before anything reads it.** Rows sharing a key are
+ *   reduced to the last one before the join and the studies, so a study never
+ *   counts a restatement as an extra bar.
+ * - **The comparison joins on the coarse keys**, exactly as it does unheld: a
+ *   day the source has no row for is a gap in the comparison too, and a
+ *   comparison keyed at another time of day (04:00 against 00:00) matches
+ *   nothing. Pass both at the same grain, keyed the same way.
+ * - **Warm-up comes from the coarse rows.** A 20-day study needs 20 coarse
+ *   rows before the grid starts; rows before the grid cost nothing in the
+ *   result. Pass the source with the look-back its longest study needs.
+ * - **The hold throws** on a value column it cannot carry (anything but
+ *   `number` and `string`), where a study that cannot fold is skipped. No
+ *   study emits such a column today.
+ */
+export interface SourceHold {
+  /** The axis's timestamps, ascending: the fine source's keys.
+   *  `series.keyColumn().begin.subarray(0, series.length)` hands them over
+   *  without a copy (a key buffer may be longer than its series). */
+  grid: ArrayLike<number>;
+  /** The coarse source's bar length in ms. A row holds from its key for this
+   *  long, or until the next row starts; past that a grid point is a gap. */
+  grainMs: number;
 }
 export type SourceInputs = Record<string, SourceInput>;
 
@@ -52,6 +101,16 @@ export interface SourceFacts {
   /** Per source: the last bar, as a plain row. Absent for an empty series. */
   last: Record<string, Readonly<Record<string, number>>>;
 }
+
+/** The series with one row per key, the last of each run: a restatement
+ *  replaces the row before it. The key scan is cheap, so a series without
+ *  duplicates, which is nearly all of them, is returned as it is. */
+const lastPerKey = (series: ChartSeries): ChartSeries => {
+  const keys = (series.keyColumn() as unknown as { begin: Float64Array }).begin;
+  for (let i = 1; i < series.length; i += 1)
+    if (keys[i] === keys[i - 1]) return series.dedupe({ keep: 'last' }) as unknown as ChartSeries;
+  return series;
+};
 
 const specsBySource = (configs: readonly SeriesConfig[]): Record<string, DeriveSpec[]> => {
   const m: Record<string, DeriveSpec[]> = {};
@@ -95,7 +154,8 @@ export function foldKey(configs: readonly SeriesConfig[]): string {
 /**
  * The fold: each source, joined with its comparison under the compare prefix
  * when any config on it asks (a compare-bound spec, or a raw compare leg), then
- * every study spec on it applied so the derived columns exist. A spec whose
+ * every study spec on it applied so the derived columns exist, then, for a
+ * source with a {@link SourceHold}, held across the axis. A spec whose
  * inputs are missing is skipped by the engine and simply yields no column — the
  * chart's column-absence handling is the render half of that contract, and
  * {@link assembleRows} keeps the config listed so the user can still remove it.
@@ -112,16 +172,21 @@ export function foldSources(
   const out: Record<string, ChartSeries> = {};
   for (const [key, input] of Object.entries(inputs)) {
     const mine = specs[key] ?? [];
-    let series = input.series;
+    // A coarse source is folded before it is held, so a restated row has to go
+    // first, or the join pairs it with nothing and a study counts it as a bar
+    // (the hold alone would only pick the later row after both had happened).
+    let series = input.hold ? lastPerKey(input.series) : input.series;
+    const compare = input.hold && input.compare ? lastPerKey(input.compare) : input.compare;
     // A compare-bound leg needs the compare entity's columns on the PRIMARY
     // series before the fold — a left exact-key join, every conflicting column
     // prefixed. Only when asked and the compare series exists; otherwise the
     // fold's own skip leaves the spread as a gap (compare off ⇒ not drawn).
     // Rename-then-join lives in core (`joinUnderPrefix`; F-charts-14 for why
     // not the library's `onConflict: 'prefix'`).
-    if (input.compare && (rawCompare.has(key) || mine.some(usesCompare)))
-      series = joinUnderPrefix(series, input.compare);
-    out[key] = applyDerived(series, mine);
+    if (compare && (rawCompare.has(key) || mine.some(usesCompare)))
+      series = joinUnderPrefix(series, compare);
+    const folded = applyDerived(series, mine);
+    out[key] = input.hold ? holdAcrossGrid(folded, input.hold.grid, input.hold.grainMs) : folded;
   }
   return out;
 }

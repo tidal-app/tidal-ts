@@ -17,6 +17,7 @@ import {
   Candlestick,
   ChartContainer,
   ChartRow,
+  CrosshairCursor,
   Layers,
   LineChart,
   Baseline,
@@ -261,7 +262,7 @@ export interface TimeSeriesChartProps {
   annotations?: readonly ChartAnnotation[];
   /**
    * Source keys whose data is **coarser than the axis** — a daily vol curve held
-   * across an intraday grid (`holdVolAcrossGrid`).
+   * across an intraday grid (the prepare step's `SourceHold`).
    *
    * These opt out of session breaks. A break marks live time a series could not
    * fill *within its own cadence*; a daily observation has no intraday cadence to
@@ -270,8 +271,8 @@ export interface TimeSeriesChartProps {
    * scattered noise rather than as a step function.
    *
    * Cannot be inferred here: the held series is re-keyed onto the fine grid, so its
-   * KEYS are minutes and only its values are daily. The service knows, because it
-   * did the fallback (the daily history's vol grain).
+   * KEYS are minutes and only its values are daily. The host knows, because it
+   * passed the source to the prepare step with a `hold`.
    */
   coarseSources?: readonly string[];
   /** Series ids to de-emphasize (drawn with reduced alpha) — the chart's "dim the
@@ -1281,7 +1282,22 @@ function TimeSeriesChartInner({
         // the fill would stop one bar before the line it is meant to agree with,
         // at every seam.
         if (!splitsFor(c)) {
-          return [<AreaChart key={c.id} series={closeSeries} column={col} as={c.id} axis={axis} />];
+          // `baseline="floor"`: since charts 0.71 an area fills to zero by
+          // default, and on an axis the library auto-fits (no `min`/`max` from
+          // the host, or a flat series a host hands back to the fit) that pulls
+          // 0 into the domain. On a pinned axis the two draw the same, because
+          // the baseline clamps to the edge. The fill rests on the floor, as
+          // before, whichever way the host fits.
+          return [
+            <AreaChart
+              key={c.id}
+              series={closeSeries}
+              column={col}
+              as={c.id}
+              axis={axis}
+              baseline="floor"
+            />,
+          ];
         }
         // The price close gets the open-line treatment per slice (one source,
         // so uncached is cheap); everything else takes the cached end-shifted
@@ -1294,7 +1310,14 @@ function TimeSeriesChartInner({
               )
             : endSegmentsFor(panelSeries);
         return slices.map((slice, i) => (
-          <AreaChart key={`${c.id}__s${i}`} series={slice} column={col} as={c.id} axis={axis} />
+          <AreaChart
+            key={`${c.id}__s${i}`}
+            series={slice}
+            column={col}
+            as={c.id}
+            axis={axis}
+            baseline="floor"
+          />
         ));
       }
       case 'bar': {
@@ -1579,7 +1602,6 @@ function TimeSeriesChartInner({
           range={viewRange ?? undefined}
           onTimeRangeChange={onViewRangeChange}
           minDuration={minDuration}
-          cursor="crosshair"
           onTrackerChanged={onTracker}
           // Omitting it makes charts skip per-layer timing entirely, so an app that
           // doesn't show the diagnostics line pays nothing for them.
@@ -1589,6 +1611,10 @@ function TimeSeriesChartInner({
           rowGap={gapSplitter ? 0 : 8}
           showAxis={false}
         >
+          {/* The cursor is a component since charts 0.71 (the `cursor` prop is
+              gone). Its defaults are the old `cursor="crosshair"`: y snaps to the
+              nearest point, and the time is pinned to the x axis as a pill. */}
+          <CrosshairCursor />
           {renderedRows.map((row, i) => {
             const visible = row.configs.filter(seriesDrawn);
             // Visible AND its column actually folded — the drawable set. A `—`

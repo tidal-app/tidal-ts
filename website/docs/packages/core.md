@@ -68,3 +68,10 @@ column for a tenor, so code never spells column names by hand.
   empty space. `sessionOpenLine` starts each session's price line at its open.
 - `DATA_TIME_ZONE`, `TIME_ZONE_CHOICES` and `resolveTimeZone` keep the zone the
   data is stored in separate from the zone the axis is read in.
+- `holdAcrossGrid(series, grid, grainMs)` puts a coarse series on a finer
+  grid: a daily curve across one-minute bars. Each row holds from its key for
+  `grainMs`, or until the next row starts. A grid point never reads a bar that
+  starts after it, and a day with no row stays a gap. Every column comes
+  through, as optional. Hold **after** computing studies, not before: a 20-bar
+  average of a held daily series is a 20-minute window. The chart's prepare
+  step does this for you with `hold` (see the chart page).

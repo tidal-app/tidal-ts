@@ -2,8 +2,56 @@
 
 All packages release together on one version.
 
-## Unreleased
+## 0.8.0 — 2026-10-08
 
+A source coarser than the axis is folded at its own grain, on pond-ts 0.72.
+
+- **pond-ts 0.72.** The family's peers move from `^0.70.0` to `^0.72.0`
+  (`@pond-ts/process` exact `0.72.0`); the install commands in the docs follow.
+  0.72's `join` works on columns, so the comparison join in `foldSources` costs
+  about as much as the comparison side is wide: on a year of one-minute bars,
+  1.9 s → 24 ms for 59 columns a side, by pond's measurement.
+- **The chart mounts `<CrosshairCursor />`.** charts 0.71 removed
+  `ChartContainer`'s `cursor` prop. Its defaults are the old crosshair's: y
+  snaps to the nearest point and the time is pinned to the x axis as a pill. The
+  centre dot now takes the snapped series' colour (a 0.71 change). **A host
+  that draws its own `ChartContainer`** gets charts 0.71's breaking change with
+  the new peers: a chart with no cursor component now shows none, so mount one
+  (`<LineCursor />` for the old implicit line).
+- **A column is found from the schema, not the first row.** `sourceFacts` took
+  a series' column names from its first row, and before pond 0.72 a join left an
+  unmatched column out of that row, so a comparison column whose first bar had
+  no match read as not carried. It now reads every value column.
+- **An `area` series rests on the plot's floor** (`baseline="floor"`), as
+  before. charts 0.71 made an area fill to zero by default, which pulls 0 into
+  an axis the library auto-fits (one with no `min`/`max` from the host). On an
+  axis the host pins, the two draw the same.
+- **`SourceInput.hold`** (chart). A daily curve on a one-minute chart is passed
+  to the prepare step at its own grain, with `hold: { grid, grainMs }`.
+  `foldSources` runs its studies and its comparison join on the daily rows,
+  then holds the result across `grid`. Before, a host held the curve first, so
+  a 20-bar average of it was a 20-_minute_ window over one flat day and read
+  that day's raw value: 79 against the right 69.5 on a ramp. The comparison
+  join also ran over about 400× the rows. On a year of one-minute bars, holding
+  first and then joining and averaging took 1.7 s; joining and averaging first
+  and then holding takes 80–100 ms.
+  - A day that arrives twice counts once: the later row replaces the earlier
+    one before the join and the studies read it.
+  - The comparison joins on the daily keys, as it does on a daily chart: a day
+    the source has no row for is a gap in the comparison too, and a comparison
+    keyed at another time of day matches nothing.
+  - Studies warm up on the daily rows, so pass enough history before the grid.
+- **`holdAcrossGrid(series, grid, grainMs)`** (core) holds any time-keyed
+  series across a finer grid and keeps every column: a joined comparison's, a
+  study's, a string column. A row holds from its key for `grainMs`, or until
+  the next row starts. A grid point never reads a bar that starts after it, a
+  day with no row stays a gap, and a restated row wins. The result has one row
+  per grid point (an empty grid gives an empty series), and its value columns
+  are optional (`HeldSchema`), because the hold makes gaps. Number and string
+  columns only; anything else throws, naming the column. So do a `grainMs`
+  that is not positive and a grid that is not ascending.
+- **`holdVolAcrossGrid` is deprecated.** It emits `VOL_SCHEMA` columns only, so
+  it drops every other column of a folded series. Use `holdAcrossGrid`.
 - **Each package has a README on npm**: what it is, the install command with
   the pond versions it needs, a short example, and links to the docs site.
   `homepage` now points at the package's docs page.

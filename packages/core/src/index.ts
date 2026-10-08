@@ -115,7 +115,7 @@ export {
   type SessionSegmentOptions,
 } from './sessions.js';
 export { monthlyExpirations, thirdFriday } from './expirations.js';
-export { holdVolAcrossGrid } from './regrid.js';
+export { holdAcrossGrid, holdVolAcrossGrid, type HeldSchema } from './regrid.js';
 
 // The corpus adoption (TDL-STUDYCAT). `ADOPTED_STUDIES` is exported so the
 // count is assertable and a widening of `adoptable` is a visible edit.

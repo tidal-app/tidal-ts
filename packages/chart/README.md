@@ -20,8 +20,8 @@ version number.
 ## Install
 
 ```bash
-npm install --save-exact @tidal-ts/core @tidal-ts/chart @pond-ts/process@0.70.0
-npm install pond-ts@~0.70.0 @pond-ts/financial@~0.70.0 @pond-ts/charts@~0.70.0 @pond-ts/react@~0.70.0
+npm install --save-exact @tidal-ts/core @tidal-ts/chart @pond-ts/process@0.72.0
+npm install pond-ts@~0.72.0 @pond-ts/financial@~0.72.0 @pond-ts/charts@~0.72.0 @pond-ts/react@~0.72.0
 ```
 
 React 18 or 19. The pond packages are peer dependencies: install them once, on
