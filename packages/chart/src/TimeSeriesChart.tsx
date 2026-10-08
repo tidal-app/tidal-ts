@@ -1612,9 +1612,9 @@ function TimeSeriesChartInner({
           showAxis={false}
         >
           {/* The cursor is a component since charts 0.71 (the `cursor` prop is
-              gone). `showTime={false}` keeps the plot free of a time pill, as
-              before: the host owns the time readout (the legend's stamp). */}
-          <CrosshairCursor showTime={false} />
+              gone). Its defaults are the old `cursor="crosshair"`: y snaps to the
+              nearest point, and the time is pinned to the x axis as a pill. */}
+          <CrosshairCursor />
           {renderedRows.map((row, i) => {
             const visible = row.configs.filter(seriesDrawn);
             // Visible AND its column actually folded — the drawable set. A `—`

@@ -301,6 +301,16 @@ describe('a coarse source folds at its own grain, then holds across the axis', (
     ]);
   });
 
+  it('a comparison column with no value on the first day is still carried', () => {
+    // The column names come from the schema. Taken from the first row, a
+    // `cmp_*` column whose first day had no match was never scanned (pond
+    // before 0.72 left an unmatched column out of a row's `data()`).
+    const late = four('cmp', [1, 2, 3], [20, 30, 40]);
+    const held = edge(four('vol', [0, 1, 2, 3], [1, 2, 3, 4]), late);
+    expect(read(held, 'cmp_iv21')).toEqual([NaN, 20, 30, 40]);
+    expect(carries(sourceFacts({ vol: held }), mirror)).toBe(true);
+  });
+
   it('an empty grid gives an empty source, never the coarse keys on the axis', () => {
     const empty = foldSources(
       { vol: { series: vol, hold: { grid: new Float64Array(0), grainMs: DAY } } },

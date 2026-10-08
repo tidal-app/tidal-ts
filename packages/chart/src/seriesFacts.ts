@@ -41,10 +41,13 @@ function rowAt(series: AnySeries, index: number): Record<string, unknown> | unde
   return s.at(index)?.data();
 }
 
-/** Column names, from the first row only. */
+/** The value column names, from the schema: every row has the same set. The
+ *  first row's `data()` used to stand in, and before pond 0.72 a join left its
+ *  unmatched columns out of that, so a `cmp_*` column whose first row had no
+ *  match was never scanned, and read as not carried. */
 export function columnNames(series: AnySeries): string[] {
-  const row = rowAt(series, 0);
-  return row ? Object.keys(row) : [];
+  const schema = (series as unknown as { schema: readonly { name: string }[] }).schema;
+  return schema.slice(1).map((c) => c.name);
 }
 
 /**

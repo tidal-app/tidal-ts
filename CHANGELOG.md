@@ -11,15 +11,21 @@ A source coarser than the axis is folded at its own grain, on pond-ts 0.72.
   0.72's `join` works on columns, so the comparison join in `foldSources` costs
   about as much as the comparison side is wide: on a year of one-minute bars,
   1.9 s → 24 ms for 59 columns a side, by pond's measurement.
-- **The chart mounts `<CrosshairCursor showTime={false} />`.** charts 0.71
-  removed `ChartContainer`'s `cursor` prop. The crosshair looks as before,
-  except that its centre dot now takes the snapped series' colour (a 0.71
-  change).
+- **The chart mounts `<CrosshairCursor />`.** charts 0.71 removed
+  `ChartContainer`'s `cursor` prop. Its defaults are the old crosshair's: y
+  snaps to the nearest point and the time is pinned to the x axis as a pill. The
+  centre dot now takes the snapped series' colour (a 0.71 change). **A host
+  that draws its own `ChartContainer`** gets charts 0.71's breaking change with
+  the new peers: a chart with no cursor component now shows none, so mount one
+  (`<LineCursor />` for the old implicit line).
+- **A column is found from the schema, not the first row.** `sourceFacts` took
+  a series' column names from its first row, and before pond 0.72 a join left an
+  unmatched column out of that row, so a comparison column whose first bar had
+  no match read as not carried. It now reads every value column.
 - **An `area` series rests on the plot's floor** (`baseline="floor"`), as
   before. charts 0.71 made an area fill to zero by default, which pulls 0 into
   an axis the library auto-fits (one with no `min`/`max` from the host). On an
   axis the host pins, the two draw the same.
-
 - **`SourceInput.hold`** (chart). A daily curve on a one-minute chart is passed
   to the prepare step at its own grain, with `hold: { grid, grainMs }`.
   `foldSources` runs its studies and its comparison join on the daily rows,
