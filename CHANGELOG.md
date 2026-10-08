@@ -16,8 +16,9 @@ A source coarser than the axis is folded at its own grain, on pond-ts 0.72.
   except that its centre dot now takes the snapped series' colour (a 0.71
   change).
 - **An `area` series rests on the plot's floor** (`baseline="floor"`), as
-  before. charts 0.71 made an area fill to zero by default, which would pull 0
-  into a price or vol axis and flatten the series into a sliver.
+  before. charts 0.71 made an area fill to zero by default, which pulls 0 into
+  an axis the library auto-fits (one with no `min`/`max` from the host). On an
+  axis the host pins, the two draw the same.
 
 - **`SourceInput.hold`** (chart). A daily curve on a one-minute chart is passed
   to the prepare step at its own grain, with `hold: { grid, grainMs }`.

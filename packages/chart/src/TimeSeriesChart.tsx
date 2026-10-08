@@ -1283,8 +1283,11 @@ function TimeSeriesChartInner({
         // at every seam.
         if (!splitsFor(c)) {
           // `baseline="floor"`: since charts 0.71 an area fills to zero by
-          // default, which pulls 0 into the axis and flattens a price or a vol
-          // level into a sliver. The fill rests on the plot's floor, as before.
+          // default, and on an axis the library auto-fits (no `min`/`max` from
+          // the host, or a flat series a host hands back to the fit) that pulls
+          // 0 into the domain. On a pinned axis the two draw the same, because
+          // the baseline clamps to the edge. The fill rests on the floor, as
+          // before, whichever way the host fits.
           return [
             <AreaChart
               key={c.id}
