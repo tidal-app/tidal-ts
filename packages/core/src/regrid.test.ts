@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { holdVolAcrossGrid } from './regrid.js';
+import { TimeSeries } from 'pond-ts';
+import { holdAcrossGrid, holdVolAcrossGrid } from './regrid.js';
 import { buildVolSeries, VOL_SCHEMA } from './vol.js';
 
 /**
@@ -121,5 +122,107 @@ describe('holdVolAcrossGrid', () => {
     const times = Array.from({ length: 390 }, (_, i) => min('2026-05-18', 13, 30 + i));
     const out = holdVolAcrossGrid(daily([{ day: '2026-05-18', iv21: 23 }]), times);
     expect(new Set(read(out, 'iv21'))).toEqual(new Set([23]));
+  });
+});
+
+describe('holdAcrossGrid', () => {
+  /** A daily series with whatever columns a fold left on it: the curve, a
+   *  joined comparison, a study, and a string column for good measure. */
+  const folded = TimeSeries.fromColumns({
+    name: 'vol',
+    schema: [
+      { name: 'time', kind: 'time' },
+      { name: 'iv21', kind: 'number' },
+      { name: 'cmp_iv21', kind: 'number', required: false },
+      { name: 'p1:sma(iv21;period=2)', kind: 'number', required: false },
+      { name: 'flag', kind: 'string', required: false },
+    ] as const,
+    columns: {
+      time: [d('2026-05-18'), d('2026-05-19'), d('2026-05-21')],
+      iv21: [23, 25, 27],
+      cmp_iv21: [31, null, 33],
+      'p1:sma(iv21;period=2)': [null, 24, 26],
+      flag: ['N', 'Y', null],
+    },
+  });
+  const at = (s: { column(n: string): unknown; length: number }, col: string) => {
+    const c = s.column(col) as { at(i: number): unknown };
+    return Array.from({ length: s.length }, (_, i) => c.at(i));
+  };
+  const grid = [
+    min('2026-05-18', 14),
+    min('2026-05-18', 19, 59),
+    min('2026-05-19', 14),
+    min('2026-05-20', 14), // no row that day
+    min('2026-05-21', 14),
+  ];
+  const out = holdAcrossGrid(folded, grid, DAY);
+
+  it('keeps every column, not just the vol schema, and the schema as it was', () => {
+    expect(out.schema).toEqual(folded.schema);
+    expect(at(out, 'iv21')).toEqual([23, 23, 25, undefined, 27]);
+    expect(at(out, 'cmp_iv21')).toEqual([31, 31, undefined, undefined, 33]);
+    expect(at(out, 'p1:sma(iv21;period=2)')).toEqual([undefined, undefined, 24, undefined, 26]);
+    expect(at(out, 'flag')).toEqual(['N', 'N', 'Y', undefined, undefined]);
+    const key = out.keyColumn() as unknown as { begin: Float64Array };
+    expect(Array.from(key.begin)).toEqual(grid);
+  });
+
+  it('never reads a bar that starts after the grid point, whatever its phase', () => {
+    // Hourly bars that start on the half hour. Flooring both sides to the hour
+    // would hand 14:00–14:29 the bar that opens at 14:30.
+    const hourly = TimeSeries.fromColumns({
+      name: 'h',
+      schema: [
+        { name: 'time', kind: 'time' },
+        { name: 'v', kind: 'number' },
+      ] as const,
+      columns: { time: [min('2026-05-18', 13, 30), min('2026-05-18', 14, 30)], v: [1, 2] },
+    });
+    const g = [
+      min('2026-05-18', 13, 29),
+      min('2026-05-18', 13, 30),
+      min('2026-05-18', 14, 10),
+      min('2026-05-18', 14, 29),
+      min('2026-05-18', 14, 30),
+      min('2026-05-18', 15, 30), // past the last bar
+    ];
+    expect(at(holdAcrossGrid(hourly, g, 3_600_000), 'v')).toEqual([
+      undefined,
+      1,
+      1,
+      1,
+      2,
+      undefined,
+    ]);
+  });
+
+  it('lets the later row win when a key is restated', () => {
+    const restated = TimeSeries.fromColumns({
+      name: 'r',
+      schema: [
+        { name: 'time', kind: 'time' },
+        { name: 'v', kind: 'number' },
+      ] as const,
+      columns: { time: [d('2026-05-18'), d('2026-05-18')], v: [23, 24.5] },
+    });
+    expect(at(holdAcrossGrid(restated, [min('2026-05-18', 14)], DAY), 'v')).toEqual([24.5]);
+  });
+
+  it('is a no-op with nothing to hold onto', () => {
+    expect(holdAcrossGrid(folded, [], DAY)).toBe(folded);
+  });
+
+  it('refuses what it cannot hold rather than dropping it', () => {
+    expect(() => holdAcrossGrid(folded.asTimeRange(), grid, DAY)).toThrow(/time key/);
+    const withBool = new TimeSeries({
+      name: 'b',
+      schema: [
+        { name: 'time', kind: 'time' },
+        { name: 'ok', kind: 'boolean' },
+      ] as const,
+      rows: [[d('2026-05-18'), true]],
+    });
+    expect(() => holdAcrossGrid(withBool, grid, DAY)).toThrow(/"ok"/);
   });
 });

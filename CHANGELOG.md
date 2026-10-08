@@ -2,8 +2,26 @@
 
 All packages release together on one version.
 
-## Unreleased
+## 0.8.0 — 2026-10-08
 
+A source coarser than the axis is folded at its own grain.
+
+- **`SourceInput.hold`** (chart). A daily curve on a one-minute chart is passed
+  to the prepare step at its own grain, with `hold: { grid, grainMs }`.
+  `foldSources` runs its studies and its comparison join on the daily rows,
+  then holds the result across `grid`. Before, a host held the curve first, so
+  a 20-bar average of it was a 20-_minute_ window over one flat day and read
+  that day's raw value: 79 against the right 69.5 on a ramp. Joining the
+  comparison after the hold also cost about 400× the rows: on a year of
+  one-minute bars, 1.5 s against 4 ms.
+- **`holdAcrossGrid(series, grid, grainMs)`** (core) holds any time-keyed
+  series across a finer grid and keeps every column: a joined comparison's, a
+  study's, a string column. A row holds from its key for `grainMs`, or until
+  the next row starts. A grid point never reads a bar that starts after it, and
+  a day with no row stays a gap. Number and string columns only; anything else
+  throws, naming the column.
+- **`holdVolAcrossGrid` is deprecated.** It emits `VOL_SCHEMA` columns only, so
+  it drops every other column of a folded series. Use `holdAcrossGrid`.
 - **Each package has a README on npm**: what it is, the install command with
   the pond versions it needs, a short example, and links to the docs site.
   `homepage` now points at the package's docs page.

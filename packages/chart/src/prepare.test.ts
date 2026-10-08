@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { DEMO_INSTRUMENTS, deriveId, generatePriceSeries, generateVolSeries } from '@tidal-ts/core';
+import { TimeSeries } from 'pond-ts';
+import {
+  applyDerived,
+  DEMO_INSTRUMENTS,
+  deriveId,
+  generatePriceSeries,
+  generateVolSeries,
+  holdAcrossGrid,
+} from '@tidal-ts/core';
 import type { DeriveSpec } from '@tidal-ts/core';
 import type { SeriesConfig } from './series.js';
 import type { ChartSeries } from './types.js';
@@ -152,5 +160,89 @@ describe('a multi-output config is carried by ALL its outputs and valued by its 
     const valued = row!.configs[0]!;
     expect(valued.value).toBe(facts.last.price![bandColumns(band.column).middle]);
     expect(Number.isFinite(valued.value)).toBe(true);
+  });
+});
+
+describe('a coarse source folds at its own grain, then holds across the axis', () => {
+  // A daily curve on a one-minute axis. The curve is a ramp (day d reads
+  // 50 + d), so a 20-day average has one right answer per day, and folding
+  // the held series instead gives a different one.
+  const DAY = 86_400_000;
+  const DAYS = 30;
+  const MINUTES = 30; // per session, from 13:30 UTC
+  const day0 = Date.parse('2026-05-04T00:00:00Z');
+  const daily = (name: string, value: (d: number) => number, skip?: number): ChartSeries => {
+    const days = Array.from({ length: DAYS }, (_, d) => d).filter((d) => d !== skip);
+    return TimeSeries.fromColumns({
+      name,
+      schema: [
+        { name: 'time', kind: 'time' },
+        { name: 'iv21', kind: 'number' },
+      ] as const,
+      columns: { time: days.map((d) => day0 + d * DAY), iv21: days.map(value) },
+    }) as unknown as ChartSeries;
+  };
+  const vol = daily('vol', (d) => 50 + d);
+  // The comparison has no row for day 12.
+  const cmpVol = daily('cmp', (d) => 30 + d, 12);
+  const grid = Float64Array.from({ length: DAYS * MINUTES }, (_, i) => {
+    const d = Math.floor(i / MINUTES);
+    return day0 + d * DAY + (13 * 60 + 30 + (i % MINUTES)) * 60_000;
+  });
+  const dayOf = (i: number) => Math.floor(i / MINUTES);
+
+  const sma20: DeriveSpec = { op: 'sma', inputs: ['iv21'], params: { period: 20 } };
+  const study = cfg({ id: 's-v', source: 'vol', column: deriveId(sma20), derive: sma20 });
+  const mirror = cfg({ id: 'm-v', source: 'vol', column: 'cmp_iv21' });
+  const out = foldSources({ vol: { series: vol, compare: cmpVol, hold: { grid, grainMs: DAY } } }, [
+    study,
+    mirror,
+  ]).vol!;
+  // Through `at`: a missing cell is `undefined` there, read here as NaN.
+  const read = (s: ChartSeries, col: string) => {
+    const c = s.column(col) as unknown as { at(i: number): number | undefined };
+    return Array.from({ length: s.length }, (_, i) => c.at(i) ?? NaN);
+  };
+
+  it('is keyed on the grid, one row per grid point', () => {
+    expect(out.length).toBe(grid.length);
+    expect(Array.from((out.keyColumn() as unknown as { begin: Float64Array }).begin)).toEqual(
+      Array.from(grid),
+    );
+  });
+
+  it('a study of it is the daily study held, not a study of the held series', () => {
+    const want = read(applyDerived(vol, [sma20]), deriveId(sma20));
+    const got = read(out, deriveId(sma20));
+    // The last session: the mean of days 10–29 is 69.5. A 20-bar average of
+    // the held series is a 20-minute window over one flat day, so it reads that
+    // day's raw value, 79.
+    expect(got[grid.length - 1]).toBe(69.5);
+    // Every grid point reads its own day's study; the first 19 days have none.
+    expect(got).toEqual(Array.from(grid, (_, i) => want[dayOf(i)]));
+    expect(Number.isNaN(got[0])).toBe(true);
+  });
+
+  it('holding first, then folding, reads the raw value instead (the order this replaces)', () => {
+    const heldFirst = foldSources(
+      { vol: { series: holdAcrossGrid(vol, grid, DAY), compare: cmpVol } },
+      [study],
+    ).vol!;
+    expect(read(heldFirst, deriveId(sma20))[grid.length - 1]).toBe(79);
+  });
+
+  it('the comparison columns survive the hold, and a missing day stays a gap', () => {
+    const cmp = read(out, 'cmp_iv21');
+    const own = read(out, 'iv21');
+    for (let i = 0; i < grid.length; i += 1) {
+      expect(own[i]).toBe(50 + dayOf(i));
+      if (dayOf(i) === 12) expect(Number.isNaN(cmp[i])).toBe(true);
+      else expect(cmp[i]).toBe(30 + dayOf(i));
+    }
+    expect(carries(sourceFacts({ vol: out }), mirror)).toBe(true);
+  });
+
+  it('the hold changes no fold key: it is a fact of the inputs, not of the configs', () => {
+    expect(foldKey([study, mirror])).toBe(foldKey([mirror, study]));
   });
 });

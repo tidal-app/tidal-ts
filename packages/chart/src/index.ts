@@ -83,6 +83,7 @@ export {
   type ConfigRow,
   type PreparedRow,
   type SourceFacts,
+  type SourceHold,
   type SourceInput,
   type SourceInputs,
 } from './prepare.js';

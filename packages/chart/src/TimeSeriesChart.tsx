@@ -261,7 +261,7 @@ export interface TimeSeriesChartProps {
   annotations?: readonly ChartAnnotation[];
   /**
    * Source keys whose data is **coarser than the axis** — a daily vol curve held
-   * across an intraday grid (`holdVolAcrossGrid`).
+   * across an intraday grid (the prepare step's `SourceHold`).
    *
    * These opt out of session breaks. A break marks live time a series could not
    * fill *within its own cadence*; a daily observation has no intraday cadence to
@@ -270,8 +270,8 @@ export interface TimeSeriesChartProps {
    * scattered noise rather than as a step function.
    *
    * Cannot be inferred here: the held series is re-keyed onto the fine grid, so its
-   * KEYS are minutes and only its values are daily. The service knows, because it
-   * did the fallback (the daily history's vol grain).
+   * KEYS are minutes and only its values are daily. The host knows, because it
+   * passed the source to the prepare step with a `hold`.
    */
   coarseSources?: readonly string[];
   /** Series ids to de-emphasize (drawn with reduced alpha) — the chart's "dim the
