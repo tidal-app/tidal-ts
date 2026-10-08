@@ -15,8 +15,8 @@ version number.
 ## Install
 
 ```bash
-npm install --save-exact @tidal-ts/core @pond-ts/process@0.70.0
-npm install pond-ts@~0.70.0 @pond-ts/financial@~0.70.0
+npm install --save-exact @tidal-ts/core @pond-ts/process@0.72.0
+npm install pond-ts@~0.72.0 @pond-ts/financial@~0.72.0
 ```
 
 The pond packages are peer dependencies: install them once, on the version

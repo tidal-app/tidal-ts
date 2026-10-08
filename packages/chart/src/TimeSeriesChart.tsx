@@ -17,6 +17,7 @@ import {
   Candlestick,
   ChartContainer,
   ChartRow,
+  CrosshairCursor,
   Layers,
   LineChart,
   Baseline,
@@ -1281,7 +1282,19 @@ function TimeSeriesChartInner({
         // the fill would stop one bar before the line it is meant to agree with,
         // at every seam.
         if (!splitsFor(c)) {
-          return [<AreaChart key={c.id} series={closeSeries} column={col} as={c.id} axis={axis} />];
+          // `baseline="floor"`: since charts 0.71 an area fills to zero by
+          // default, which pulls 0 into the axis and flattens a price or a vol
+          // level into a sliver. The fill rests on the plot's floor, as before.
+          return [
+            <AreaChart
+              key={c.id}
+              series={closeSeries}
+              column={col}
+              as={c.id}
+              axis={axis}
+              baseline="floor"
+            />,
+          ];
         }
         // The price close gets the open-line treatment per slice (one source,
         // so uncached is cheap); everything else takes the cached end-shifted
@@ -1294,7 +1307,14 @@ function TimeSeriesChartInner({
               )
             : endSegmentsFor(panelSeries);
         return slices.map((slice, i) => (
-          <AreaChart key={`${c.id}__s${i}`} series={slice} column={col} as={c.id} axis={axis} />
+          <AreaChart
+            key={`${c.id}__s${i}`}
+            series={slice}
+            column={col}
+            as={c.id}
+            axis={axis}
+            baseline="floor"
+          />
         ));
       }
       case 'bar': {
@@ -1579,7 +1599,6 @@ function TimeSeriesChartInner({
           range={viewRange ?? undefined}
           onTimeRangeChange={onViewRangeChange}
           minDuration={minDuration}
-          cursor="crosshair"
           onTrackerChanged={onTracker}
           // Omitting it makes charts skip per-layer timing entirely, so an app that
           // doesn't show the diagnostics line pays nothing for them.
@@ -1589,6 +1608,10 @@ function TimeSeriesChartInner({
           rowGap={gapSplitter ? 0 : 8}
           showAxis={false}
         >
+          {/* The cursor is a component since charts 0.71 (the `cursor` prop is
+              gone). `showTime={false}` keeps the plot free of a time pill, as
+              before: the host owns the time readout (the legend's stamp). */}
+          <CrosshairCursor showTime={false} />
           {renderedRows.map((row, i) => {
             const visible = row.configs.filter(seriesDrawn);
             // Visible AND its column actually folded — the drawable set. A `—`

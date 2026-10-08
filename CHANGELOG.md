@@ -4,7 +4,20 @@ All packages release together on one version.
 
 ## 0.8.0 — 2026-10-08
 
-A source coarser than the axis is folded at its own grain.
+A source coarser than the axis is folded at its own grain, on pond-ts 0.72.
+
+- **pond-ts 0.72.** The family's peers move from `^0.70.0` to `^0.72.0`
+  (`@pond-ts/process` exact `0.72.0`); the install commands in the docs follow.
+  0.72's `join` works on columns, so the comparison join in `foldSources` costs
+  about as much as the comparison side is wide: on a year of one-minute bars,
+  1.9 s → 24 ms for 59 columns a side, by pond's measurement.
+- **The chart mounts `<CrosshairCursor showTime={false} />`.** charts 0.71
+  removed `ChartContainer`'s `cursor` prop. The crosshair looks as before,
+  except that its centre dot now takes the snapped series' colour (a 0.71
+  change).
+- **An `area` series rests on the plot's floor** (`baseline="floor"`), as
+  before. charts 0.71 made an area fill to zero by default, which would pull 0
+  into a price or vol axis and flatten the series into a sliver.
 
 - **`SourceInput.hold`** (chart). A daily curve on a one-minute chart is passed
   to the prepare step at its own grain, with `hold: { grid, grainMs }`.

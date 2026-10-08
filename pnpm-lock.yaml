@@ -31,17 +31,17 @@ importers:
         version: link:../core
     devDependencies:
       '@pond-ts/charts':
-        specifier: ^0.70.0
-        version: 0.70.0(@pond-ts/react@0.70.0(pond-ts@0.70.0)(react@18.3.1))(pond-ts@0.70.0)(react@18.3.1)
+        specifier: ^0.72.0
+        version: 0.72.0(@pond-ts/react@0.72.0(pond-ts@0.72.0)(react@18.3.1))(pond-ts@0.72.0)(react@18.3.1)
       '@pond-ts/financial':
-        specifier: ^0.70.0
-        version: 0.70.0(pond-ts@0.70.0)
+        specifier: ^0.72.0
+        version: 0.72.0(pond-ts@0.72.0)
       '@pond-ts/process':
-        specifier: 0.70.0
-        version: 0.70.0(pond-ts@0.70.0)
+        specifier: 0.72.0
+        version: 0.72.0(pond-ts@0.72.0)
       '@pond-ts/react':
-        specifier: ^0.70.0
-        version: 0.70.0(pond-ts@0.70.0)(react@18.3.1)
+        specifier: ^0.72.0
+        version: 0.72.0(pond-ts@0.72.0)(react@18.3.1)
       '@storybook/addon-essentials':
         specifier: ^8.5.0
         version: 8.6.14(@types/react@18.3.31)(storybook@8.6.18(prettier@3.9.6))
@@ -61,8 +61,8 @@ importers:
         specifier: ^4.3.4
         version: 4.7.0(vite@5.4.21(@types/node@22.20.2)(lightningcss@1.33.0)(terser@5.51.2))
       pond-ts:
-        specifier: ^0.70.0
-        version: 0.70.0
+        specifier: ^0.72.0
+        version: 0.72.0
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -85,14 +85,14 @@ importers:
   packages/core:
     devDependencies:
       '@pond-ts/financial':
-        specifier: ^0.70.0
-        version: 0.70.0(pond-ts@0.70.0)
+        specifier: ^0.72.0
+        version: 0.72.0(pond-ts@0.72.0)
       '@pond-ts/process':
-        specifier: 0.70.0
-        version: 0.70.0(pond-ts@0.70.0)
+        specifier: 0.72.0
+        version: 0.72.0(pond-ts@0.72.0)
       pond-ts:
-        specifier: ^0.70.0
-        version: 0.70.0
+        specifier: ^0.72.0
+        version: 0.72.0
       typescript:
         specifier: ^5.7.2
         version: 5.9.3
@@ -110,17 +110,17 @@ importers:
         version: link:../core
     devDependencies:
       '@pond-ts/charts':
-        specifier: ^0.70.0
-        version: 0.70.0(@pond-ts/react@0.70.0(pond-ts@0.70.0)(react@18.3.1))(pond-ts@0.70.0)(react@18.3.1)
+        specifier: ^0.72.0
+        version: 0.72.0(@pond-ts/react@0.72.0(pond-ts@0.72.0)(react@18.3.1))(pond-ts@0.72.0)(react@18.3.1)
       '@pond-ts/financial':
-        specifier: ^0.70.0
-        version: 0.70.0(pond-ts@0.70.0)
+        specifier: ^0.72.0
+        version: 0.72.0(pond-ts@0.72.0)
       '@pond-ts/process':
-        specifier: 0.70.0
-        version: 0.70.0(pond-ts@0.70.0)
+        specifier: 0.72.0
+        version: 0.72.0(pond-ts@0.72.0)
       '@pond-ts/react':
-        specifier: ^0.70.0
-        version: 0.70.0(pond-ts@0.70.0)(react@18.3.1)
+        specifier: ^0.72.0
+        version: 0.72.0(pond-ts@0.72.0)(react@18.3.1)
       '@types/react':
         specifier: ^18.3.18
         version: 18.3.31
@@ -128,8 +128,8 @@ importers:
         specifier: ^6.1.0
         version: 6.1.0(@types/react@18.3.31)(react@18.3.1)(xstate@5.33.0)
       pond-ts:
-        specifier: ^0.70.0
-        version: 0.70.0
+        specifier: ^0.72.0
+        version: 0.72.0
       react:
         specifier: ^18.3.1
         version: 18.3.1
@@ -170,17 +170,17 @@ importers:
         specifier: ^3.0.0
         version: 3.1.1(@types/react@18.3.31)(react@18.3.1)
       '@pond-ts/charts':
-        specifier: ^0.70.0
-        version: 0.70.0(@pond-ts/react@0.70.0(pond-ts@0.70.0)(react@18.3.1))(pond-ts@0.70.0)(react@18.3.1)
+        specifier: ^0.72.0
+        version: 0.72.0(@pond-ts/react@0.72.0(pond-ts@0.72.0)(react@18.3.1))(pond-ts@0.72.0)(react@18.3.1)
       '@pond-ts/financial':
-        specifier: ^0.70.0
-        version: 0.70.0(pond-ts@0.70.0)
+        specifier: ^0.72.0
+        version: 0.72.0(pond-ts@0.72.0)
       '@pond-ts/process':
-        specifier: 0.70.0
-        version: 0.70.0(pond-ts@0.70.0)
+        specifier: 0.72.0
+        version: 0.72.0(pond-ts@0.72.0)
       '@pond-ts/react':
-        specifier: ^0.70.0
-        version: 0.70.0(pond-ts@0.70.0)(react@18.3.1)
+        specifier: ^0.72.0
+        version: 0.72.0(pond-ts@0.72.0)(react@18.3.1)
       '@tidal-ts/chart':
         specifier: workspace:*
         version: link:../packages/chart
@@ -191,8 +191,8 @@ importers:
         specifier: ^2.0.0
         version: 2.1.1
       pond-ts:
-        specifier: ^0.70.0
-        version: 0.70.0
+        specifier: ^0.72.0
+        version: 0.72.0
       prism-react-renderer:
         specifier: ^2.3.0
         version: 2.4.1(react@18.3.1)
@@ -1975,31 +1975,31 @@ packages:
   '@polka/url@1.0.0-next.29':
     resolution: {integrity: sha512-wwQAWhWSuHaag8c4q/KN/vCoeOJYshAIvMQwD4GpSb3OiZklFfvAgmj0VCBBImRpuF/aFgIRzllXlVX93Jevww==}
 
-  '@pond-ts/charts@0.70.0':
-    resolution: {integrity: sha512-cggbfSjOUA2Jt8hdaZ3FVvZtH+wIMSpvzgS9rKZ3pwXCAlBEx8VOEQtmkJnK357T0MOs3ogKHg2lnaoSt/G97w==}
+  '@pond-ts/charts@0.72.0':
+    resolution: {integrity: sha512-epomqIbuOS4nvnWwGJZ27/1V6x3HWpP0p7aIgw9C35wSQK5V9RsuJVzEB7eHW4RGhcjuQZaVZ2QnE5VOgtyvmA==}
     engines: {node: '>=18'}
     peerDependencies:
-      '@pond-ts/react': ^0.70.0
-      pond-ts: ^0.70.0
+      '@pond-ts/react': ^0.72.0
+      pond-ts: ^0.72.0
       react: ^18.0.0 || ^19.0.0
 
-  '@pond-ts/financial@0.70.0':
-    resolution: {integrity: sha512-5ZXrddQbLlXBCrzKsgD0GsV5pqgNklcZWL0Tkk2QlDmh8WCvPVLMVBr3XsAqAJvCPOC+KcTnf+Ex/AvNrUMvmQ==}
+  '@pond-ts/financial@0.72.0':
+    resolution: {integrity: sha512-VlQWHLo+8k4AW6wN3hL4laddJTlgGXWeoRtESZb+FiRQ+LeXO1WMThU8FhVqa9z8Ll40yzcGCJ0xYw27PZ9Cbw==}
     engines: {node: '>=18'}
     peerDependencies:
-      pond-ts: ^0.70.0
+      pond-ts: ^0.72.0
 
-  '@pond-ts/process@0.70.0':
-    resolution: {integrity: sha512-wFoIv2QrwnSS7a2FZ2dVnFgOqZjUQSYCkKzD8r0nSTpnjOLx1vyUHpc/ZDvpD0YdG6Vgie/nmxXzWYjOQD8PAw==}
+  '@pond-ts/process@0.72.0':
+    resolution: {integrity: sha512-7yXP+p+ON+DOJv2zY5jWX5YGA7OvFjOClQQMw7aQL1Cx1fYahp+XSiyEdMu+e8RUZ2J5i8g1n6zAMKPvfuEbMg==}
     engines: {node: '>=18'}
     peerDependencies:
-      pond-ts: ^0.70.0
+      pond-ts: ^0.72.0
 
-  '@pond-ts/react@0.70.0':
-    resolution: {integrity: sha512-IHb+vkSdW27XdhOVByrukmtm8j6dpyabMmBjOGDiyCoh90Ad78gI9zv/qSxyu/eEQHKRHgTNaNhaFEfaI71JQQ==}
+  '@pond-ts/react@0.72.0':
+    resolution: {integrity: sha512-fVsaxGHoFm4Ux5fsM2QwxNBW88qJLjGBjmqY4Lw3hpr0qyXOFIjfDgPV5JdV/9UJMwtmoHNHmOAHct8/2KvATQ==}
     engines: {node: '>=18'}
     peerDependencies:
-      pond-ts: ^0.70.0
+      pond-ts: ^0.72.0
       react: ^18.0.0 || ^19.0.0
 
   '@rolldown/pluginutils@1.0.0-beta.27':
@@ -5327,8 +5327,8 @@ packages:
     resolution: {integrity: sha512-OBatVyC/N7SCW/FaDHrSd+vn0o5cS855TOmYi4OkdWUMSJCET/xip//ch8xGUvtr3i44X9LVyWwQlRMTN3pwSA==}
     engines: {node: '>=10'}
 
-  pond-ts@0.70.0:
-    resolution: {integrity: sha512-+gqtyR+PBtvdzzGIQS9yxP5PvgV9ZSKM12lc3Z+cVw48bWllakX4OaqSwtLbMv/ML30BMmrlLnRhzokmG6fNPg==}
+  pond-ts@0.72.0:
+    resolution: {integrity: sha512-zfOeO6PDOEUh/PXMGCC13Bnb/i4v1ci/OfGRiGOMOcAAYXfGA6qnm+aqXEPa9HreRXIiFUq495IGIRCysGzh1A==}
     engines: {node: '>=18'}
 
   possible-typed-array-names@1.1.0:
@@ -9749,27 +9749,27 @@ snapshots:
 
   '@polka/url@1.0.0-next.29': {}
 
-  '@pond-ts/charts@0.70.0(@pond-ts/react@0.70.0(pond-ts@0.70.0)(react@18.3.1))(pond-ts@0.70.0)(react@18.3.1)':
+  '@pond-ts/charts@0.72.0(@pond-ts/react@0.72.0(pond-ts@0.72.0)(react@18.3.1))(pond-ts@0.72.0)(react@18.3.1)':
     dependencies:
-      '@pond-ts/react': 0.70.0(pond-ts@0.70.0)(react@18.3.1)
+      '@pond-ts/react': 0.72.0(pond-ts@0.72.0)(react@18.3.1)
       d3-scale: 4.0.2
       d3-shape: 3.2.0
       d3-time-format: 4.1.0
-      pond-ts: 0.70.0
+      pond-ts: 0.72.0
       react: 18.3.1
 
-  '@pond-ts/financial@0.70.0(pond-ts@0.70.0)':
+  '@pond-ts/financial@0.72.0(pond-ts@0.72.0)':
     dependencies:
       '@js-temporal/polyfill': 0.5.1
-      pond-ts: 0.70.0
+      pond-ts: 0.72.0
 
-  '@pond-ts/process@0.70.0(pond-ts@0.70.0)':
+  '@pond-ts/process@0.72.0(pond-ts@0.72.0)':
     dependencies:
-      pond-ts: 0.70.0
+      pond-ts: 0.72.0
 
-  '@pond-ts/react@0.70.0(pond-ts@0.70.0)(react@18.3.1)':
+  '@pond-ts/react@0.72.0(pond-ts@0.72.0)(react@18.3.1)':
     dependencies:
-      pond-ts: 0.70.0
+      pond-ts: 0.72.0
       react: 18.3.1
 
   '@rolldown/pluginutils@1.0.0-beta.27': {}
@@ -13439,7 +13439,7 @@ snapshots:
     dependencies:
       '@babel/runtime': 7.29.7
 
-  pond-ts@0.70.0:
+  pond-ts@0.72.0:
     dependencies:
       '@js-temporal/polyfill': 0.5.1
 
