@@ -289,17 +289,17 @@ describe('shiftKeys — the buffer route gives what the envelope route gave', ()
     expect(() => TimeSeries.fromJSON(shifted.toJSON() as never)).not.toThrow();
   });
 
-  it('keeps a gap a gap when the slot under it holds a number', () => {
-    // pond adopts an Arrow buffer as it stands, so the slot under a cleared
-    // validity bit can hold any value — here 7. It must stay a gap, and the
-    // buffer pond adopted must not be written.
-    const n = 20;
-    const values = Float64Array.from({ length: n }, (_, i) => (i === 9 ? 7 : i));
-    const bits = new Uint8Array([0xff, 0b11111101, 0b1111]); // slot 9 is a gap
+  /** A one-column series pond builds by ADOPTING `values` and `bits` as they
+   *  stand (a stand-in Arrow table, the way `fromArrow` reads a real one), so
+   *  the slot under a cleared bit keeps whatever `values` holds there. */
+  const adopted = (values: Float64Array, bits: Uint8Array): Series => {
+    const n = values.length;
+    let gaps = 0;
+    for (let i = 0; i < n; i += 1) if (!(bits[i >> 3]! & (1 << (i & 7)))) gaps += 1;
     const keys = Float64Array.from({ length: n }, (_, i) => T0 + i * MIN);
     const vector = (data: Float64Array, nullBitmap?: Uint8Array) => ({
       length: n,
-      nullCount: nullBitmap ? 1 : 0,
+      nullCount: nullBitmap ? gaps : 0,
       toArray: () => data,
       get: (i: number) => (nullBitmap && !(nullBitmap[i >> 3]! & (1 << (i & 7))) ? null : data[i]!),
       data: [{ offset: 0, length: n, values: data, nullBitmap }],
@@ -318,11 +318,47 @@ describe('shiftKeys — the buffer route gives what the envelope route gave', ()
       },
       getChild: (name: string) => children[name],
     }) as unknown as Series;
-    const exported = raw.toArrow().fields.find((f) => f.name === 'v')!;
-    expect(exported.values).toBe(values); // pond adopted it, 7 and all
+    // pond adopted the buffer, whatever sits under its gaps.
+    expect(raw.toArrow().fields.find((f) => f.name === 'v')!.values).toBe(values);
+    return raw;
+  };
+  const readV = (s: Series, i: number) =>
+    (s.column('v' as never) as { read(i: number): unknown }).read(i);
+
+  it('keeps a gap a gap when the slot under it holds a number', () => {
+    // Slot 9 is a gap holding 7. It must stay a gap, and the buffer pond
+    // adopted must not be written.
+    const values = Float64Array.from({ length: 20 }, (_, i) => (i === 9 ? 7 : i));
+    const raw = adopted(values, new Uint8Array([0xff, 0b11111101, 0b1111]));
     const shifted = expectSameShift(raw);
-    expect((shifted.column('v' as never) as { read(i: number): unknown }).read(9)).toBeUndefined();
+    expect(readV(shifted, 9)).toBeUndefined();
     expect(values[9]).toBe(7);
+  });
+
+  it('finds a gap on the first slot after a byte of eight valid ones', () => {
+    // A byte of eight valid slots is skipped whole. The slot just after it
+    // (8, 16, …) is the one an off-by-one in that skip would miss.
+    const values = Float64Array.from({ length: 30 }, (_, i) => 1000 + i);
+    const raw = adopted(values, new Uint8Array([0xff, 0b11111110, 0b11111110, 0b00111110]));
+    const shifted = expectSameShift(raw);
+    expect([8, 16, 24].map((i) => readV(shifted, i))).toEqual([undefined, undefined, undefined]);
+    expect(readV(shifted, 9)).toBe(1009);
+  });
+
+  it('agrees with the envelope route on adopted buffers with numbers under random gaps', () => {
+    // Seeded, so a failure reproduces. Mostly-full bytes, so the whole-byte
+    // skip and the slot after it are both exercised.
+    let seed = 0x5eed;
+    const rand = () => (seed = (seed * 1_103_515_245 + 12_345) >>> 0) / 2 ** 32;
+    for (let c = 0; c < 200; c += 1) {
+      const n = 1 + Math.floor(rand() * 70);
+      const values = Float64Array.from({ length: n }, () => Math.round(rand() * 1e4));
+      const bits = new Uint8Array((n + 7) >> 3);
+      for (let i = 0; i < n; i += 1) if (rand() < 0.85) bits[i >> 3]! |= 1 << (i & 7);
+      const before = values.slice();
+      expectSameShift(adopted(values, bits));
+      expect(values).toEqual(before);
+    }
   });
 
   it('moves a dictionary-encoded string column', () => {
@@ -361,9 +397,9 @@ describe('shiftKeys — the buffer route gives what the envelope route gave', ()
     expect(shifted.schema[3]).toEqual({ name: 's', kind: 'string', required: false });
   });
 
-  it('moves a slice that starts mid-byte', () => {
-    // A slice is a view: its values start part-way into pond's buffer and its
-    // validity has to be re-read from bit 5 of a byte, not bit 0.
+  it('moves a slice whose values start part-way into pond’s buffer', () => {
+    // A slice's values are a view part-way into pond's buffer (pond 0.72 copies
+    // its validity into a fresh bitmap that starts at bit 0).
     const raw = mixed(200).slice(5, 171) as unknown as Series;
     expectSameShift(raw);
   });

@@ -1152,15 +1152,21 @@ function TimeSeriesChartInner({
   //
   // ONLY THE COLUMNS A LAYER READS are shifted (`drawnColumns`); `select` narrows
   // the source first, without a copy. The result is cached per source on the
-  // series and its column set. A visibility toggle re-shifts only the source
-  // whose drawn columns it changed, and a `sources` record rebuilt around the
-  // same series re-shifts nothing. (A host may rebuild the record on every
-  // settled view; a host that rebases an axis to the view does.)
+  // series and its column set, so a `sources` record rebuilt around the same
+  // series shifts nothing again. (A host may rebuild the record on every
+  // settled view; a host that rebases an axis to the view does.) The price is a
+  // visibility toggle: when it changes a source's drawn columns, that source is
+  // shifted again, narrow and so a few ms, and its layers get a new series.
+  // Before, a toggle shifted nothing, because every column was already there.
+  //
+  // The cache is written during render. A render React throws away can leave an
+  // entry behind, but an entry is a pure function of its series and columns, so
+  // the worst case is one extra shift, never a wrong one.
   const drawn = useMemo(() => drawnColumns(allConfigs, sources ?? {}), [allConfigs, sources]);
   const shiftSig = JSON.stringify([...drawn]);
-  const shiftCache = useRef<ShiftCache>(new Map());
+  const shiftCache = useRef<ShiftCache>();
   const shifted = useMemo(
-    () => shiftDrawn(sources ?? {}, drawn, shiftCache.current),
+    () => shiftDrawn(sources ?? {}, drawn, (shiftCache.current ??= new Map())),
     // `drawn` is read through its signature, so a new `drawn` with the same
     // columns (any config edit rebuilds it) does not re-run this.
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -16,6 +16,37 @@ vi.mock('@tidal-ts/core', async (original) => {
   return { ...actual, shiftKeys: vi.fn(actual.shiftKeys) };
 });
 
+// A server render measures no width, and at width 0 the chart mounts no layer.
+// Given one, every layer mounts — and each records what it was handed and what
+// it reads, so a layer reading a column the narrowing dropped is caught here
+// rather than as a pond `RangeError` in a host.
+vi.mock('./useMeasuredWidth.js', async (original) => {
+  const actual = await original<typeof import('./useMeasuredWidth.js')>();
+  return { ...actual, useMeasuredWidth: () => [{ current: null }, 800] };
+});
+const mounted = vi.hoisted(() => [] as { layer: string; has: string[]; reads: string[] }[]);
+vi.mock('@pond-ts/charts', async (original) => {
+  const actual = await original<typeof import('@pond-ts/charts')>();
+  type Props = { series: { schema: readonly { name: string }[] } } & Record<string, unknown>;
+  const record =
+    (layer: 'LineChart' | 'AreaChart' | 'BarChart' | 'BandChart', reads: (p: Props) => unknown[]) =>
+    (p: Props) => {
+      mounted.push({
+        layer,
+        has: p.series.schema.map((c) => c.name),
+        reads: reads(p).map(String),
+      });
+      return (actual[layer] as unknown as (p: Props) => unknown)(p);
+    };
+  return {
+    ...actual,
+    LineChart: record('LineChart', (p) => [p.column]),
+    AreaChart: record('AreaChart', (p) => [p.column]),
+    BarChart: record('BarChart', (p) => [p.column]),
+    BandChart: record('BandChart', (p) => [p.lower, p.upper]),
+  };
+});
+
 const cfg = (over: Partial<SeriesConfig> & Pick<SeriesConfig, 'id' | 'column'>): SeriesConfig => ({
   label: over.id,
   color: 'blue',
@@ -157,4 +188,55 @@ describe('the chart shifts only the columns its layers read', () => {
       expect(cols.length).toBeLessThan(names(folded.price!).length - 1);
     }
   });
+});
+
+describe('every layer finds its column in the series it is handed', () => {
+  // The narrowing is safe only while no layer reads a column outside
+  // `drawnColumns`. Mount every layer kind that reads the shifted series, plus
+  // the ones that do not (open line, bars), at daily and at one-minute grain.
+  const render = (interval: '1d' | '1m') => {
+    const p = generatePriceSeries(DEMO_INSTRUMENTS[0]!, { bars: 400, interval });
+    const o = generatePriceSeries(DEMO_INSTRUMENTS[1]!, { bars: 400, interval });
+    const configs = [
+      cfg({ id: 'pc', column: 'close' }), // OHLC close: the open line
+      cfg({ id: 'pa', column: 'close', style: 'area' }),
+      cfg({ id: 'po', column: 'open', style: 'area' }),
+      band,
+      lines,
+      cfg({ id: 'oc', column: 'close', source: 'other', style: 'candle' }), // no OHLC: a line
+      cfg({ id: 'oh', column: 'high', source: 'other' }),
+      cfg({ id: 'ob', column: 'volume', source: 'other', style: 'bar' }),
+      cfg({ id: 'hidden', column: 'low', source: 'other', visible: false }),
+    ];
+    const sources = foldSources(
+      { price: { series: p as never }, other: { series: o as never } },
+      configs,
+    );
+    mounted.length = 0;
+    renderToString(
+      <TimeSeriesChart
+        rows={[{ id: 'r', height: 200, configs }]}
+        sources={sources}
+        ohlcSources={['price']}
+        theme={defaultTheme}
+      />,
+    );
+    return { sources, mounted: [...mounted] };
+  };
+
+  for (const interval of ['1d', '1m'] as const) {
+    it(`at ${interval}`, () => {
+      const { sources, mounted: layers } = render(interval);
+      expect(layers.length).toBeGreaterThanOrEqual(10);
+      for (const l of layers) {
+        for (const col of l.reads) expect(l.has, `${l.layer} reads ${col}`).toContain(col);
+      }
+      // …and the narrowing really happened: the line on `other` drew from that
+      // source's drawn columns only — not `open`, which nothing draws, nor
+      // `low`, whose config is hidden.
+      const high = layers.find((l) => l.reads[0] === 'high')!;
+      expect(high.has.slice(1).sort()).toEqual(['close', 'high', 'volume']);
+      expect(names(sources.other!)).toEqual(expect.arrayContaining(['open', 'low']));
+    });
+  }
 });

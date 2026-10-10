@@ -24,9 +24,10 @@ The chart's end-shift copies a fraction of what it did. No API change.
   moved every source whole each time the `sources` record changed: all 118
   columns of a held vol, for the few the chart draws. It now narrows each
   source to its drawn configs' columns (`select`, no copy) before it shifts.
-  The result is kept per source while the series and its drawn columns hold.
-  So a visibility toggle shifts again only the source it changed, and a
-  `sources` record rebuilt around the same series shifts nothing again.
+  The result is kept per source while the series and its drawn columns hold,
+  so a `sources` record rebuilt around the same series shifts nothing again.
+  The trade: a visibility toggle that changes a source's drawn columns now
+  shifts that source again (narrow, a few ms), where before it shifted nothing.
 
 ## 0.8.0 — 2026-10-08
 
