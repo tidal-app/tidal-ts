@@ -2,6 +2,33 @@
 
 All packages release together on one version.
 
+## 0.8.1 — unreleased
+
+The chart's end-shift copies a fraction of what it did. No API change.
+
+- **`shiftKeys` reads pond's buffers** (core). It went through `toColumns()`,
+  pond's JSON wire envelope: a plain array per column and a boxed cell at a
+  time. It now reads `toArrow()`, so a numeric column goes back in as it
+  stands and only the key buffer is new. The output is the same cell for cell,
+  and the schema is the input's own. Shifting a year of one-minute bars, 118
+  columns wide (a held vol curve and its comparison), took 239–409 ms. It now
+  takes 26–35 ms.
+  - It rebuilds through `fromColumns`, not `fromArrow`. `fromArrow` takes its
+    schema from the Arrow fields, so a column with gaps would lose
+    `required: false`, and the shifted series could not go back in through its
+    own JSON.
+  - A gap stays a gap whatever value pond holds in the slot under it.
+  - A boolean or array column takes the old route and fails as it did:
+    `fromColumns` takes number and string value columns only.
+- **The chart shifts only the columns a layer reads** (chart). The end-shift
+  moved every source whole each time the `sources` record changed: all 118
+  columns of a held vol, for the few the chart draws. It now narrows each
+  source to its drawn configs' columns (`select`, no copy) before it shifts.
+  The result is kept per source while the series and its drawn columns hold,
+  so a `sources` record rebuilt around the same series shifts nothing again.
+  The trade: a visibility toggle that changes a source's drawn columns now
+  shifts that source again (narrow, a few ms), where before it shifted nothing.
+
 ## 0.8.0 — 2026-10-08
 
 A source coarser than the axis is folded at its own grain, on pond-ts 0.72.

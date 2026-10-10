@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { LiveSeries, TimeSeries } from 'pond-ts';
+import type { SeriesSchema } from 'pond-ts';
 import {
   exactSessionSegments,
   inferBarMs,
@@ -198,6 +200,260 @@ describe('shiftKeys — a close belongs at its bar’s end', () => {
   it('is a no-op for a zero shift or a series with no time key', () => {
     const raw = buildPriceSeries('X', session(15, 3));
     expect(shiftKeys(raw, 0)).toBe(raw);
+    const ranged = new TimeSeries({
+      name: 'R',
+      schema: [
+        { name: 'timeRange', kind: 'timeRange' },
+        { name: 'v', kind: 'number' },
+      ] as const,
+      rows: [[[0, MIN], 1]],
+    }) as unknown as TimeSeries<SeriesSchema>;
+    expect(shiftKeys(ranged, MIN)).toBe(ranged);
+  });
+});
+
+/**
+ * `shiftKeys` reads pond's buffers through `toArrow()` rather than its JSON
+ * envelope. The envelope route is kept here as the reference: every case must
+ * come out cell for cell, and schema for schema, as it did.
+ */
+describe('shiftKeys — the buffer route gives what the envelope route gave', () => {
+  type Series = TimeSeries<SeriesSchema>;
+  const viaEnvelope = (series: Series, ms: number): Series => {
+    const out = series.toColumns() as unknown as {
+      schema: readonly { name: string }[];
+      columns: Record<string, ArrayLike<number>>;
+    };
+    const key = out.schema[0]!.name;
+    const src = out.columns[key]!;
+    const shifted = new Float64Array(src.length);
+    for (let i = 0; i < src.length; i += 1) shifted[i] = src[i]! + ms;
+    return TimeSeries.fromColumns({
+      ...out,
+      columns: { ...out.columns, [key]: shifted },
+    } as never) as unknown as Series;
+  };
+  /** Every key, every cell (`undefined` for a gap), and the schema itself. */
+  const contents = (s: Series) => ({
+    name: s.name,
+    schema: s.schema,
+    keys: Array.from(s.keyColumn().begin.subarray(0, s.length)),
+    cells: Object.fromEntries(
+      s.schema.slice(1).map((c) => {
+        const col = s.column(c.name as never) as { read(i: number): unknown };
+        return [c.name, Array.from({ length: s.length }, (_, i) => col.read(i))];
+      }),
+    ),
+  });
+  const expectSameShift = (s: Series, ms = MIN) => {
+    const shifted = shiftKeys(s, ms);
+    expect(contents(shifted)).toEqual(contents(viaEnvelope(s, ms)));
+    return shifted;
+  };
+  /** The Arrow shape pond hands over for a column — so a test that means to
+   *  cover one shape fails loudly if pond starts handing over another. */
+  const exportedAs = (s: Series, name: string) =>
+    s.toArrow().fields.find((f) => f.name === name)?.type;
+
+  const schema = [
+    { name: 'time', kind: 'time' },
+    { name: 'v', kind: 'number', required: false },
+    { name: 'w', kind: 'number', required: false },
+    { name: 's', kind: 'string', required: false },
+  ] as const;
+  const T0 = Date.UTC(2026, 6, 15, 13, 30);
+  /** `n` minute rows; `v` has a gap every 7th row, `w` none, `s` low-cardinality
+   *  (pond dictionary-encodes it) with a gap every 5th row. */
+  const mixed = (n: number) =>
+    new TimeSeries({
+      name: 'M',
+      schema,
+      rows: Array.from({ length: n }, (_, i) => [
+        T0 + i * MIN,
+        i % 7 === 3 ? undefined : 100 + i,
+        i / 10,
+        i % 5 === 1 ? undefined : (['a', 'b', 'c'] as const)[i % 3],
+      ]),
+    }) as unknown as Series;
+
+  it('keeps every gap where it was, and the schema that says it may have gaps', () => {
+    const raw = mixed(50);
+    const shifted = expectSameShift(raw);
+    const v = shifted.column('v' as never) as { read(i: number): unknown };
+    expect(v.read(3)).toBeUndefined();
+    expect(v.read(10)).toBeUndefined();
+    expect(v.read(4)).toBe(104);
+    // `fromArrow` would have dropped `required: false`; the shifted series must
+    // still go back in through its own JSON.
+    expect(shifted.schema).toEqual(raw.schema);
+    expect(() => TimeSeries.fromJSON(shifted.toJSON() as never)).not.toThrow();
+  });
+
+  /** A one-column series pond builds by ADOPTING `values` and `bits` as they
+   *  stand (a stand-in Arrow table, the way `fromArrow` reads a real one), so
+   *  the slot under a cleared bit keeps whatever `values` holds there. */
+  const adopted = (values: Float64Array, bits: Uint8Array): Series => {
+    const n = values.length;
+    let gaps = 0;
+    for (let i = 0; i < n; i += 1) if (!(bits[i >> 3]! & (1 << (i & 7)))) gaps += 1;
+    const keys = Float64Array.from({ length: n }, (_, i) => T0 + i * MIN);
+    const vector = (data: Float64Array, nullBitmap?: Uint8Array) => ({
+      length: n,
+      nullCount: nullBitmap ? gaps : 0,
+      toArray: () => data,
+      get: (i: number) => (nullBitmap && !(nullBitmap[i >> 3]! & (1 << (i & 7))) ? null : data[i]!),
+      data: [{ offset: 0, length: n, values: data, nullBitmap }],
+    });
+    const children: Record<string, ReturnType<typeof vector>> = {
+      time: vector(keys),
+      v: vector(values, bits),
+    };
+    const raw = TimeSeries.fromArrow({
+      numRows: n,
+      schema: {
+        fields: [
+          { name: 'time', type: {} },
+          { name: 'v', type: {} },
+        ],
+      },
+      getChild: (name: string) => children[name],
+    }) as unknown as Series;
+    // pond adopted the buffer, whatever sits under its gaps.
+    expect(raw.toArrow().fields.find((f) => f.name === 'v')!.values).toBe(values);
+    return raw;
+  };
+  const readV = (s: Series, i: number) =>
+    (s.column('v' as never) as { read(i: number): unknown }).read(i);
+
+  it('keeps a gap a gap when the slot under it holds a number', () => {
+    // Slot 9 is a gap holding 7. It must stay a gap, and the buffer pond
+    // adopted must not be written.
+    const values = Float64Array.from({ length: 20 }, (_, i) => (i === 9 ? 7 : i));
+    const raw = adopted(values, new Uint8Array([0xff, 0b11111101, 0b1111]));
+    const shifted = expectSameShift(raw);
+    expect(readV(shifted, 9)).toBeUndefined();
+    expect(values[9]).toBe(7);
+  });
+
+  it('finds a gap on the first slot after a byte of eight valid ones', () => {
+    // A byte of eight valid slots is skipped whole. The slot just after it
+    // (8, 16, …) is the one an off-by-one in that skip would miss.
+    const values = Float64Array.from({ length: 30 }, (_, i) => 1000 + i);
+    const raw = adopted(values, new Uint8Array([0xff, 0b11111110, 0b11111110, 0b00111110]));
+    const shifted = expectSameShift(raw);
+    expect([8, 16, 24].map((i) => readV(shifted, i))).toEqual([undefined, undefined, undefined]);
+    expect(readV(shifted, 9)).toBe(1009);
+  });
+
+  it('agrees with the envelope route on adopted buffers with numbers under random gaps', () => {
+    // Seeded, so a failure reproduces. Mostly-full bytes, so the whole-byte
+    // skip and the slot after it are both exercised.
+    let seed = 0x5eed;
+    const rand = () => (seed = (seed * 1_103_515_245 + 12_345) >>> 0) / 2 ** 32;
+    for (let c = 0; c < 200; c += 1) {
+      const n = 1 + Math.floor(rand() * 70);
+      const values = Float64Array.from({ length: n }, () => Math.round(rand() * 1e4));
+      const bits = new Uint8Array((n + 7) >> 3);
+      for (let i = 0; i < n; i += 1) if (rand() < 0.85) bits[i >> 3]! |= 1 << (i & 7);
+      const before = values.slice();
+      expectSameShift(adopted(values, bits));
+      expect(values).toEqual(before);
+    }
+  });
+
+  it('moves a dictionary-encoded string column', () => {
+    const raw = mixed(50);
+    expect(exportedAs(raw, 's')).toBe('dictionary');
+    const shifted = expectSameShift(raw);
+    const s = shifted.column('s' as never) as { read(i: number): unknown };
+    expect([s.read(0), s.read(1), s.read(2)]).toEqual(['a', undefined, 'c']);
+  });
+
+  it('moves a plain string column', () => {
+    // Every value distinct, so pond keeps it as a plain array.
+    const raw = new TimeSeries({
+      name: 'P',
+      schema,
+      rows: Array.from({ length: 12 }, (_, i) => [
+        T0 + i * MIN,
+        i,
+        i,
+        i === 4 ? undefined : `id-${i}`,
+      ]),
+    }) as unknown as Series;
+    expect(exportedAs(raw, 's')).toBe('utf8');
+    expectSameShift(raw);
+  });
+
+  it('keeps a string column that is all gaps a string column', () => {
+    // An all-null array is indistinguishable from an all-null number column
+    // to a reader that classifies by value; the schema must decide.
+    const raw = TimeSeries.fromColumns({
+      name: 'N',
+      schema,
+      columns: { time: [T0, T0 + MIN], v: [1, 2], w: [3, 4], s: [null, null] },
+    } as never) as unknown as Series;
+    const shifted = expectSameShift(raw);
+    expect(shifted.schema[3]).toEqual({ name: 's', kind: 'string', required: false });
+  });
+
+  it('moves a slice whose values start part-way into pond’s buffer', () => {
+    // A slice's values are a view part-way into pond's buffer (pond 0.72 copies
+    // its validity into a fresh bitmap that starts at bit 0).
+    const raw = mixed(200).slice(5, 171) as unknown as Series;
+    expectSameShift(raw);
+  });
+
+  it('moves a series fed in batches through a live series', () => {
+    // pond's live storage holds each `pushMany` batch as a chunk. Its snapshot
+    // re-materialises rows today (pond-ts 0.72), so this reaches `toArrow` as a
+    // packed column; were the snapshot to keep the chunks, `toArrow` packs them
+    // first. No public pond 0.72 door builds a `TimeSeries` that keeps a chunked
+    // column, so this is the nearest a test can get to one.
+    const live = new LiveSeries({ name: 'L', schema });
+    const all = mixed(60);
+    for (let b = 0; b < 3; b += 1) {
+      const part = all.slice(b * 20, b * 20 + 20) as unknown as Series;
+      const rows = Array.from({ length: part.length }, (_, i) => {
+        const e = part.at(i)!;
+        return [e.key().begin(), e.get('v' as never), e.get('w' as never), e.get('s' as never)];
+      });
+      live.pushMany(rows as never);
+    }
+    const snap = live.toTimeSeries() as unknown as Series;
+    expect(contents(snap).cells).toEqual(contents(all).cells);
+    expectSameShift(snap);
+  });
+
+  it('moves an empty series', () => {
+    const raw = mixed(0);
+    expect(shiftKeys(raw, MIN).length).toBe(0);
+    expectSameShift(raw);
+  });
+
+  it('leaves the series it was given untouched', () => {
+    const raw = mixed(30);
+    const before = contents(raw);
+    shiftKeys(raw, MIN);
+    expect(contents(raw)).toEqual(before);
+  });
+
+  it('fails on a boolean column exactly as the envelope route did', () => {
+    // `fromColumns` takes number and string value columns only, so neither route
+    // can rebuild a boolean column; the error is pond's, unchanged.
+    const raw = new TimeSeries({
+      name: 'B',
+      schema: [
+        { name: 'time', kind: 'time' },
+        { name: 'up', kind: 'boolean' },
+      ] as const,
+      rows: [
+        [T0, true],
+        [T0 + MIN, false],
+      ],
+    }) as unknown as Series;
+    expect(() => viaEnvelope(raw, MIN)).toThrow(/'up' is 'boolean'/);
+    expect(() => shiftKeys(raw, MIN)).toThrow(/'up' is 'boolean'/);
   });
 });
 
