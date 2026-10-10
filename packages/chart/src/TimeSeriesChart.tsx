@@ -571,6 +571,72 @@ function nativeMs(series: ChartSeries): number | undefined {
 }
 
 /**
+ * Per source, the columns some drawn config reads: sorted, each once.
+ *
+ * What the end-shift copies (`shifted`). A layer reads only its own config's
+ * columns from the shifted series, so shifting a whole source paid for every
+ * column nobody draws. At 1m with a comparison, the held vol is 118 columns and
+ * a terminal draws a few of them. The question is asked the way the layers are
+ * guarded: `seriesDrawn`, then every one of `configColumns` in the source. A
+ * config that fails that guard draws nothing, so it needs nothing shifted.
+ */
+export function drawnColumns(
+  configs: readonly SeriesConfig[],
+  sources: Record<string, ChartSeries>,
+): Map<string, string[]> {
+  const sets = new Map<string, Set<string>>();
+  for (const c of configs) {
+    if (!seriesDrawn(c) || !c.source) continue;
+    const src = sources[c.source];
+    if (!src) continue;
+    const cols = configColumns(c);
+    if (!cols.every((col) => src.schema.some((sc) => sc.name === col))) continue;
+    let set = sets.get(c.source);
+    if (!set) sets.set(c.source, (set = new Set()));
+    for (const col of cols) set.add(col);
+  }
+  return new Map([...sets].map(([key, set]) => [key, [...set].sort()]));
+}
+
+/** What {@link shiftDrawn} keeps between calls, per source key. */
+export type ShiftCache = Map<string, { src: ChartSeries; cols: string; series: ChartSeries }>;
+
+/**
+ * Each source narrowed to its drawn columns and moved one bar later — the
+ * end-shift, on only what a layer reads.
+ *
+ * `select` narrows without a copy, so the copy `shiftKeys` makes is the drawn
+ * columns and the key. A source whose series and columns match the cache comes
+ * back as the same object, so pond sees the same series. The cache drops a key
+ * this call did not return. A source with no drawn column, or no inferable bar,
+ * gets no entry; its layers draw the raw series.
+ */
+export function shiftDrawn(
+  sources: Record<string, ChartSeries>,
+  drawn: ReadonlyMap<string, readonly string[]>,
+  cache: ShiftCache,
+): Map<string, ChartSeries> {
+  const out = new Map<string, ChartSeries>();
+  for (const [key, src] of Object.entries(sources)) {
+    const cols = drawn.get(key);
+    if (!cols?.length) continue;
+    const sig = JSON.stringify(cols);
+    const hit = cache.get(key);
+    if (hit && hit.src === src && hit.cols === sig) {
+      out.set(key, hit.series);
+      continue;
+    }
+    const native = nativeMs(src);
+    if (native === undefined) continue;
+    const series = shiftKeys(src.select(...cols) as ChartSeries, native) as ChartSeries;
+    cache.set(key, { src, cols: sig, series });
+    out.set(key, series);
+  }
+  for (const key of cache.keys()) if (!out.has(key)) cache.delete(key);
+  return out;
+}
+
+/**
  * Per-bar colours for a study histogram, by the SIGN of each bar.
  *
  * A MACD's histogram is the line minus its signal, so what a reader takes off it
@@ -1083,15 +1149,23 @@ function TimeSeriesChartInner({
   //
   // Leaving daily out also cost a fifth of every week: the segment runs one bar
   // past its last key, so Fri 00:00Z → Sat 00:00Z was live axis with no line on it.
-  const shifted = useMemo(() => {
-    const out = new Map<string, ChartSeries>();
-    for (const [key, src] of Object.entries(sources ?? {})) {
-      const native = nativeMs(src);
-      if (native === undefined) continue;
-      out.set(key, shiftKeys(src, native) as ChartSeries);
-    }
-    return out;
-  }, [sources]);
+  //
+  // ONLY THE COLUMNS A LAYER READS are shifted (`drawnColumns`); `select` narrows
+  // the source first, without a copy. The result is cached per source on the
+  // series and its column set. A visibility toggle re-shifts only the source
+  // whose drawn columns it changed, and a `sources` record rebuilt around the
+  // same series re-shifts nothing. (A host may rebuild the record on every
+  // settled view; a host that rebases an axis to the view does.)
+  const drawn = useMemo(() => drawnColumns(allConfigs, sources ?? {}), [allConfigs, sources]);
+  const shiftSig = JSON.stringify([...drawn]);
+  const shiftCache = useRef<ShiftCache>(new Map());
+  const shifted = useMemo(
+    () => shiftDrawn(sources ?? {}, drawn, shiftCache.current),
+    // `drawn` is read through its signature, so a new `drawn` with the same
+    // columns (any config edit rebuilds it) does not re-run this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [sources, shiftSig],
+  );
 
   // …and where the source carries an OPEN, the line can start at the session open
   // instead of a minute inside it. `sessionOpenLine` emits one column named `close`

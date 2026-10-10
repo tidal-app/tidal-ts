@@ -182,16 +182,131 @@ function median(values: number[]): number {
  * whichever key kind it is, so the only way to move the line is to move the key —
  * and only for the layers that want it moved.
  *
- * Costs one pass over the key column plus a rebuild (~14 ms at 100k rows), so it
- * belongs behind a per-fetch memo, never in a render path.
+ * **The values are handed over, not walked.** `toArrow()` gives pond's own
+ * buffers, a numeric column goes back in as it stands (unless its gaps need
+ * marking, below), and only the key buffer is always new. This used to go
+ * through `toColumns()`, pond's JSON wire envelope: a plain array per column and
+ * a boxed cell at a time. On a 118-column, 97k-row series that cost 239–409 ms;
+ * this costs 26–35 ms (Node).
+ *
+ * It rebuilds through `fromColumns` with the input's own schema, not through
+ * `fromArrow`. `fromArrow` takes its schema from the Arrow fields, so every
+ * column comes back without `required: false`: a column with gaps would be
+ * declared required, and the shifted series could not go back in through its
+ * own JSON.
+ *
+ * A gap is a cleared bitmap bit to `toArrow` and a non-finite value to
+ * `fromColumns`, and the slot under a cleared bit can hold anything (pond adopts
+ * an Arrow buffer as it stands, and a row-built series leaves its own value
+ * there). Such a slot is written `NaN` in a copy, never in pond's buffer. A
+ * column with no gaps, or whose gaps already hold `NaN`, is not copied.
+ *
+ * Still a copy of the key, and still worth a per-fetch memo rather than a render
+ * path. Moving a point key without any copy needs a public key offset in pond.
  */
 export function shiftKeys(series: TimeSeries<SeriesSchema>, ms: number): TimeSeries<SeriesSchema> {
   if (ms === 0) return series;
+  const key = series.schema[0]!;
+  // No time key (a range- or interval-keyed series) ⇒ nothing to shift, and
+  // shifting the wrong column would corrupt values rather than fail.
+  if (key.kind !== 'time') return series;
+  // `fromColumns` takes number and string value columns only. Any other kind
+  // keeps the envelope route, so it fails (or, if pond's ingest grows, works)
+  // exactly as it always has.
+  if (series.schema.some((c, i) => i > 0 && c.kind !== 'number' && c.kind !== 'string')) {
+    return viaEnvelope(series, key.name, ms);
+  }
+  const { length, fields } = series.toArrow();
+  const columns: Record<string, Float64Array | ReadonlyArray<string | null>> = {};
+  for (const f of fields) {
+    if (f.name === key.name) {
+      // A time key exports as epoch-ms `f64` under `'timestamp'`. Anything else
+      // would be read as a value column below and come back unshifted.
+      if (f.type !== 'timestamp') return viaEnvelope(series, key.name, ms);
+      const shifted = new Float64Array(length);
+      for (let i = 0; i < length; i += 1) shifted[i] = f.values[i]! + ms;
+      columns[f.name] = shifted;
+    } else if (f.type === 'float64') {
+      columns[f.name] = numbersWithGaps(f.values, f.nullBitmap, length);
+    } else if (f.type === 'utf8') {
+      columns[f.name] = stringsWithGaps(f.values, f.nullBitmap, length);
+    } else if (f.type === 'dictionary') {
+      columns[f.name] = decodeDictionary(f.values, f.dictionary, f.nullBitmap, length);
+    } else {
+      return viaEnvelope(series, key.name, ms);
+    }
+  }
+  return TimeSeries.fromColumns({
+    name: series.name,
+    schema: series.schema,
+    columns,
+  } as never) as unknown as TimeSeries<SeriesSchema>;
+}
+
+/** Whether slot `i` is a gap. No bitmap ⇒ every slot is valid. */
+const isGap = (bits: Uint8Array | undefined, i: number): boolean =>
+  bits !== undefined && (bits[i >> 3]! & (1 << (i & 7))) === 0;
+
+/** The values with every gap non-finite, as `fromColumns` reads a gap. Pond's
+ *  buffer when its gaps already are; otherwise a copy. */
+function numbersWithGaps(
+  values: Float64Array,
+  bits: Uint8Array | undefined,
+  length: number,
+): Float64Array {
+  let out = values;
+  if (bits === undefined) return out;
+  for (let i = 0; i < length; i += 1) {
+    if (bits[i >> 3] === 0xff) {
+      i += 7; // eight valid slots
+      continue;
+    }
+    if (isGap(bits, i) && Number.isFinite(out[i]!)) {
+      if (out === values) out = new Float64Array(values);
+      out[i] = NaN;
+    }
+  }
+  return out;
+}
+
+/** The strings with every gap `null`. The array as given when its gaps already
+ *  are; otherwise a copy. */
+function stringsWithGaps(
+  values: ReadonlyArray<string | null>,
+  bits: Uint8Array | undefined,
+  length: number,
+): ReadonlyArray<string | null> {
+  let out: (string | null)[] | undefined;
+  if (bits === undefined) return values;
+  for (let i = 0; i < length; i += 1) {
+    if (isGap(bits, i) && values[i] != null) {
+      out ??= values.slice();
+      out[i] = null;
+    }
+  }
+  return out ?? values;
+}
+
+/** A dictionary-encoded string column as the plain array `fromColumns` takes. */
+function decodeDictionary(
+  indices: Int32Array,
+  dictionary: ReadonlyArray<string>,
+  bits: Uint8Array | undefined,
+  length: number,
+): (string | null)[] {
+  const out = new Array<string | null>(length);
+  for (let i = 0; i < length; i += 1) out[i] = isGap(bits, i) ? null : dictionary[indices[i]!]!;
+  return out;
+}
+
+/** The old route, through pond's JSON envelope. Kept for the column kinds
+ *  `fromColumns` does not take. */
+function viaEnvelope(
+  series: TimeSeries<SeriesSchema>,
+  key: string,
+  ms: number,
+): TimeSeries<SeriesSchema> {
   const out = (series as unknown as { toColumns(): ColumnarOut }).toColumns();
-  const key = out.schema.find((c) => c.kind === 'time')?.name;
-  // No time key (a value-keyed series) ⇒ nothing to shift, and shifting the wrong
-  // column would corrupt values rather than fail.
-  if (key === undefined) return series;
   const src = out.columns[key] as ArrayLike<number>;
   const shifted = new Float64Array(src.length);
   for (let i = 0; i < src.length; i += 1) shifted[i] = src[i]! + ms;
