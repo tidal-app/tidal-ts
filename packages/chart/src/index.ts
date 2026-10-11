@@ -31,6 +31,7 @@ export {
   seriesAxisId,
   readsCompare,
   seriesDrawn,
+  seriesCategoryStyle,
   seriesLineDashArray,
   seriesLineWidth,
   sharedAxisId,

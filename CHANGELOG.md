@@ -18,7 +18,8 @@ multi-output study can be styled on its own.
   continues every line by default.
   - `series.addStudy` takes `outputs`; `series.setStudyOutputs` switches them in
     place (guard: `outputsAllowed`). Helpers: `studyOutputsOf`,
-    `defaultStudyOutputs`, `studyOutputChoices`, `studyOutputsRead`.
+    `defaultStudyOutputs`, `studyOutputChoices`, `studyOutputsRead`; the React
+    hooks are `useAddStudy(target, op, period, outputs)` and `useSetStudyOutputs`.
   - The prepare step folds one spec per line (`configSpecs`); `configOutputs`,
     `configBand` and `publishedColumns` answer what a config draws and what a
     study of it may read. `sourcesOf` finds a parent by any of its lines.
@@ -33,7 +34,7 @@ multi-output study can be styled on its own.
   (`solid | dashed | dotted`) overrides the category's texture, except on a
   comparison, where the texture names the symbol. `SeriesConfig.opacity`
   multiplies with the chart's dimming and with a fill's own translucency.
-  `LineDash` gains `'dotted'` (settings too).
+  `LineDash` gains `'dotted'` (settings too). `seriesCategoryStyle` is now exported.
 - **A study's colour follows its parent's** (terminal). Recolouring a series
   recolours every study built on it that still wears its old colour; one given
   its own colour keeps it.
