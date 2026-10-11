@@ -14,7 +14,7 @@
  * **props** (props in, events out).
  */
 
-export type LineDash = 'solid' | 'dashed';
+export type LineDash = 'solid' | 'dashed' | 'dotted';
 
 /** One line category's presentation default: stroke style + weight (px). */
 export interface CategoryLineStyle {
@@ -123,7 +123,7 @@ export function mergeChartSettings(stored: unknown): ChartSettings {
     // read as a data bug) — out-of-range falls back to the default.
     const w = o.weight;
     return {
-      dash: o.dash === 'solid' || o.dash === 'dashed' ? o.dash : base.dash,
+      dash: o.dash === 'solid' || o.dash === 'dashed' || o.dash === 'dotted' ? o.dash : base.dash,
       weight: typeof w === 'number' && Number.isFinite(w) && w > 0 && w <= 8 ? w : base.weight,
     };
   };

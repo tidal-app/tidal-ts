@@ -73,6 +73,8 @@ export {
   primaryOutput,
   studyInputOf,
   studyPick,
+  fanPick,
+  withFanOutput,
   withStudyOutput,
   type StudyPick,
   isPickedInput,

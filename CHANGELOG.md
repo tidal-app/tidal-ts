@@ -2,6 +2,43 @@
 
 All packages release together on one version.
 
+## 0.9.0 — 2026-10-11
+
+A study can run on several outputs of its parent, and every line of a
+multi-output study can be styled on its own.
+
+- **A study run on several outputs — a FAN** (chart, terminal, core).
+  `SeriesConfig.fan` names the outputs of its multi-output source a study runs
+  on: an SMA of a band's `Upper` and `Lower` is one study drawing a band of
+  smoothed edges. `derive` reads the first of them, so `column`, params and
+  labels work as before; each other line is the same chain with the bottom pick
+  swapped (`withFanOutput`, `fanPick` in core), so a retune moves every line.
+  A fan over a band's two edges draws as a `band` (with a centre only when
+  `Middle` is in it); anything else as `lines`. A study of a fanned study
+  continues every line by default.
+  - `series.addStudy` takes `outputs`; `series.setStudyOutputs` switches them in
+    place (guard: `outputsAllowed`). Helpers: `studyOutputsOf`,
+    `defaultStudyOutputs`, `studyOutputChoices`, `studyOutputsRead`; the React
+    hooks are `useAddStudy(target, op, period, outputs)` and `useSetStudyOutputs`.
+  - The prepare step folds one spec per line (`configSpecs`); `configOutputs`,
+    `configBand` and `publishedColumns` answer what a config draws and what a
+    study of it may read. `sourcesOf` finds a parent by any of its lines.
+  - A fan of a multi-output study is refused, and a fanned study is not a pair
+    leg.
+- **Per-output ink** (chart). `SeriesConfig.outputStyles`, keyed by output
+  name, overrides colour, width, texture and opacity of one line of a
+  multi-output study (or a band's centre). `outputLook` is the one resolver for
+  the chart and any key a host draws; the default is unchanged — one colour,
+  `OUTPUT_DASHES` for the 2nd..Nth line.
+- **A line's texture and opacity** (chart). `SeriesConfig.lineDash`
+  (`solid | dashed | dotted`) overrides the category's texture, except on a
+  comparison, where the texture names the symbol. `SeriesConfig.opacity`
+  multiplies with the chart's dimming and with a fill's own translucency.
+  `LineDash` gains `'dotted'` (settings too). `seriesCategoryStyle` is now exported.
+- **A study's colour follows its parent's** (terminal). Recolouring a series
+  recolours every study built on it that still wears its old colour; one given
+  its own colour keeps it.
+
 ## 0.8.0 — 2026-10-08
 
 A source coarser than the axis is folded at its own grain, on pond-ts 0.72.

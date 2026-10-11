@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import {
   configColumns,
+  configOutputs,
+  dashPattern,
+  DOT_PATTERN,
+  OUTPUT_DASHES,
+  outputLook,
   outputKey,
   type SeriesStyle,
   effectiveSplit,
@@ -164,7 +169,7 @@ describe('mergeChartSettings', () => {
 
   it('rejects out-of-vocabulary values field by field', () => {
     const merged = mergeChartSettings({
-      metrics: { dash: 'dotted', weight: 'fat' },
+      metrics: { dash: 'wavy', weight: 'fat' },
       candles: { split: 'yes', rise: 7 },
     });
     expect(merged.metrics).toEqual(DEFAULT_CHART_SETTINGS.metrics);
@@ -667,5 +672,50 @@ describe('guideLevels', () => {
   it('skips raw metrics and studies with no levels', () => {
     const sma = cfg({ id: 's', derive: { op: 'sma', inputs: ['close'], params: { period: 20 } } });
     expect(guideLevels([cfg({ id: 'p' }), sma], 'r1')).toEqual([]);
+  });
+});
+
+describe('outputLook — the ink each output of a multi-output config draws with', () => {
+  const macd: SeriesConfig = {
+    id: 's-m',
+    column: 'm',
+    label: 'MACD',
+    color: 'blue',
+    axis: 'L',
+    style: 'lines',
+    visible: true,
+    value: null,
+    derive: { op: 'macd', inputs: ['close'] },
+  };
+
+  it('defaults to one colour and a texture ladder, the first output solid', () => {
+    expect(outputLook(macd, 0).dash).toBeUndefined();
+    expect(outputLook(macd, 1).dash).toEqual(OUTPUT_DASHES[0]);
+    expect(outputLook(macd, 1).color).toBe('blue');
+    expect(outputLook(macd, 0).opacity).toBe(1);
+  });
+
+  it('takes per-output overrides by output NAME, falling back to the config', () => {
+    const names = configOutputs(macd).map((o) => o.name);
+    const styled: SeriesConfig = {
+      ...macd,
+      opacity: 0.5,
+      outputStyles: { [names[1]!]: { color: 'amber', lineDash: 'dotted', lineWidth: 2 } },
+    };
+    expect(outputLook(styled, 1)).toEqual({
+      color: 'amber',
+      width: 2,
+      dash: DOT_PATTERN,
+      opacity: 0.5,
+    });
+    expect(outputLook(styled, 0).color).toBe('blue');
+  });
+
+  it("a series' own texture overrides its category, but never a comparison's", () => {
+    const line: SeriesConfig = { ...macd, style: 'line', derive: undefined, lineDash: 'dashed' };
+    expect(seriesLineDashArray(line)).toEqual(dashPattern('dashed'));
+    expect(seriesLineDashArray({ ...line, column: 'cmp_close' })).toEqual(
+      dashPattern(DEFAULT_CHART_SETTINGS.comparisons.dash),
+    );
   });
 });

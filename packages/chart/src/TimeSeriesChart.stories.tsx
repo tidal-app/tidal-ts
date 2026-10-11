@@ -186,3 +186,86 @@ export const IntradayBand: Story = {
     collapseWeekends: true,
   },
 };
+
+/** A line's own texture and opacity — `lineDash` and `opacity`, both
+ *  overrides of what the series' category would draw. Solid, dashed and dotted
+ *  term-structure lines, the last at half opacity. */
+export const LineTextures: Story = {
+  args: {
+    rows: [
+      {
+        id: 'only',
+        height: 380,
+        configs: [
+          volConfigs[0]!,
+          { ...volConfigs[2]!, lineDash: 'dashed' },
+          { ...volConfigs[3]!, lineDash: 'dotted', opacity: 0.5 },
+        ],
+      },
+    ],
+  },
+};
+
+/** A MACD's three outputs, one of them given its own ink: by default a
+ *  multi-output study is ONE colour with a texture per output; `outputStyles`
+ *  overrides any output by name, here the `Signal` line in a second colour. */
+const macdSpec: DeriveSpec = { op: 'macd', inputs: ['close'] };
+const macdConfigs: SeriesConfig[] = [
+  line('macd', deriveId(macdSpec), 'Price · MACD', '#4f9cd9', {
+    style: 'lines',
+    unit: '',
+    source: 'price',
+    derive: macdSpec,
+    outputStyles: { Signal: { color: '#e0518a', lineDash: 'solid' } },
+  }),
+];
+const macd = prepareChart({ price: { series: priceSeries as unknown as ChartSeries } }, [
+  { id: 'only', configs: macdConfigs },
+]);
+export const PerOutputInk: Story = {
+  args: {
+    rows: [{ id: 'only', height: 380, configs: macd.rows[0]!.configs }],
+    sources: macd.sources,
+    ohlcSources: [],
+  },
+};
+
+/** One SMA run on a band's two edges (`fan: ['Upper', 'Lower']`) draws a band
+ *  of its own: the smoothed edges, washed between, with no centre line — over
+ *  the band it smooths, which keeps its own. */
+const fanBand: DeriveSpec = {
+  op: 'bollinger',
+  inputs: ['close'],
+  params: { period: 20, stdDev: 2 },
+};
+const fanSma: DeriveSpec = {
+  op: 'sma',
+  inputs: [{ from: fanBand, output: 'Upper' }],
+  params: { period: 10 },
+};
+const fanConfigs: SeriesConfig[] = [
+  line('price', 'close', 'Price', '#c9a94a', { unit: '', source: 'price' }),
+  line('band', deriveId(fanBand), 'Price · BOLLINGER(20, 2)', '#4f9cd9', {
+    style: 'band',
+    unit: '',
+    source: 'price',
+    derive: fanBand,
+  }),
+  line('smooth', deriveId(fanSma), 'Price · BOLLINGER(20, 2) · Upper, Lower · SMA(10)', '#e0518a', {
+    style: 'band',
+    unit: '',
+    source: 'price',
+    derive: fanSma,
+    fan: ['Upper', 'Lower'],
+  }),
+];
+const fan = prepareChart({ price: { series: priceSeries as unknown as ChartSeries } }, [
+  { id: 'only', configs: fanConfigs },
+]);
+export const FannedBand: Story = {
+  args: {
+    rows: [{ id: 'only', height: 380, configs: fan.rows[0]!.configs }],
+    sources: fan.sources,
+    ohlcSources: [],
+  },
+};

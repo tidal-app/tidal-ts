@@ -126,11 +126,16 @@ export function useAddSeries(): (catalogId: string, rowId?: string) => void {
 }
 
 /** Add a study (`sma`/`ema` …) of a target series, layered on its row. */
-export function useAddStudy(): (targetId: string, op: DeriveOp, period: number) => void {
+export function useAddStudy(): (
+  targetId: string,
+  op: DeriveOp,
+  period: number,
+  outputs?: readonly string[],
+) => void {
   const ref = TerminalContext.useActorRef();
   return useCallback(
-    (targetId: string, op: DeriveOp, period: number) =>
-      ref.send({ type: 'series.addStudy', targetId, op, period }),
+    (targetId: string, op: DeriveOp, period: number, outputs?: readonly string[]) =>
+      ref.send({ type: 'series.addStudy', targetId, op, period, ...(outputs ? { outputs } : {}) }),
     [ref],
   );
 }
@@ -174,6 +179,17 @@ export function useSetStudyOutput(): (id: string, output: string) => void {
   const ref = TerminalContext.useActorRef();
   return useCallback(
     (id: string, output: string) => ref.send({ type: 'series.setStudyOutput', id, output }),
+    [ref],
+  );
+}
+
+/** Which outputs of its multi-output source a study runs on — one, several, or
+ *  all (`series.setStudyOutputs`). */
+export function useSetStudyOutputs(): (id: string, outputs: readonly string[]) => void {
+  const ref = TerminalContext.useActorRef();
+  return useCallback(
+    (id: string, outputs: readonly string[]) =>
+      ref.send({ type: 'series.setStudyOutputs', id, outputs }),
     [ref],
   );
 }

@@ -34,10 +34,11 @@ export function bandColumns(column: string): { middle: string; upper: string; lo
  * the toggle on a study with nothing to colour would be a control that does
  * nothing.
  */
-export function hasBarOutput(c: Pick<SeriesConfig, 'style' | 'derive'>): boolean {
+export function hasBarOutput(
+  c: Pick<SeriesConfig, 'style' | 'derive' | 'column' | 'fan'>,
+): boolean {
   if (c.style !== 'lines' || !c.derive) return false;
-  const op = c.derive.op;
-  return opOutputs(op).some((suffix) => outputMark(op, suffix) === 'bar');
+  return configOutputs(c).some((o) => o.mark === 'bar');
 }
 
 /**
@@ -51,28 +52,118 @@ export function hasBarOutput(c: Pick<SeriesConfig, 'style' | 'derive'>): boolean
 export const outputKey = (id: string, i: number): string => `${id}__o${i}`;
 
 /**
- * The columns a config actually reads — one for most styles, three for a
- * `band`, and one per declared output for `lines`.
+ * One drawn output of a config — its NAME (the declared suffix, or for a
+ * fanned study the source output it runs on), the column it reads, and its
+ * mark. Index-aligned with {@link outputKey}.
+ */
+export interface ConfigOutput {
+  /** `''` for a single-output config; `'Upper'`, `'Signal'`, … otherwise. */
+  name: string;
+  column: string;
+  mark: 'line' | 'bar';
+}
+
+/**
+ * The outputs a config draws, in order — the one answer to "what lines does
+ * this config put on the canvas, and what is each called?".
+ *
+ * Three shapes:
+ *
+ * - **A fanned study** ({@link SeriesConfig.fan}): one output per source output
+ *   it runs on, each its own spec (`withFanOutput`) and so its own column.
+ * - **A multi-output op**: one per declared suffix, named off the spec id.
+ * - **Anything else**: its one column, unnamed.
+ *
+ * A config whose `derive` is gone degrades to its bare column rather than
+ * throwing (a persisted config can outlive the op that named it).
+ */
+export function configOutputs(c: Pick<SeriesConfig, 'column' | 'derive' | 'fan'>): ConfigOutput[] {
+  if (c.derive && c.fan && c.fan.length > 0) {
+    const mark = outputMark(c.derive.op, '');
+    const derive = c.derive;
+    return c.fan.map((name) => ({ name, column: deriveId(withFanOutput(derive, name)), mark }));
+  }
+  if (c.derive) {
+    const op = c.derive.op;
+    const outs = opOutputs(op);
+    if (outs.length > 1)
+      return outs.map((name) => ({
+        name,
+        column: `${c.column}${name}`,
+        mark: outputMark(op, name),
+      }));
+  }
+  return [{ name: '', column: c.column, mark: 'line' }];
+}
+
+/**
+ * The columns a `band` config draws between (and its centre line, when it has
+ * one). A fanned band — an SMA of a band's `Upper` and `Lower` — may have no
+ * centre at all; an op's own band always does (`bandColumns`).
+ */
+export function configBand(c: Pick<SeriesConfig, 'column' | 'derive' | 'fan'>): {
+  middle?: string;
+  upper: string;
+  lower: string;
+} {
+  if (c.derive && c.fan && c.fan.length > 0) {
+    const by = new Map(configOutputs(c).map((o) => [o.name, o.column]));
+    const middle = by.get('Middle');
+    return {
+      ...(middle ? { middle } : {}),
+      upper: by.get('Upper') ?? c.column,
+      lower: by.get('Lower') ?? c.column,
+    };
+  }
+  return bandColumns(c.column);
+}
+
+/**
+ * Whether a fan over `outputs` draws as a BAND: it runs on a band's two edges.
+ * A centre is optional — smoothing a band's bounds is still a band.
+ */
+export const fanIsBand = (outputs: readonly string[]): boolean =>
+  outputs.includes('Upper') && outputs.includes('Lower');
+
+/**
+ * The specs a config folds — one, or one per output of a fanned study. The
+ * prepare step folds every one of them, so each fanned line has a column.
+ */
+export function configSpecs(c: Pick<SeriesConfig, 'derive' | 'fan'>): DeriveSpec[] {
+  if (!c.derive) return [];
+  const derive = c.derive;
+  return c.fan && c.fan.length > 0 ? c.fan.map((o) => withFanOutput(derive, o)) : [derive];
+}
+
+/**
+ * The columns OTHER configs can be built on — what a study of this one may
+ * read. A config's `column`, and for a fanned study each of its lines' too:
+ * an EMA of the `Lower` line of a fanned SMA reads that line's column, not
+ * the `Upper` one the config is named by.
+ */
+export function publishedColumns(c: Pick<SeriesConfig, 'column' | 'derive' | 'fan'>): string[] {
+  return c.fan && c.fan.length > 0 ? configOutputs(c).map((o) => o.column) : [c.column];
+}
+
+/**
+ * The columns a config actually reads — one for most styles, two or three for
+ * a `band`, and one per output for `lines`.
  *
  * The single place that answers "what data does this config touch?", so a new
- * multi-output study doesn't have to be found in five scanners. A `lines`
- * config needs its `derive` to answer, because the suffixes come from the op's
- * declaration; without one it degrades to its bare column rather than throwing
- * (a persisted config can outlive the op that named it).
+ * multi-output study doesn't have to be found in five scanners.
  */
 export function configColumns(c: {
   column: string;
   style: SeriesStyle;
   derive?: DeriveSpec;
+  fan?: readonly string[];
 }): string[] {
   if (c.style === 'band') {
-    const b = bandColumns(c.column);
-    return [b.middle, b.upper, b.lower];
+    const b = configBand(c);
+    return [...(b.middle ? [b.middle] : []), b.upper, b.lower];
   }
-  if (c.style === 'lines') {
-    if (!c.derive) return [c.column];
-    return opOutputs(c.derive.op).map((suffix) => `${c.column}${suffix}`);
-  }
+  if (c.style === 'lines' || (c.fan && c.fan.length > 0))
+    return configOutputs(c).map((o) => o.column);
   return [c.column];
 }
 
@@ -83,12 +174,14 @@ export function configColumns(c: {
 import {
   BAND_OUTPUTS,
   COMPARE_PREFIX,
+  deriveId,
   inputNames,
   opOutputs,
   opParams,
   outputMark,
   studyLevels,
   usesCompare,
+  withFanOutput,
 } from '@tidal-ts/core';
 import type { DeriveSpec, SeriesWindow } from '@tidal-ts/core';
 export type { DeriveSpec, SeriesWindow };
@@ -103,6 +196,7 @@ import {
   DEFAULT_CHART_SETTINGS,
   type CategoryLineStyle,
   type ChartSettings,
+  type LineDash,
 } from './chartSettings.js';
 
 /**
@@ -225,6 +319,49 @@ export interface SeriesConfig {
    *  keys / raw CSS). Omitted ⇒ the chart settings' defaults. */
   riseColor?: string;
   fallColor?: string;
+  /** The line's texture. Omitted ⇒ the category default from the chart
+   *  settings (see {@link seriesLineDashArray}). A comparison-reading series
+   *  keeps its own texture: there, dashing is what says "the other symbol". */
+  lineDash?: LineDash;
+  /** How opaque the series draws, `0..1`. Omitted ⇒ `1`. Multiplies with the
+   *  chart's own dimming and with a fill's own translucency, so a half-opaque
+   *  band is half as strong a wash, not an opaque one. A LINE fades only when
+   *  its colour resolves to hex or `rgb()`/`rgba()`; another form (`hsl()`, a
+   *  named colour, `var()`) draws at full strength — resolve to hex to fade. */
+  opacity?: number;
+  /**
+   * Per-OUTPUT ink for a config that draws several lines (a MACD's `Signal`, a
+   * band's `Middle`, one line of a fanned study), keyed by the output's name
+   * ({@link ConfigOutput.name}). Every field falls back to the config's own,
+   * then to the output's default texture — so an empty entry changes nothing,
+   * and a study recoloured as a whole still recolours every output it has not
+   * been told otherwise about.
+   */
+  outputStyles?: Readonly<Record<string, OutputStyle>>;
+  /**
+   * The outputs of its multi-output source this study runs on, when it runs on
+   * MORE than one — an SMA of a band's `Upper` and `Lower` is one study drawing
+   * two smoothed edges, not two studies.
+   *
+   * `derive` reads the first of them, so `column` and every single-spec reader
+   * (params, labels, the panel) keep working unchanged; each other output's
+   * spec is the same chain with the bottom pick swapped (`withFanOutput`), so a
+   * retune moves every line together. Absent ⇒ the one output `derive` picks.
+   * A fan over a band's two edges draws as a `band`; anything else as `lines`.
+   */
+  fan?: readonly string[];
+}
+
+/** The textures in display order. */
+export const LINE_DASHES: readonly LineDash[] = ['solid', 'dashed', 'dotted'];
+
+/** Ink for ONE output of a multi-output config — see
+ *  {@link SeriesConfig.outputStyles}. Every field is an override. */
+export interface OutputStyle {
+  color?: string;
+  lineWidth?: number;
+  lineDash?: LineDash;
+  opacity?: number;
 }
 
 // --- Axis identity ------------------------------------------------------------
@@ -698,12 +835,85 @@ export function seriesLineWidth(
   return s.lineWidth ?? seriesCategoryStyle(s, settings).weight;
 }
 
-/** A series' dash pattern (`undefined` = solid) from its category's style. */
+/** The dash pattern a `'dotted'` line draws with — short enough to read as
+ *  dots at every weight the panel offers, spaced so it never reads as a dash. */
+export const DOT_PATTERN: readonly [number, number] = [1.5, 3];
+
+/** A texture as a dash pattern — `undefined` for solid. */
+export function dashPattern(dash: LineDash | undefined): readonly [number, number] | undefined {
+  return dash === 'dashed' ? DASH_PATTERN : dash === 'dotted' ? DOT_PATTERN : undefined;
+}
+
+/** A series' dash pattern (`undefined` = solid): its own `lineDash`, else its
+ *  category's style. A comparison-reading series always takes its category's:
+ *  there the texture is not decoration but the symbol it reads. */
 export function seriesLineDashArray(
   s: SeriesConfig,
   settings: ChartSettings = DEFAULT_CHART_SETTINGS,
 ): readonly [number, number] | undefined {
-  return seriesCategoryStyle(s, settings).dash === 'dashed' ? DASH_PATTERN : undefined;
+  if (s.lineDash && !readsCompare(s)) return dashPattern(s.lineDash);
+  return dashPattern(seriesCategoryStyle(s, settings).dash);
+}
+
+/** Dash ladders for a multi-output config's 2nd..Nth line, by default.
+ *  Distinguishable at a glance and ordered so a longer dash reads as "further
+ *  from the main output". Cycles past the end — a 12-output ribbon (`guppy`)
+ *  wants a colour ramp rather than twelve dashes, which is a named
+ *  TDL-STUDYDRAW case. Exported so a host's key draws the same textures. */
+export const OUTPUT_DASHES: readonly (readonly number[])[] = [
+  [6, 3],
+  [2, 2],
+  [9, 3, 2, 3],
+  [1, 3],
+];
+
+/** How one output of a config draws — see {@link outputLook}. */
+export interface OutputLook {
+  /** A palette key or raw CSS colour, unresolved — as `SeriesConfig.color`. */
+  color: string;
+  width: number;
+  /** `undefined` = solid. */
+  dash?: readonly number[];
+  /** `0..1`, before the chart's own dimming. */
+  opacity: number;
+}
+
+/**
+ * The ink one output of a config draws with — its {@link OutputStyle}
+ * overrides, else the config's own, else the output's default.
+ *
+ * The defaults are what a multi-output study has always drawn: ONE colour, N
+ * textures. The first output is the config's own line; each later one takes a
+ * longer dash and a hair less weight, so the stack reads as primary-and-derived
+ * rather than as peers. One function for the chart and for any key a host
+ * draws, so the two cannot disagree about which line is which.
+ */
+export function outputLook(
+  c: SeriesConfig,
+  index: number,
+  settings: ChartSettings = DEFAULT_CHART_SETTINGS,
+): OutputLook {
+  const name = configOutputs(c)[index]?.name ?? '';
+  const own = c.outputStyles?.[name];
+  const width = seriesLineWidth(c, settings);
+  // A band draws ONE line (its centre) over its wash, so that line is the
+  // config's own and takes the config's own texture; the ladder is for stacks.
+  const lead = index === 0 || c.style === 'band';
+  const dash = own?.lineDash
+    ? dashPattern(own.lineDash)
+    : c.style === 'band'
+      ? seriesLineDashArray(c, settings)
+      : index === 0
+        ? c.lineDash
+          ? dashPattern(c.lineDash)
+          : undefined
+        : OUTPUT_DASHES[(index - 1) % OUTPUT_DASHES.length];
+  return {
+    color: own?.color ?? c.color,
+    width: own?.lineWidth ?? (lead ? width : Math.max(1, width - 0.5)),
+    ...(dash ? { dash } : {}),
+    opacity: own?.opacity ?? c.opacity ?? 1,
+  };
 }
 
 /** The effective direction-coloring of a `bar`/`candle` series: the per-series
@@ -799,17 +1009,22 @@ export function sourcesOf(configs: readonly SeriesConfig[], c: SeriesConfig): Se
     if (byId != null && byId !== c.id) {
       const recorded = configs.find((x) => x.id === byId);
       if (!recorded) return; // its parent is gone — an orphan, not a re-bind
-      if (recorded.column === name) {
+      if (publishes(recorded, name)) {
         out.push(recorded);
         return;
       }
       // Stale: that config computes something else now. Fall through.
     }
-    const src = configs.find((x) => x.id !== c.id && x.column === name);
+    const src = configs.find((x) => x.id !== c.id && publishes(x, name));
     if (src) out.push(src);
   });
   return out;
 }
+
+/** Whether `c` computes the column `name` — its own, or one of its fanned
+ *  lines' ({@link publishedColumns}). The cheap test first: a fan is rare. */
+const publishes = (c: SeriesConfig, name: string): boolean =>
+  c.column === name || (!!c.fan && publishedColumns(c).includes(name));
 
 /** Whether `c` is built on `p` — `sourcesOf`, asked the other way round. */
 export const readsFrom = (
