@@ -1405,6 +1405,9 @@ export function outputAllowed(scope: EditScope, id: string, output: string): boo
     const configs = flatConfigs(scope.rows);
     const target = configs.find((c) => c.id === id);
     if (!target?.derive) return false;
+    // A fanned study moves its outputs with `series.setStudyOutputs`, which
+    // keeps the fan and the spec in step; this event would move only the spec.
+    if (target.fan && target.fan.length > 0) return false;
     const pick = studyPick(target.derive);
     if (!pick || !opOutputs(pick.from.op).includes(output)) return false;
     if (pick.explicit && pick.output === output) return false;
@@ -2256,8 +2259,8 @@ export const terminalMachine = setup({
       // multi-output study (a MACD of each band edge) would draw a grid of
       // lines nothing can key, so it is refused rather than guessed at.
       const outputs = chosenOutputs(target, event.outputs);
-      if (event.outputs && event.outputs.length > 0) {
-        const offered = studyOutputsOf(target);
+      const offered = studyOutputsOf(target);
+      if (offered.length > 0 && event.outputs && event.outputs.length > 0) {
         if (!event.outputs.every((o) => offered.includes(o))) return false;
       }
       if (outputs.length > 1 && opOutputs(event.op).length > 1) return false;
@@ -2780,14 +2783,26 @@ export const terminalMachine = setup({
         // on it that still wears the colour it had — and leaves alone one that
         // was given its own. Matching on the OLD colour is what tells the two
         // apart without a second field to keep in step.
+        // The walk goes study by study down from the recoloured series and
+        // stops at a link that does not follow, so a grandchild under a study
+        // given its own colour keeps its colour even if it matches the root's.
+        // A pair is never a study of one leg, so it never follows.
         const follow = new Set<string>();
-        const target = flatConfigs(context.rows).find((c) => c.id === event.id);
+        const configs = flatConfigs(context.rows);
+        const target = configs.find((c) => c.id === event.id);
         const color = event.patch.color;
         if (target && typeof color === 'string' && color !== target.color) {
-          const configs = flatConfigs(context.rows);
-          for (const id of studiesOn(configs, target.id, isCatalogColumn(context))) {
-            const c = configs.find((x) => x.id === id);
-            if (id !== target.id && c?.color === target.color) follow.add(id);
+          const catalog = isCatalogColumn(context);
+          const reached = [target];
+          while (reached.length > 0) {
+            const from = reached.pop()!;
+            for (const c of configs) {
+              if (c.id === target.id || follow.has(c.id) || !c.derive) continue;
+              if (catalog(c.column) || readPairParts(c.derive) !== null) continue;
+              if (c.color !== target.color || !readsFrom(configs, c, from)) continue;
+              follow.add(c.id);
+              reached.push(c);
+            }
           }
         }
         return context.rows.map((r) => ({

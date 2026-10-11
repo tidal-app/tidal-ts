@@ -325,7 +325,9 @@ export interface SeriesConfig {
   lineDash?: LineDash;
   /** How opaque the series draws, `0..1`. Omitted ⇒ `1`. Multiplies with the
    *  chart's own dimming and with a fill's own translucency, so a half-opaque
-   *  band is half as strong a wash, not an opaque one. */
+   *  band is half as strong a wash, not an opaque one. A LINE fades only when
+   *  its colour resolves to hex or `rgb()`/`rgba()`; another form (`hsl()`, a
+   *  named colour, `var()`) draws at full strength — resolve to hex to fade. */
   opacity?: number;
   /**
    * Per-OUTPUT ink for a config that draws several lines (a MACD's `Signal`, a

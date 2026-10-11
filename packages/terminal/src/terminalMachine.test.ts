@@ -3340,6 +3340,41 @@ describe('a study run on SEVERAL outputs of its parent (a fan)', () => {
   });
 });
 
+describe('the review fixes for a fan (tidal-ts #30)', () => {
+  const all = (ctx: () => { rows: RowState[] }) => ctx().rows.flatMap((r) => r.configs);
+
+  it('the single-output event is refused on a fanned study, so the spec and fan stay in step', () => {
+    const { actor, ctx, idOf } = start();
+    actor.send({ type: 'series.addStudy', targetId: idOf('close'), op: 'bollinger', period: 20 });
+    const band = all(ctx).find((c) => c.derive?.op === 'bollinger')!;
+    actor.send({
+      type: 'series.addStudy',
+      targetId: band.id,
+      op: 'sma',
+      period: 5,
+      outputs: ['Upper', 'Lower'],
+    });
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    expect(outputAllowed(ctx(), sma.id, 'Middle')).toBe(false);
+    actor.send({ type: 'series.setStudyOutput', id: sma.id, output: 'Middle' });
+    expect(all(ctx).find((c) => c.id === sma.id)).toEqual(sma);
+  });
+
+  it('outputs passed for a single-output target are ignored, as documented', () => {
+    const { actor, ctx, idOf } = start();
+    const before = all(ctx).length;
+    actor.send({
+      type: 'series.addStudy',
+      targetId: idOf('close'),
+      op: 'sma',
+      period: 20,
+      outputs: ['Upper'],
+    });
+    expect(all(ctx).length).toBe(before + 1);
+    expect(all(ctx).find((c) => c.derive?.op === 'sma')!.fan).toBeUndefined();
+  });
+});
+
 describe("a study's colour follows its parent's", () => {
   const all = (ctx: () => { rows: RowState[] }) => ctx().rows.flatMap((r) => r.configs);
 
@@ -3360,5 +3395,22 @@ describe("a study's colour follows its parent's", () => {
     actor.send({ type: 'series.patch', id: price, patch: { color: 'teal' } });
     expect(all(ctx).find((c) => c.id === sma.id)!.color).toBe('teal');
     expect(all(ctx).find((c) => c.id === ema.id)!.color).toBe('green');
+  });
+
+  it('stops at a study given its own colour, even when one below it matches the root', () => {
+    const { actor, ctx, idOf } = start();
+    const price = idOf('close');
+    const root = find(ctx, 'close').color;
+    actor.send({ type: 'series.addStudy', targetId: price, op: 'sma', period: 20 });
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    actor.send({ type: 'series.addStudy', targetId: sma.id, op: 'ema', period: 5 });
+    const ema = all(ctx).find((c) => c.derive?.op === 'ema')!;
+    // The SMA is given its own colour; the EMA under it keeps the root's colour
+    // (now a choice made under the SMA, not an inherited one).
+    actor.send({ type: 'series.patch', id: sma.id, patch: { color: 'green' } });
+    actor.send({ type: 'series.patch', id: ema.id, patch: { color: root } });
+    actor.send({ type: 'series.patch', id: price, patch: { color: 'pink' } });
+    expect(all(ctx).find((c) => c.id === sma.id)!.color).toBe('green');
+    expect(all(ctx).find((c) => c.id === ema.id)!.color).toBe(root);
   });
 });
