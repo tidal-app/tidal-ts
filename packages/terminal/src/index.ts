@@ -19,6 +19,7 @@ export {
   useAddStudy,
   useSetStudyParam,
   useSetStudyOutput,
+  useSetStudyOutputs,
   useOrderSeries,
   useReindexSeries,
   useMoveSeriesToRow,
