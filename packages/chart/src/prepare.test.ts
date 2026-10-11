@@ -20,7 +20,7 @@ import {
   prepareChart,
   sourceFacts,
 } from './prepare.js';
-import { bandColumns } from './series.js';
+import { bandColumns, configBand, configColumns } from './series.js';
 
 // Deterministic fixtures (seeded walks) — the same the app runs on with no socket.
 const price = generatePriceSeries(DEMO_INSTRUMENTS[0]!, { bars: 40 }) as unknown as ChartSeries;
@@ -317,5 +317,37 @@ describe('a coarse source folds at its own grain, then holds across the axis', (
       [study],
     ).vol!;
     expect(empty.length).toBe(0);
+  });
+});
+
+describe('a FANNED study (one study on several outputs of a band)', () => {
+  const bb: DeriveSpec = { op: 'bollinger', inputs: ['close'], params: { period: 5 } };
+  const smaUpper: DeriveSpec = {
+    op: 'sma',
+    inputs: [{ from: bb, output: 'Upper' }],
+    params: { period: 3 },
+  };
+  const fanned = cfg({
+    id: 's-f',
+    column: deriveId(smaUpper),
+    derive: smaUpper,
+    fan: ['Upper', 'Lower'],
+    style: 'band',
+  });
+
+  it('folds one column per output, so the smoothed band carries both edges', () => {
+    const facts = sourceFacts(foldSources({ price: { series: price } }, [fanned]));
+    const [upper, lower] = configColumns(fanned);
+    expect(upper).toBe(fanned.column);
+    expect(lower).not.toBe(upper);
+    expect(facts.columns.price!.has(upper!)).toBe(true);
+    expect(facts.columns.price!.has(lower!)).toBe(true);
+    expect(carries(facts, fanned)).toBe(true);
+    expect(configBand(fanned).middle).toBeUndefined();
+  });
+
+  it('its fold key moves with the fan, so adding an output re-folds', () => {
+    const one = { ...fanned, fan: undefined, style: 'line' as const };
+    expect(foldKey([fanned])).not.toBe(foldKey([one]));
   });
 });

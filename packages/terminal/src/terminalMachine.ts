@@ -25,6 +25,9 @@ import {
   studyPick,
   substituteInput,
   withStudyOutput,
+  fanPick,
+  primaryOutput,
+  withFanOutput,
   type DeriveInput,
   type DeriveOp,
   type DeriveSpec,
@@ -75,6 +78,8 @@ import {
   isStudySeries,
   readsFrom,
   sourcesOf,
+  fanIsBand,
+  publishedColumns,
 } from '@tidal-ts/chart';
 import {
   configAxisId,
@@ -307,7 +312,17 @@ interface TerminalContext {
  *  event union (the pre-paid bus contract). */
 export type TerminalEvent =
   | { type: 'series.add'; catalogId: string; rowId?: string }
-  | { type: 'series.addStudy'; targetId: string; op: DeriveOp; period: number }
+  /** Add a study of `targetId`. `outputs` names which outputs of a
+   *  MULTI-OUTPUT target it runs on ({@link studyOutputsOf}); several make one
+   *  study FANNED over them (`SeriesConfig.fan`). Omitted ⇒ the target's
+   *  default ({@link defaultStudyOutputs}). Ignored for a single-output target. */
+  | {
+      type: 'series.addStudy';
+      targetId: string;
+      op: DeriveOp;
+      period: number;
+      outputs?: readonly string[];
+    }
   /** Add an A-vs-B spread. `rowId` names the row to seat it on — the per-row
    *  `+Pair` affordance, and an EXPLICIT choice, so it wins over the default
    *  (in front of leg A, which is only a guess about where you want it). */
@@ -324,6 +339,10 @@ export type TerminalEvent =
   /** Which output of a multi-output source a study reads (`Middle`, `Hist`) —
    *  the output picker. `output` is one of the source op's declared suffixes. */
   | { type: 'series.setStudyOutput'; id: string; output: string }
+  /** Which outputs of its multi-output source a study runs on — one, several
+   *  (a FAN: one study drawing a line per output), or all. Generalises
+   *  `series.setStudyOutput`, and reaches a study of a fanned study too. */
+  | { type: 'series.setStudyOutputs'; id: string; outputs: readonly string[] }
   /** Draw-order (z) within the series' own row. The row's config list is
    *  **front→back** — index 0 paints on top (the render reverses for
    *  `<Layers>`), so `up` moves toward the front. */
@@ -725,6 +744,51 @@ function toConfig(e: MetricEntry, id: string, axis: SeriesAxis = e.axis): Series
   };
 }
 
+/**
+ * The outputs a study of `target` may run on — the choices the add-study
+ * picker and the properties' "Reads" control offer.
+ *
+ * A MULTI-OUTPUT study offers its declared outputs (a MACD's Line, Signal,
+ * Hist); a FANNED study offers the outputs it runs on, because a study of it
+ * continues each of its lines (an EMA of a smoothed band's edges). Anything
+ * else offers none: it is one line, and a study of it reads that.
+ */
+export function studyOutputsOf(target: Pick<SeriesConfig, 'derive' | 'fan'>): string[] {
+  if (target.fan && target.fan.length > 0) return [...target.fan];
+  if (target.derive && opOutputs(target.derive.op).length > 1) return opOutputs(target.derive.op);
+  return [];
+}
+
+/**
+ * What a study of `target` runs on when nothing says otherwise: a fanned
+ * study's every line (so smoothing a smoothed band gives a band), else a
+ * multi-output study's PRIMARY (`primaryOutput`) — the one reading it was
+ * named for. Empty for a single-output target.
+ */
+export function defaultStudyOutputs(target: Pick<SeriesConfig, 'derive' | 'fan'>): string[] {
+  if (target.fan && target.fan.length > 0) return [...target.fan];
+  const primary = target.derive ? primaryOutput(target.derive.op) : undefined;
+  return primary ? [primary] : [];
+}
+
+/** `outputs` in the order `offered` lists them, duplicates dropped — so a fan's
+ *  first output (the one `derive` reads) does not depend on click order. */
+const inOfferedOrder = (offered: readonly string[], outputs: readonly string[]): string[] =>
+  offered.filter((o) => outputs.includes(o));
+
+/**
+ * The input a study of `target` reads for one of its outputs: the target's own
+ * column or spec, a PICK of one output of a multi-output target, or — for a
+ * fanned target — the chain that computes that one of its lines.
+ */
+function studyInputFor(target: SeriesConfig, output?: string): DeriveInput {
+  if (output !== undefined && target.derive) {
+    if (target.fan && target.fan.includes(output)) return withFanOutput(target.derive, output);
+    if (opOutputs(target.derive.op).includes(output)) return { from: target.derive, output };
+  }
+  return studyInputOf(target.derive ?? target.column);
+}
+
 /** The spec a study of `target` at `(op, period)` induces — reads the target's
  *  DATA column, or **nests** the target's own spec when the target is derived
  *  (the engine reads a string input as a raw column, so composition nests;
@@ -732,7 +796,12 @@ function toConfig(e: MetricEntry, id: string, axis: SeriesAxis = e.axis): Series
  *  MULTI-OUTPUT target is nested as one PICKED output, its primary
  *  (`studyInputOf`) — never bare, which would read whichever output it happens
  *  to declare first (TDL-STUDYCHAIN). */
-const studySpec = (target: SeriesConfig, op: DeriveOp, period: number): DeriveSpec => {
+const studySpec = (
+  target: SeriesConfig,
+  op: DeriveOp,
+  period: number,
+  output?: string,
+): DeriveSpec => {
   // Params come from the REGISTRY, not from a list here: an op is tuned by
   // exactly what it declares, so a two-param study (a band's `period` +
   // `stdDev`) is complete on arrival without this function knowing it exists.
@@ -758,7 +827,7 @@ const studySpec = (target: SeriesConfig, op: DeriveOp, period: number): DeriveSp
   // and `deriveId` dedupes them. That is correct — ATR(14) of the bars is one
   // series — and it is why the picker has to refuse the op where its columns
   // are absent (`opNeedsColumns`) rather than let the fold skip it silently.
-  const self = studyInputOf(target.derive ?? target.column);
+  const self = studyInputFor(target, output);
   const inputs = opInputs(op).map((r) =>
     // A target role takes the target; a bar role takes its own column. No
     // default and not a target role should be unreachable (a benchmark role is
@@ -786,8 +855,13 @@ function studyConfig(
   period: number,
   id: string,
   unitOf: (column: string) => string,
+  requested?: readonly string[],
 ): SeriesConfig {
-  const derive = studySpec(target, op, period);
+  const outputs = chosenOutputs(target, requested);
+  const derive = studySpec(target, op, period, outputs[0]);
+  // Several outputs make one study FANNED over them: `derive` reads the first,
+  // and each other line is the same chain with its pick swapped.
+  const fan = outputs.length > 1 ? outputs : undefined;
   // Only an `inherit` op may share its source's scale (pond's rule, shipped
   // with the catalog's `unit`). An RSI is bounded 0..100 and a vol reading is
   // ~20, so sharing stretches the axis five times and squashes the very series
@@ -801,9 +875,11 @@ function studyConfig(
   const own = specUnit(derive, (col) =>
     col === target.column ? (target.unit ?? '') : unitOf(col),
   );
-  // Which output of a multi-output target this study reads, named in the label
-  // (`Price · DONCHIAN(20) · Middle · SMA(10)`) so the choice is never silent.
-  const picked = derive.inputs.find(isPickedInput);
+  // Which output(s) of a multi-output target this study reads, named in the
+  // label (`Price · DONCHIAN(20) · Middle · SMA(10)`) so the choice is never
+  // silent — except where it says nothing new: a study of a fanned study run
+  // on every one of its lines reads exactly what its parent's label says.
+  const segment = outputsSegment(target, outputs);
   return {
     id,
     // Sharing means sharing the SOURCE's scale — which is the source's own axis
@@ -811,7 +887,7 @@ function studyConfig(
     // group landed on the row's shared axis instead, a line near zero drawn on
     // the price's scale.
     ...(shares ? (target.axisGroup ? { axisGroup: target.axisGroup } : {}) : { axisGroup: id }),
-    label: `${target.label}${picked ? ` · ${picked.output}` : ''} · ${studyTag(derive)}`, // legend chip
+    label: `${target.label}${segment ? ` · ${segment}` : ''} · ${studyTag(derive)}`, // legend chip
     family: target.family ?? target.label, // main line = the source's name
     tenor: target.tenor, // carry the source's tenor into the params sub-line
     // A study is the same reading, smoothed — so it takes its metric's COLOUR
@@ -826,19 +902,24 @@ function studyConfig(
     // anything else is N lines off one spec, one per declared output. A
     // single-output study whose one output is a histogram (an Awesome
     // Oscillator) opens as bars; the user can still restyle it.
-    style: opIsBand(op)
-      ? 'band'
-      : opIsMulti(op)
-        ? 'lines'
-        : outputMark(op, '') === 'bar'
-          ? 'bar'
-          : 'line',
+    style: fan
+      ? fanIsBand(fan)
+        ? 'band'
+        : 'lines'
+      : opIsBand(op)
+        ? 'band'
+        : opIsMulti(op)
+          ? 'lines'
+          : outputMark(op, '') === 'bar'
+            ? 'bar'
+            : 'line',
     visible: true,
     source: target.source,
     column: deriveId(derive),
     value: null,
     unit: shares ? target.unit : own,
     derive,
+    ...(fan ? { fan } : {}),
     // WHICH config this study is on — recorded now, because this is the one
     // moment it is known for certain: the user pressed THIS config's button.
     // The spec above names the target by column, which is the data; this
@@ -849,6 +930,30 @@ function studyConfig(
     // that SMA's child (PR #16 review, MEDIUM).
     ...recordParents(derive, [target]),
   };
+}
+
+/** The outputs a new study of `target` runs on: what was asked for, in the
+ *  target's own order and limited to what it offers, else its default. Empty
+ *  for a single-output target. */
+function chosenOutputs(target: SeriesConfig, requested?: readonly string[]): string[] {
+  const offered = studyOutputsOf(target);
+  if (offered.length === 0) return [];
+  const asked = requested ? inOfferedOrder(offered, requested) : [];
+  return asked.length > 0 ? asked : defaultStudyOutputs(target);
+}
+
+/** The label segment naming which outputs a study of `parent` reads, or
+ *  `undefined` when there is nothing to say: a single-output parent, or a
+ *  fanned parent continued on every one of its lines. */
+function outputsSegment(
+  parent: Pick<SeriesConfig, 'derive' | 'fan'> | undefined,
+  outputs: readonly string[],
+): string | undefined {
+  if (outputs.length === 0) return undefined;
+  const fan = parent?.fan;
+  if (fan && fan.length === outputs.length && fan.every((o) => outputs.includes(o)))
+    return undefined;
+  return outputs.join(', ');
 }
 
 /** Legend label per pair op — the spread reads as its construction. */
@@ -903,6 +1008,8 @@ function legSeat(context: TerminalContext, metricId: string): SeriesConfig | und
  */
 const resolveLeg = (context: TerminalContext, id: string): PairLeg | null => {
   const cfg = legSeat(context, id);
+  // A FANNED study is several lines, like a multi-output one: no single leg.
+  if (cfg?.fan && cfg.fan.length > 0) return null;
   if (cfg)
     return {
       seatId: cfg.id,
@@ -1117,9 +1224,14 @@ function pairConfig(
  */
 function recordParents(
   derive: DeriveSpec,
-  seats: readonly Pick<SeriesConfig, 'id' | 'column'>[],
+  seats: readonly Pick<SeriesConfig, 'id' | 'column' | 'derive' | 'fan'>[],
 ): Pick<SeriesConfig, 'parentIds'> {
-  const parentIds = inputNames(derive).map((name) => seats.find((s) => s.column === name)?.id);
+  // `publishedColumns`: a study of ONE line of a fanned study reads that
+  // line's column, which is not the column the fanned config is named by.
+  const parentIds = inputNames(derive).map(
+    (name) =>
+      seats.find((s) => s.column === name || (!!s.fan && publishedColumns(s).includes(name)))?.id,
+  );
   return parentIds.some((id) => id != null) ? { parentIds } : {};
 }
 
@@ -1301,6 +1413,107 @@ export function outputAllowed(scope: EditScope, id: string, output: string): boo
     if (next === null || !unitsStayCoherent(scope.rows, next)) return false;
     const borrowed = target.axisGroup != null && target.axisGroup !== target.id;
     return !(borrowed && next.get(id)!.unit !== (target.unit ?? ''));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The outputs a study can be set to run on — its PARENT's
+ * ({@link studyOutputsOf}), or, with no seated parent, every output its chain's
+ * multi-output source declares. Empty when it reads no multi-output source.
+ */
+export function studyOutputChoices(scope: EditScope, id: string): string[] {
+  const configs = flatConfigs(scope.rows);
+  const study = configs.find((c) => c.id === id);
+  if (!study?.derive) return [];
+  const pick = fanPick(study.derive);
+  if (!pick) return [];
+  const parent = sourcesOf(configs, study)[0];
+  const offered = parent ? studyOutputsOf(parent) : [];
+  return offered.length > 0 ? offered : opOutputs(pick.from.op);
+}
+
+/** The outputs a study runs on now: its fan, else the one its chain picks. */
+export function studyOutputsRead(study: Pick<SeriesConfig, 'derive' | 'fan'>): string[] {
+  if (study.fan && study.fan.length > 0) return [...study.fan];
+  const pick = study.derive ? fanPick(study.derive) : undefined;
+  return pick ? [pick.output] : [];
+}
+
+/**
+ * A study re-pointed to run on `outputs` — its spec, fan, style and label;
+ * `null` when the set is not one it can take.
+ *
+ * The identity stands, as for every retune. The spec reads the FIRST output
+ * (so `column` and every one-spec reader keep working); more than one makes it
+ * a fan, drawn as a band over a band's two edges and as lines otherwise. Going
+ * back to one output gives back a single line — unless the study was already
+ * drawing as something single-column the user chose (an area), which it keeps.
+ */
+function respecOutputs(
+  scope: EditScope,
+  study: SeriesConfig,
+  outputs: readonly string[],
+): SeriesConfig | null {
+  if (!study.derive) return null;
+  const offered = studyOutputChoices(scope, study.id);
+  if (offered.length === 0 || outputs.length === 0) return null;
+  if (!outputs.every((o) => offered.includes(o))) return null;
+  const next = inOfferedOrder(offered, outputs);
+  // A fan runs a SINGLE-output study once per output (see `canAddStudy`).
+  if (next.length > 1 && opOutputs(study.derive.op).length > 1) return null;
+  const derive = withFanOutput(study.derive, next[0]!);
+  const fan = next.length > 1 ? next : undefined;
+  const configs = flatConfigs(scope.rows);
+  const parent = sourcesOf(configs, study)[0];
+  // Swap the label's output segment, keeping whatever precedes it.
+  const tag = ` · ${studyTag(study.derive)}`;
+  const was = outputsSegment(parent, studyOutputsRead(study));
+  const label = typeof study.label === 'string' ? study.label : '';
+  const named = was ? ` · ${was}${tag}` : tag;
+  const base = label.endsWith(named)
+    ? label.slice(0, -named.length)
+    : label.endsWith(tag)
+      ? label.slice(0, -tag.length)
+      : (study.family ?? label);
+  const segment = outputsSegment(parent, next);
+  const single = study.style === 'band' || study.style === 'lines' ? 'line' : study.style;
+  return {
+    ...study,
+    derive,
+    column: deriveId(derive),
+    fan,
+    style: fan ? (fanIsBand(fan) ? 'band' : 'lines') : opIsBand(study.derive.op) ? 'band' : single,
+    label: `${base}${segment ? ` · ${segment}` : ''}${tag}`,
+  };
+}
+
+/**
+ * Whether a study can be set to run on `outputs` — shared by the guard and the
+ * host, so a refused set renders disabled. Beyond {@link respecOutputs}'s own
+ * refusals: nothing may change while the SAME set is asked for; a study with a
+ * study built on it may only move between single outputs (its child reads one
+ * of its lines, and a fan change would leave it reading a line no longer
+ * drawn); and the result must stay coherent like any retune.
+ *
+ * Total: it runs in a guard.
+ */
+export function outputsAllowed(scope: EditScope, id: string, outputs: readonly string[]): boolean {
+  try {
+    const configs = flatConfigs(scope.rows);
+    const study = configs.find((c) => c.id === id);
+    if (!study?.derive) return false;
+    const now = studyOutputsRead(study);
+    const next = respecOutputs(scope, study, outputs);
+    if (!next) return false;
+    const want = studyOutputsRead(next);
+    if (want.length === now.length && want.every((o, i) => o === now[i])) return false;
+    if (hasStudyChild(configs, study) && (want.length > 1 || now.length > 1)) return false;
+    const re = propagateRespec(configs, id, next, unitOfColumn(scope));
+    if (re === null || !unitsStayCoherent(scope.rows, re)) return false;
+    const borrowed = study.axisGroup != null && study.axisGroup !== study.id;
+    return !(borrowed && re.get(id)!.unit !== (study.unit ?? ''));
   } catch {
     return false;
   }
@@ -1642,7 +1855,17 @@ function propagateRespec(
           // re-pointed the OTHER copy's children at it, silently changing what a
           // line the user never touched computes.
           if (!readsFrom(configs, c, dep)) continue;
-          spec = substituteInput(spec, dep.column, moved.derive);
+          // A FANNED source publishes one column per line, and a dependent
+          // may read any of them: re-point each at the same line of the
+          // retuned chain. Its fan itself does not move with a retune.
+          if (dep.fan && dep.fan.length > 0 && dep.derive) {
+            for (const o of dep.fan)
+              spec = substituteInput(
+                spec,
+                deriveId(withFanOutput(dep.derive, o)),
+                withFanOutput(moved.derive, o),
+              );
+          } else spec = substituteInput(spec, dep.column, moved.derive);
         }
         if (spec === before) continue;
         if (!isValidSpec(spec)) return null;
@@ -1880,6 +2103,7 @@ function comparableMetric(c: SeriesConfig): boolean {
   // visible" must not try — it would raise an `addPair` the guard then refuses,
   // which reads as the button silently skipping things.
   if (c.derive && opIsMulti(c.derive.op)) return false;
+  if (c.fan && c.fan.length > 0) return false; // a fan is several lines too
   return !c.column.startsWith(COMPARE_PREFIX);
 }
 
@@ -1927,6 +2151,16 @@ export function canonRows(rows: readonly RowState[]): string {
           // a different preset from the same two joined, or from two unrelated
           // metrics that happen to be seated together.
           c.group ? [groupSlot(c.group.id), c.group.side, c.group.hidden ?? false] : null,
+          c.lineDash ?? null,
+          c.opacity ?? null,
+          // Per-output ink, key-sorted so two equal maps written in different
+          // orders hash alike. A fan is composition: which lines a study draws.
+          c.outputStyles
+            ? Object.keys(c.outputStyles)
+                .sort()
+                .map((k) => [k, c.outputStyles![k]])
+            : null,
+          c.fan ?? null,
         ]),
       ];
     }),
@@ -2017,7 +2251,17 @@ export const terminalMachine = setup({
       // (out-of-range period, malformed nested input), and a guard that throws
       // errors the whole actor (PR #130 review, HIGH). The machine is
       // host-driven — this guard IS the validation.
-      const spec = studySpec(target, event.op, event.period);
+      // A requested output set must be one the target offers, and a FAN —
+      // more than one — runs a single-output study once per output: fanning a
+      // multi-output study (a MACD of each band edge) would draw a grid of
+      // lines nothing can key, so it is refused rather than guessed at.
+      const outputs = chosenOutputs(target, event.outputs);
+      if (event.outputs && event.outputs.length > 0) {
+        const offered = studyOutputsOf(target);
+        if (!event.outputs.every((o) => offered.includes(o))) return false;
+      }
+      if (outputs.length > 1 && opOutputs(event.op).length > 1) return false;
+      const spec = studySpec(target, event.op, event.period, outputs[0]);
       // The same study may sit on two configs — an SMA on the price in each of
       // two rows, each copy then growing its own chain. That was refused
       // because every walk resolved by column and could not tell the two
@@ -2087,6 +2331,8 @@ export const terminalMachine = setup({
     // actor, and the `>= 2` pre-check does not cover the registry's max).
     canSetStudyOutput: ({ context, event }) =>
       event.type === 'series.setStudyOutput' && outputAllowed(context, event.id, event.output),
+    canSetStudyOutputs: ({ context, event }) =>
+      event.type === 'series.setStudyOutputs' && outputsAllowed(context, event.id, event.outputs),
     canSetStudyParam: ({ context, event }) =>
       event.type === 'series.setStudyParam' &&
       respecAllowed(context, event.id, event.name, event.value),
@@ -2144,6 +2390,7 @@ export const terminalMachine = setup({
           event.period,
           mintId(context.cfgSeq),
           unitOfColumn(context),
+          event.outputs,
         );
         // A study in its OWN units (an RSI, a MACD, an ATR) opens on a row of
         // its own, directly under its target's row (TDL-OSCROW). On the target's
@@ -2290,6 +2537,25 @@ export const terminalMachine = setup({
         const target = flatConfigs(context.rows).find((c) => c.id === event.id);
         if (!target?.derive) return context.rows;
         return applyRespec(context, event.id, respecOutput(target, event.output));
+      },
+    }),
+    setStudyOutputs: assign({
+      rows: ({ context, event }) => {
+        if (event.type !== 'series.setStudyOutputs') return context.rows;
+        const study = flatConfigs(context.rows).find((c) => c.id === event.id);
+        if (!study) return context.rows;
+        const next = respecOutputs(context, study, event.outputs);
+        if (!next) return context.rows;
+        const rows = applyRespec(context, event.id, next);
+        if (rows === context.rows) return rows; // refused: never half-apply
+        // The spec moved through the one apply path; the fan and the style are
+        // this edit's own and are written beside it.
+        return rows.map((r) => ({
+          ...r,
+          configs: r.configs.map((c) =>
+            c.id === event.id ? { ...c, fan: next.fan, style: next.style } : c,
+          ),
+        }));
       },
     }),
     setStudyParam: assign({
@@ -2507,18 +2773,37 @@ export const terminalMachine = setup({
       },
     }),
     patchSeries: assign({
-      rows: ({ context, event }) =>
-        event.type === 'series.patch'
-          ? context.rows.map((r) => ({
-              ...r,
-              configs: r.configs.map((c) =>
-                // `parentIds` is the graph, not a presentation field: a patch
-                // may not rewrite which config a study is on (an untyped host
-                // could still send one).
-                c.id === event.id ? { ...c, ...event.patch, parentIds: c.parentIds } : c,
-              ),
-            }))
-          : context.rows,
+      rows: ({ context, event }) => {
+        if (event.type !== 'series.patch') return context.rows;
+        // A study's colour is its parent's until the user says otherwise
+        // (Peter, 2026-10-11): recolouring a series recolours every study built
+        // on it that still wears the colour it had — and leaves alone one that
+        // was given its own. Matching on the OLD colour is what tells the two
+        // apart without a second field to keep in step.
+        const follow = new Set<string>();
+        const target = flatConfigs(context.rows).find((c) => c.id === event.id);
+        const color = event.patch.color;
+        if (target && typeof color === 'string' && color !== target.color) {
+          const configs = flatConfigs(context.rows);
+          for (const id of studiesOn(configs, target.id, isCatalogColumn(context))) {
+            const c = configs.find((x) => x.id === id);
+            if (id !== target.id && c?.color === target.color) follow.add(id);
+          }
+        }
+        return context.rows.map((r) => ({
+          ...r,
+          configs: r.configs.map((c) =>
+            // `parentIds` is the graph, not a presentation field: a patch
+            // may not rewrite which config a study is on (an untyped host
+            // could still send one).
+            c.id === event.id
+              ? { ...c, ...event.patch, parentIds: c.parentIds }
+              : follow.has(c.id)
+                ? { ...c, color: color! }
+                : c,
+          ),
+        }));
+      },
     }),
     toggleVisible: assign({
       rows: ({ context, event }) => {
@@ -2923,6 +3208,7 @@ export const terminalMachine = setup({
     },
     'series.setStudyParam': { guard: 'canSetStudyParam', actions: 'setStudyParam' },
     'series.setStudyOutput': { guard: 'canSetStudyOutput', actions: 'setStudyOutput' },
+    'series.setStudyOutputs': { guard: 'canSetStudyOutputs', actions: 'setStudyOutputs' },
     'series.order': { actions: 'orderSeries' },
     'series.reindex': { actions: 'orderSeries' },
     'series.moveToRow': { guard: 'canMoveToRow', actions: 'moveSeriesToRow' },

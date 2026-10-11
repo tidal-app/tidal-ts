@@ -1067,6 +1067,55 @@ export function withStudyOutput(spec: DeriveSpec, output: string): DeriveSpec {
 }
 
 /**
+ * The pick at the BOTTOM of a study chain — the multi-output source a chain
+ * of single-output studies ultimately reads, and which of its outputs.
+ *
+ * {@link studyPick} answers for a study OF a multi-output study; a study of
+ * THAT study nests it, so its pick is one level down, and so on. A study
+ * **fanned** over several outputs (`SeriesConfig.fan`) is one chain per output,
+ * identical except at this pick, which is why this is the one place the
+ * outputs are read from. Follows the first input that leads to a pick; a pair
+ * stops the walk, as it does for `studyPick`. `undefined` when the chain reads
+ * no multi-output source.
+ */
+export function fanPick(spec: DeriveSpec): StudyPick | undefined {
+  if (!isSpecLike(spec) || isPairOp(spec.op)) return undefined;
+  const own = studyPick(spec);
+  if (own) return own;
+  for (const i of spec.inputs ?? []) {
+    if (isSpecLike(i) && !isPickedInput(i)) {
+      const deep = fanPick(i);
+      if (deep) return deep;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * `spec` with the pick at the bottom of its chain ({@link fanPick}) reading
+ * `output` instead — the same chain, run on another output of its source. The
+ * spec unchanged when it reads no multi-output source.
+ *
+ * This is how a fanned study names each of its lines: `sma(Upper)` and
+ * `sma(Lower)` are the same SMA with the pick swapped, so a retune of the SMA
+ * moves every line together without a list of specs to keep in step.
+ */
+export function withFanOutput(spec: DeriveSpec, output: string): DeriveSpec {
+  if (!isSpecLike(spec) || isPairOp(spec.op)) return spec;
+  if (studyPick(spec)) return withStudyOutput(spec, output);
+  const inputs = spec.inputs ?? [];
+  for (let index = 0; index < inputs.length; index++) {
+    const i = inputs[index];
+    if (isSpecLike(i) && !isPickedInput(i) && fanPick(i)) {
+      const next = [...inputs];
+      next[index] = withFanOutput(i, output);
+      return { ...spec, inputs: next };
+    }
+  }
+  return spec;
+}
+
+/**
  * What a study of `source` reads: the source itself, or — for a multi-output
  * source — its {@link primaryOutput}, PICKED. Never a bare nested multi-output
  * spec, whose reading is whichever output happens to be declared first.

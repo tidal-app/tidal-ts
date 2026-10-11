@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { TimeSeries, type SeriesSchema } from 'pond-ts';
 import {
   applyDerived,
+  fanPick,
+  withFanOutput,
   applyDerivedReport,
   deriveId,
   deriveLineage,
@@ -771,5 +773,27 @@ describe('picked outputs — which output a study of a study reads (TDL-STUDYCHA
     expect(isPickedInput({ from: null, output: 'Lower' })).toBe(false);
     expect(isPickedInput({ from: DONCHIAN })).toBe(false);
     expect(isPickedInput({ from: DONCHIAN, output: 'Lower' })).toBe(true);
+  });
+});
+
+describe('fanPick / withFanOutput — the pick at the bottom of a study chain', () => {
+  const bb = { op: 'bollinger', inputs: ['close'], params: { period: 20, stdDev: 2 } };
+  const sma = { op: 'sma', inputs: [{ from: bb, output: 'Upper' }], params: { period: 5 } };
+  const ema = { op: 'ema', inputs: [sma], params: { period: 3 } };
+
+  it('finds the pick one level down, or several', () => {
+    expect(fanPick(sma)).toMatchObject({ from: bb, output: 'Upper' });
+    expect(fanPick(ema)).toMatchObject({ from: bb, output: 'Upper' });
+    expect(fanPick({ op: 'sma', inputs: ['close'], params: { period: 5 } })).toBeUndefined();
+  });
+
+  it('swaps only that pick, keeping every param above it', () => {
+    expect(withFanOutput(ema, 'Lower')).toEqual({
+      ...ema,
+      inputs: [{ ...sma, inputs: [{ from: bb, output: 'Lower' }] }],
+    });
+    // A spec reading no multi-output source comes back as it was.
+    const plain = { op: 'sma', inputs: ['close'], params: { period: 5 } };
+    expect(withFanOutput(plain, 'Lower')).toBe(plain);
   });
 });

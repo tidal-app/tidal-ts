@@ -6,7 +6,7 @@ import {
   usesCompare,
 } from '@tidal-ts/core';
 import type { DeriveSpec } from '@tidal-ts/core';
-import { configColumns, type SeriesConfig } from './series.js';
+import { configColumns, configSpecs, type SeriesConfig } from './series.js';
 import type { ChartSeries } from './types.js';
 import { finiteColumns, lastRow } from './seriesFacts.js';
 
@@ -114,7 +114,8 @@ const lastPerKey = (series: ChartSeries): ChartSeries => {
 
 const specsBySource = (configs: readonly SeriesConfig[]): Record<string, DeriveSpec[]> => {
   const m: Record<string, DeriveSpec[]> = {};
-  for (const c of configs) if (c.derive && c.source) (m[c.source] ??= []).push(c.derive);
+  // `configSpecs`: a FANNED study folds one spec per output it runs on.
+  for (const c of configs) if (c.derive && c.source) (m[c.source] ??= []).push(...configSpecs(c));
   return m;
 };
 

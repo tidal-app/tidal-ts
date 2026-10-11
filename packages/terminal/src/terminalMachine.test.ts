@@ -1,10 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { createActor } from 'xstate';
-import { configAxisId, seriesDrawn, type SeriesConfig } from '@tidal-ts/chart';
+import {
+  configAxisId,
+  configColumns,
+  configSpecs,
+  seriesDrawn,
+  sourcesOf,
+  type SeriesConfig,
+} from '@tidal-ts/chart';
 import { deriveId, isPairOp, opParams, studyPick, type DeriveSpec } from '@tidal-ts/core';
 import {
   activeSlot,
   outputAllowed,
+  outputsAllowed,
+  studyOutputChoices,
   canonRows,
   axisMoveAllowed,
   respecAllowed,
@@ -3156,5 +3165,200 @@ describe('a single-output histogram study opens as bars', () => {
     actor.send({ type: 'series.addStudy', targetId: idOf('close'), op: 'rsi', period: 14 });
     expect(all(ctx).find((c) => c.derive?.op === 'awesomeOscillator')?.style).toBe('bar');
     expect(all(ctx).find((c) => c.derive?.op === 'rsi')?.style).toBe('line');
+  });
+});
+
+describe('a study run on SEVERAL outputs of its parent (a fan)', () => {
+  const all = (ctx: () => { rows: RowState[] }) => ctx().rows.flatMap((r) => r.configs);
+  const withBand = () => {
+    const h = start();
+    h.actor.send({
+      type: 'series.addStudy',
+      targetId: h.idOf('close'),
+      op: 'bollinger',
+      period: 20,
+    });
+    const band = all(h.ctx).find((c) => c.derive?.op === 'bollinger')!;
+    return { ...h, band };
+  };
+
+  it("an SMA of a band's two edges is ONE study drawing a band of smoothed edges", () => {
+    const { actor, ctx, band } = withBand();
+    actor.send({
+      type: 'series.addStudy',
+      targetId: band.id,
+      op: 'sma',
+      period: 5,
+      outputs: ['Lower', 'Upper'], // click order: the fan follows the band's own
+    });
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    expect(sma.fan).toEqual(['Upper', 'Lower']);
+    expect(sma.style).toBe('band');
+    expect(sma.derive!.inputs).toEqual([{ from: band.derive, output: 'Upper' }]);
+    expect(sma.column).toBe(deriveId(sma.derive!));
+    expect(sma.label).toBe(`${band.label} · Upper, Lower · SMA(5)`);
+    // One spec folded per edge, and the band reads both of them.
+    const specs = configSpecs(sma);
+    expect(specs.map((x) => x.inputs[0])).toEqual([
+      { from: band.derive, output: 'Upper' },
+      { from: band.derive, output: 'Lower' },
+    ]);
+    expect(configColumns(sma)).toEqual(specs.map(deriveId));
+    expect(sma.color).toBe(band.color);
+  });
+
+  it('all three outputs is a band with a centre; two non-edge outputs are lines', () => {
+    const { actor, ctx, band, idOf } = withBand();
+    actor.send({
+      type: 'series.addStudy',
+      targetId: band.id,
+      op: 'sma',
+      period: 5,
+      outputs: ['Middle', 'Upper', 'Lower'],
+    });
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    expect(sma.style).toBe('band');
+    expect(configColumns(sma)).toHaveLength(3);
+    actor.send({ type: 'series.addStudy', targetId: idOf('close'), op: 'macd', period: 20 });
+    const macd = all(ctx).find((c) => c.derive?.op === 'macd')!;
+    actor.send({
+      type: 'series.addStudy',
+      targetId: macd.id,
+      op: 'ema',
+      period: 5,
+      outputs: ['Line', 'Signal'],
+    });
+    const ema = all(ctx).find((c) => c.derive?.op === 'ema')!;
+    expect(ema.style).toBe('lines');
+    expect(ema.fan).toEqual(['Line', 'Signal']);
+  });
+
+  it('refuses outputs the parent does not offer, and a fan of a multi-output study', () => {
+    const { actor, ctx, band } = withBand();
+    const before = all(ctx).length;
+    actor.send({
+      type: 'series.addStudy',
+      targetId: band.id,
+      op: 'sma',
+      period: 5,
+      outputs: ['Nope'],
+    });
+    actor.send({
+      type: 'series.addStudy',
+      targetId: band.id,
+      op: 'macd',
+      period: 12,
+      outputs: ['Upper', 'Lower'],
+    });
+    expect(all(ctx)).toHaveLength(before);
+  });
+
+  it('a study of a fanned study continues every line by default, and retunes with it', () => {
+    const { actor, ctx, band } = withBand();
+    actor.send({
+      type: 'series.addStudy',
+      targetId: band.id,
+      op: 'sma',
+      period: 5,
+      outputs: ['Upper', 'Lower'],
+    });
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    actor.send({ type: 'series.addStudy', targetId: sma.id, op: 'ema', period: 3 });
+    const ema = all(ctx).find((c) => c.derive?.op === 'ema')!;
+    expect(ema.fan).toEqual(['Upper', 'Lower']);
+    expect(ema.style).toBe('band');
+    // The label does not repeat what its parent's already says.
+    expect(ema.label).toBe(`${sma.label} · EMA(3)`);
+    expect(sourcesOf(all(ctx), ema).map((c) => c.id)).toEqual([sma.id]);
+    // Retune the SMA: the EMA's every line follows.
+    actor.send({ type: 'series.setStudyParam', id: sma.id, name: 'period', value: 8 });
+    const ema2 = all(ctx).find((c) => c.id === ema.id)!;
+    const sma2 = all(ctx).find((c) => c.id === sma.id)!;
+    expect(configSpecs(ema2).map((x) => x.inputs[0])).toEqual(configSpecs(sma2));
+  });
+
+  it('a study of ONE line of a fanned study is built on it', () => {
+    const { actor, ctx, band } = withBand();
+    actor.send({
+      type: 'series.addStudy',
+      targetId: band.id,
+      op: 'sma',
+      period: 5,
+      outputs: ['Upper', 'Lower'],
+    });
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    actor.send({
+      type: 'series.addStudy',
+      targetId: sma.id,
+      op: 'ema',
+      period: 3,
+      outputs: ['Lower'],
+    });
+    const ema = all(ctx).find((c) => c.derive?.op === 'ema')!;
+    expect(ema.fan).toBeUndefined();
+    expect(ema.style).toBe('line');
+    expect(ema.parentIds).toEqual([sma.id]);
+    expect(ema.label).toBe(`${sma.label} · Lower · EMA(3)`);
+    expect(sourcesOf(all(ctx), ema).map((c) => c.id)).toEqual([sma.id]);
+    // Retune the SMA: the EMA keeps reading the Lower line.
+    actor.send({ type: 'series.setStudyParam', id: sma.id, name: 'period', value: 8 });
+    const sma2 = all(ctx).find((c) => c.id === sma.id)!;
+    expect(all(ctx).find((c) => c.id === ema.id)!.derive!.inputs).toEqual([configSpecs(sma2)[1]]);
+    // Removing the SMA takes the EMA with it.
+    actor.send({ type: 'series.remove', id: sma.id });
+    expect(all(ctx).some((c) => c.id === ema.id)).toBe(false);
+  });
+
+  it('switches outputs in place: one to many, many to one', () => {
+    const { actor, ctx, band } = withBand();
+    actor.send({ type: 'series.addStudy', targetId: band.id, op: 'sma', period: 5 });
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    expect(sma.fan).toBeUndefined();
+    expect(studyOutputChoices(ctx(), sma.id)).toEqual(['Middle', 'Upper', 'Lower']);
+    expect(outputsAllowed(ctx(), sma.id, ['Middle'])).toBe(false); // already
+    expect(outputsAllowed(ctx(), sma.id, ['Upper', 'Lower'])).toBe(true);
+    actor.send({ type: 'series.setStudyOutputs', id: sma.id, outputs: ['Upper', 'Lower'] });
+    const fanned = all(ctx).find((c) => c.id === sma.id)!;
+    expect(fanned.fan).toEqual(['Upper', 'Lower']);
+    expect(fanned.style).toBe('band');
+    expect(fanned.label).toBe(`${band.label} · Upper, Lower · SMA(5)`);
+    actor.send({ type: 'series.setStudyOutputs', id: sma.id, outputs: ['Lower'] });
+    const one = all(ctx).find((c) => c.id === sma.id)!;
+    expect(one.fan).toBeUndefined();
+    expect(one.style).toBe('line');
+    expect(one.derive!.inputs).toEqual([{ from: band.derive, output: 'Lower' }]);
+    expect(one.label).toBe(`${band.label} · Lower · SMA(5)`);
+  });
+
+  it('refuses a fan change under a study built on it', () => {
+    const { actor, ctx, band } = withBand();
+    actor.send({ type: 'series.addStudy', targetId: band.id, op: 'sma', period: 5 });
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    actor.send({ type: 'series.addStudy', targetId: sma.id, op: 'ema', period: 3 });
+    expect(outputsAllowed(ctx(), sma.id, ['Upper', 'Lower'])).toBe(false);
+    expect(outputsAllowed(ctx(), sma.id, ['Upper'])).toBe(true); // one to one still follows
+  });
+});
+
+describe("a study's colour follows its parent's", () => {
+  const all = (ctx: () => { rows: RowState[] }) => ctx().rows.flatMap((r) => r.configs);
+
+  it('recolouring a metric recolours the chain built on it, unless one was given its own', () => {
+    const { actor, ctx, idOf } = start();
+    const price = idOf('close');
+    actor.send({ type: 'series.addStudy', targetId: price, op: 'sma', period: 20 });
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    actor.send({ type: 'series.addStudy', targetId: sma.id, op: 'ema', period: 5 });
+    const ema = all(ctx).find((c) => c.derive?.op === 'ema')!;
+    expect(sma.color).toBe(find(ctx, 'close').color);
+    expect(ema.color).toBe(sma.color);
+    actor.send({ type: 'series.patch', id: price, patch: { color: 'pink' } });
+    expect(all(ctx).find((c) => c.id === sma.id)!.color).toBe('pink');
+    expect(all(ctx).find((c) => c.id === ema.id)!.color).toBe('pink');
+    // Give the EMA its own colour: the next recolour leaves it alone.
+    actor.send({ type: 'series.patch', id: ema.id, patch: { color: 'green' } });
+    actor.send({ type: 'series.patch', id: price, patch: { color: 'teal' } });
+    expect(all(ctx).find((c) => c.id === sma.id)!.color).toBe('teal');
+    expect(all(ctx).find((c) => c.id === ema.id)!.color).toBe('green');
   });
 });

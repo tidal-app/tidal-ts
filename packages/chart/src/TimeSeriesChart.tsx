@@ -54,8 +54,6 @@ import {
   type BarReducer,
   type Segment,
   type SeriesWindow,
-  opOutputs,
-  outputMark,
 } from '@tidal-ts/core';
 import { candleStyleForColor, candleStyleForPair } from './candleStyle.js';
 import { useMeasuredWidth } from './useMeasuredWidth.js';
@@ -64,7 +62,10 @@ import {
   configAxisId,
   guideLevels,
   seriesDrawn,
-  DASH_PATTERN,
+  configBand,
+  configOutputs,
+  dashPattern,
+  outputLook,
   effectiveSplit,
   seriesAxisId,
   seriesLineDashArray,
@@ -72,7 +73,6 @@ import {
   sharedAxisId,
   axisFormat,
   fractionTicks,
-  bandColumns,
   outputKey,
   configColumns,
   type SeriesAxis,
@@ -126,17 +126,6 @@ export interface ChartAnnotation {
    */
   band?: readonly [number, number];
 }
-
-/** Dash ladders for a multi-output study's 2nd..Nth line. Distinguishable at a
- *  glance and ordered so a longer dash reads as "further from the main output".
- *  Cycles past the end — a 12-output ribbon (`guppy`) wants a colour ramp
- *  rather than twelve dashes, which is a named TDL-STUDYDRAW case. */
-const OUTPUT_DASHES: readonly (readonly number[])[] = [
-  [6, 3],
-  [2, 2],
-  [9, 3, 2, 3],
-  [1, 3],
-];
 
 const EMPTY_ANNOTATIONS: readonly ChartAnnotation[] = [];
 const EMPTY_SOURCES: readonly string[] = [];
@@ -471,20 +460,36 @@ function hoverInk(color: string | undefined, scheme: 'dark' | 'light'): string |
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-/** #rgb / #rrggbb → rgba() with the given alpha (for dimming a series). Falls
- *  back to the input unchanged for any other color form (dim just no-ops). */
-function withAlpha(hex: string, alpha: number): string {
-  let h = hex.trim().replace(/^#/, '');
+/** A colour with its alpha multiplied by `alpha` — `#rgb`, `#rrggbb`,
+ *  `#rrggbbaa`, `rgb()` and `rgba()`. Any other colour form comes back
+ *  unchanged (dimming then simply no-ops). `1` is the identity. */
+function withAlpha(color: string, alpha: number): string {
+  if (alpha >= 1) return color;
+  const fn = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)(?:[\s,/]+([\d.]+%?))?\s*\)$/i.exec(
+    color.trim(),
+  );
+  if (fn) {
+    const a0 = fn[4] == null ? 1 : fn[4].endsWith('%') ? parseFloat(fn[4]) / 100 : Number(fn[4]);
+    return `rgba(${fn[1]}, ${fn[2]}, ${fn[3]}, ${round3(a0 * alpha)})`;
+  }
+  let h = color.trim().replace(/^#/, '');
   if (h.length === 3)
     h = h
       .split('')
       .map((c) => c + c)
       .join('');
-  const m = /^([\da-f]{6})$/i.exec(h);
-  if (!m) return hex;
+  const m = /^([\da-f]{6})([\da-f]{2})?$/i.exec(h);
+  if (!m) return color;
   const n = parseInt(m[1]!, 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
+  const a0 = m[2] ? parseInt(m[2], 16) / 255 : 1;
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${round3(a0 * alpha)})`;
 }
+
+const round3 = (v: number): number => Math.round(v * 1000) / 1000;
+
+/** A config's own opacity, clamped to `0..1` (persisted state is untyped). */
+const opacityOf = (o: number | undefined): number =>
+  typeof o === 'number' && Number.isFinite(o) ? Math.min(1, Math.max(0, o)) : 1;
 
 /** A row's per-side SHARED axis id — unique across the container so each row
  *  scales independently. Now the exported `sharedAxisId` (series.ts): the
@@ -734,7 +739,9 @@ function TimeSeriesChartInner({
     allConfigs
       .map((c) => {
         const sp = effectiveSplit(c, settings);
-        return `${c.id}:${c.color}:${sp.mode}:${sp.rise}:${sp.fall}:${c.style}:${seriesLineWidth(c, settings)}`;
+        // The per-output ink, texture and opacity too — and the FAN, whose
+        // outputs are what the per-output keys are named after.
+        return `${c.id}:${c.color}:${sp.mode}:${sp.rise}:${sp.fall}:${c.style}:${seriesLineWidth(c, settings)}:${c.lineDash ?? ''}:${c.opacity ?? ''}:${c.fan?.join(',') ?? ''}:${c.outputStyles ? JSON.stringify(c.outputStyles) : ''}`;
       })
       .join('|') +
     '#' +
@@ -762,17 +769,22 @@ function TimeSeriesChartInner({
     for (const c of allConfigs) {
       const stroke = resolveColor(c.color);
       const isDim = dim.has(c.id);
-      const color = isDim ? withAlpha(stroke, 0.22) : stroke;
+      // The user's opacity and the chart's dimming compose: a half-opaque line
+      // that is also dimmed is fainter still, never back to full strength.
+      const own = opacityOf(c.opacity);
+      const alpha = own * (isDim ? 0.22 : 1);
+      const color = withAlpha(stroke, alpha);
       const width = seriesLineWidth(c, settings);
       const dash = seriesLineDashArray(c, settings);
       line[c.id] = { color, width, ...(dash ? { dash: [...dash] } : {}) };
       // The comparison counterpart shares the color + axis but takes the
       // `comparisons` category's own weight + texture (dashed by default —
       // texture encodes primary-vs-compare). Dims with its primary.
+      const cmpDash = dashPattern(settings.comparisons.dash);
       line[`${c.id}__cmp`] = {
         color,
         width: settings.comparisons.weight,
-        ...(settings.comparisons.dash === 'dashed' ? { dash: [...DASH_PATTERN] } : {}),
+        ...(cmpDash ? { dash: [...cmpDash] } : {}),
       };
       // Area fill wants a solid hex for its gradient, so dim via fillOpacity (not
       // an rgba fill); the outline still carries the dim.
@@ -781,37 +793,46 @@ function TimeSeriesChartInner({
         color,
         width,
         fill: stroke,
-        fillOpacity: isDim ? 0.04 : 0.14,
+        fillOpacity: (isDim ? 0.04 : 0.14) * own,
       };
       // A band is a WASH, not a fill under a line: it carries no outline of its
       // own (the middle band draws that, as an ordinary line under the same
       // id), so it wants to read as a tinted region and nothing else. 0.16 sits
       // where the earnings band landed — unmistakably a region, still quiet
       // enough that a line crossing it stays the brighter thing.
-      band[c.id] = { fill: stroke, opacity: isDim ? 0.04 : 0.16 };
-      // A multi-output study's N lines: ONE colour, N textures. A study's
-      // outputs are one series (a MACD is one study), so spending N palette
-      // colours on them would fight "colour = series" and make three studies
-      // look like nine. The first output is the study's own line; each later one
-      // takes a longer dash and a hair less weight, so the stack reads as
-      // primary-and-derived rather than as peers. Same shape as `__cmp`.
-      if (c.style === 'lines' && c.derive) {
-        const op = c.derive.op;
-        opOutputs(op).forEach((suffix, i) => {
+      band[c.id] = { fill: stroke, opacity: (isDim ? 0.04 : 0.16) * own };
+      // Each output of a multi-output config takes its own ink (`outputLook`):
+      // by default ONE colour, N textures — a study's outputs are one series (a
+      // MACD is one study), so spending N palette colours on them would fight
+      // "colour = series" — and whatever the user has set per output on top.
+      // A band's one line (its centre) draws under `c.id`, so its look lands
+      // there; a stack's lines each get their own key.
+      if ((c.style === 'lines' && c.derive) || c.style === 'band') {
+        configOutputs(c).forEach((out, i) => {
+          const look = outputLook(c, i, settings);
+          const ink = withAlpha(
+            resolveColor(look.color),
+            opacityOf(look.opacity) * (isDim ? 0.22 : 1),
+          );
+          const style = {
+            color: ink,
+            width: look.width,
+            ...(look.dash ? { dash: [...look.dash] } : {}),
+          };
+          if (c.style === 'band') {
+            if (out.name === 'Middle') line[c.id] = style;
+            return;
+          }
           const key = outputKey(c.id, i);
-          if (outputMark(op, suffix) === 'bar') {
+          if (out.mark === 'bar') {
             // A histogram in the STUDY's colour, not a rise/fall pair: green and
             // red are reserved for market data (P&L, bid/ask), never for an
             // indicator. The sign is legible from which side of zero the bar
             // sits on, which is the reading anyway.
-            bar[key] = { ...base.bar.default, fill: color, highlight: color };
+            bar[key] = { ...base.bar.default, fill: ink, highlight: ink };
             return;
           }
-          line[key] = {
-            color,
-            width: i === 0 ? width : Math.max(1, width - 0.5),
-            ...(i === 0 ? {} : { dash: [...OUTPUT_DASHES[(i - 1) % OUTPUT_DASHES.length]!] }),
-          };
+          line[key] = style;
         });
       }
       // Direction-capable marks: a split bar draws its rise fill under `c.id` and
@@ -822,8 +843,8 @@ function TimeSeriesChartInner({
       if (sp.mode === 'split') {
         const rise = resolveColor(sp.rise);
         const fall = resolveColor(sp.fall);
-        const riseC = isDim ? withAlpha(rise, 0.22) : rise;
-        const fallC = isDim ? withAlpha(fall, 0.22) : fall;
+        const riseC = withAlpha(rise, alpha);
+        const fallC = withAlpha(fall, alpha);
         bar[c.id] = { ...base.bar.default, fill: riseC, highlight: riseC };
         bar[`${c.id}__down`] = { ...base.bar.default, fill: fallC, highlight: fallC };
         if (c.style === 'candle') candle[c.id] = candleStyleForPair(riseC, fallC);
@@ -1389,7 +1410,9 @@ function TimeSeriesChartInner({
         // Both break at the session seams together — `<BandChart sessionBreaks>`
         // arrived in charts 0.70.0 with the same semantics as the line's, which
         // retired this chart's one-wash-per-segment workaround (0.2.0).
-        const b = bandColumns(col);
+        // A FANNED band (an SMA of a band's two edges) may have no centre: it
+        // draws its wash and nothing else.
+        const b = configBand(c);
         return [
           <BandChart
             key={`${c.id}__band`}
@@ -1400,14 +1423,18 @@ function TimeSeriesChartInner({
             axis={axis}
             sessionBreaks={breaksFor(c)}
           />,
-          <LineChart
-            key={c.id}
-            series={endSeries}
-            column={b.middle}
-            as={c.id}
-            axis={axis}
-            sessionBreaks={breaksFor(c)}
-          />,
+          ...(b.middle
+            ? [
+                <LineChart
+                  key={c.id}
+                  series={endSeries}
+                  column={b.middle}
+                  as={c.id}
+                  axis={axis}
+                  sessionBreaks={breaksFor(c)}
+                />,
+              ]
+            : []),
         ];
       }
       case 'lines': {
@@ -1416,12 +1443,13 @@ function TimeSeriesChartInner({
         // column is named off it by suffix; reading `col` itself finds nothing,
         // exactly as for a band.
         if (!c.derive) return [];
-        const op = c.derive.op;
         const histSplit = effectiveSplit(c, settings);
-        const layers = opOutputs(op).map((suffix, i) => ({
-          mark: outputMark(op, suffix),
+        // One per OUTPUT (`configOutputs`): a multi-output op's declared
+        // suffixes, or a fanned study's one line per source output it runs on.
+        const layers = configOutputs(c).map((out, i) => ({
+          mark: out.mark,
           node:
-            outputMark(op, suffix) === 'bar' ? (
+            out.mark === 'bar' ? (
               // On the SAME series as the study's lines: a point-keyed bar is
               // centred on its key, so a histogram left on the raw keys would
               // put its zero-cross one bar left of the line-cross it exists to
@@ -1429,7 +1457,7 @@ function TimeSeriesChartInner({
               <BarChart
                 key={`${c.id}__o${i}`}
                 series={endSeries}
-                column={`${col}${suffix}`}
+                column={out.column}
                 as={outputKey(c.id, i)}
                 axis={axis}
                 // Opt-in, per config: off, the histogram is the study's own
@@ -1439,7 +1467,7 @@ function TimeSeriesChartInner({
                   ? {
                       binColors: signColors(
                         endSeries,
-                        `${col}${suffix}`,
+                        out.column,
                         resolveColor(histSplit.rise),
                         resolveColor(histSplit.fall),
                       ),
@@ -1450,7 +1478,7 @@ function TimeSeriesChartInner({
               <LineChart
                 key={`${c.id}__o${i}`}
                 series={endSeries}
-                column={`${col}${suffix}`}
+                column={out.column}
                 as={outputKey(c.id, i)}
                 axis={axis}
                 sessionBreaks={intraday && settings.sessions.breaks && !coarse.has(c.source ?? '')}
