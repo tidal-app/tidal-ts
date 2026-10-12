@@ -1066,6 +1066,36 @@ export function withStudyOutput(spec: DeriveSpec, output: string): DeriveSpec {
   return { ...spec, inputs };
 }
 
+/** A bar's price columns — what a price DATA node offers a study besides the
+ *  one it draws: a Bollinger of the high is still a study of that price. */
+export const BAR_PRICE_COLUMNS: readonly string[] = ['open', 'high', 'low', 'close'];
+
+/**
+ * The raw COLUMN a study reads as its TARGET — `close` for a Bollinger of the
+ * close — or `undefined` when it has none to switch: a study of a study, a
+ * pair, or a study of a SERIES (an ATR's `high`/`low`/`close` are bar roles,
+ * not a target — re-pointing one would compute nonsense under the same name).
+ * The data node's output picker's question: which column drives the chain.
+ */
+export function studyColumn(spec: DeriveSpec): { index: number; column: string } | undefined {
+  if (!isSpecLike(spec) || isPairOp(spec.op)) return undefined;
+  const roles = opInputs(spec.op);
+  const index = (spec.inputs ?? []).findIndex(
+    (i, k) => typeof i === 'string' && TARGET_ROLES.has(roles[k]?.role ?? ''),
+  );
+  return index < 0 ? undefined : { index, column: spec.inputs[index] as string };
+}
+
+/** `spec` reading `column` of its source instead — the same spec when it reads
+ *  no raw column ({@link studyColumn}). */
+export function withStudyColumn(spec: DeriveSpec, column: string): DeriveSpec {
+  const at = studyColumn(spec);
+  if (!at) return spec;
+  const inputs = [...spec.inputs];
+  inputs[at.index] = column;
+  return { ...spec, inputs };
+}
+
 /**
  * The pick at the BOTTOM of a study chain — the multi-output source a chain
  * of single-output studies ultimately reads, and which of its outputs.

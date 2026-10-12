@@ -173,9 +173,11 @@ export function configColumns(c: {
 // series vocabulary.
 import {
   BAND_OUTPUTS,
+  BAR_PRICE_COLUMNS,
   COMPARE_PREFIX,
   deriveId,
   inputNames,
+  isPairOp,
   opOutputs,
   opParams,
   outputMark,
@@ -1009,7 +1011,11 @@ export function sourcesOf(configs: readonly SeriesConfig[], c: SeriesConfig): Se
     if (byId != null && byId !== c.id) {
       const recorded = configs.find((x) => x.id === byId);
       if (!recorded) return; // its parent is gone — an orphan, not a re-bind
-      if (publishes(recorded, name)) {
+      // A DATA node offers every column of its source, not only the one it
+      // draws: a Bollinger of a price's HIGH is still built on that price
+      // (Peter, 2026-10-12). Only through the recorded parent, so a study is
+      // never re-bound to some other node on the same source.
+      if (publishes(recorded, name) || offersRaw(recorded, c, i)) {
         out.push(recorded);
         return;
       }
@@ -1020,6 +1026,21 @@ export function sourcesOf(configs: readonly SeriesConfig[], c: SeriesConfig): Se
   });
   return out;
 }
+
+/** Whether data node `p` feeds study `c`'s raw input `i`: `p` draws one of a
+ *  bar's price columns on the study's own source, and the input reads another.
+ *  Only a BAR offers its siblings — a vol source's `iv21` and `iv63` are two
+ *  metrics, each its own node, not two columns of one. */
+const offersRaw = (p: SeriesConfig, c: SeriesConfig, i: number): boolean => {
+  if (p.derive || p.source == null || p.source !== c.source || !c.derive) return false;
+  if (isPairOp(c.derive.op)) return false;
+  const input = c.derive.inputs[i];
+  return (
+    typeof input === 'string' &&
+    BAR_PRICE_COLUMNS.includes(p.column) &&
+    BAR_PRICE_COLUMNS.includes(input)
+  );
+};
 
 /** Whether `c` computes the column `name` — its own, or one of its fanned
  *  lines' ({@link publishedColumns}). The cheap test first: a fan is rare. */

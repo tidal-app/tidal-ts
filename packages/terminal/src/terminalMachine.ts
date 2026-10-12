@@ -25,6 +25,9 @@ import {
   studyPick,
   substituteInput,
   withStudyOutput,
+  studyColumn,
+  withStudyColumn,
+  BAR_PRICE_COLUMNS,
   fanPick,
   primaryOutput,
   withFanOutput,
@@ -339,6 +342,10 @@ export type TerminalEvent =
   /** Which output of a multi-output source a study reads (`Middle`, `Hist`) —
    *  the output picker. `output` is one of the source op's declared suffixes. */
   | { type: 'series.setStudyOutput'; id: string; output: string }
+  /** Which COLUMN of its source a study reads straight off it (`close` →
+   *  `high`) — the data node's output picker. The study stays under the data
+   *  node it is built on, which offers every column of its source. */
+  | { type: 'series.setStudyInput'; id: string; column: string }
   /** Which outputs of its multi-output source a study runs on — one, several
    *  (a FAN: one study drawing a line per output), or all. Generalises
    *  `series.setStudyOutput`, and reaches a study of a fanned study too. */
@@ -1064,7 +1071,7 @@ export interface PairLegInput {
  *  derived metrics that stand alone instead of travelling with a source. A
  *  seated config's id no longer says where it came from, so catalog-ness is
  *  read off what it computes. */
-const isCatalogColumn = (context: TerminalContext) => {
+const isCatalogColumn = (context: { catalog: EditScope['catalog'] }) => {
   const cols = new Set(context.catalog.map(entryColumn));
   return (column: string) => cols.has(column);
 };
@@ -1419,6 +1426,55 @@ export function outputAllowed(scope: EditScope, id: string, output: string): boo
   } catch {
     return false;
   }
+}
+
+/**
+ * Whether study `id` can be re-pointed to read `column` of its source — the
+ * data node's output picker (`series.setStudyInput`).
+ *
+ * Narrow on purpose (PR #33 review): only a study whose TARGET is one of a
+ * bar's price columns ({@link studyColumn} — an ATR's bar roles are not a
+ * target), re-pointed at another of them, off a seated price data node on its
+ * own source. So not a catalog metric (a derived vol is a metric, not a study
+ * of a column), not a vol source's columns (each is its own metric node), not
+ * the column already read, not a fanned study; and never a rewrite the spec or
+ * unit gates of {@link outputAllowed} refuse.
+ *
+ * Total: it runs in a guard, where a throw kills the actor.
+ */
+export function inputAllowed(scope: EditScope, id: string, column: string): boolean {
+  try {
+    const configs = flatConfigs(scope.rows);
+    const target = configs.find((c) => c.id === id);
+    if (!target?.derive || (target.fan && target.fan.length > 0)) return false;
+    if (isCatalogColumn(scope)(target.column)) return false;
+    const at = studyColumn(target.derive);
+    if (!at || at.column === column) return false;
+    if (!BAR_PRICE_COLUMNS.includes(at.column) || !BAR_PRICE_COLUMNS.includes(column)) return false;
+    const home = dataParent(configs, target);
+    if (!home || !BAR_PRICE_COLUMNS.includes(home.column)) return false;
+    if (!isValidSpec(withStudyColumn(target.derive, column))) return false;
+    const next = propagateRespec(
+      configs,
+      id,
+      respecInput(target, column, home.column),
+      unitOfColumn(scope),
+    );
+    if (next === null || !unitsStayCoherent(scope.rows, next)) return false;
+    const borrowed = target.axisGroup != null && target.axisGroup !== target.id;
+    return !(borrowed && next.get(id)!.unit !== (target.unit ?? ''));
+  } catch {
+    return false;
+  }
+}
+
+/** The seated DATA node a study reads its raw column off — a node with no
+ *  derive of its own, on the study's source. */
+function dataParent(
+  configs: readonly SeriesConfig[],
+  study: SeriesConfig,
+): SeriesConfig | undefined {
+  return sourcesOf(configs, study).find((p) => !p.derive && p.source === study.source);
 }
 
 /**
@@ -1780,6 +1836,31 @@ function respecOutput(study: SeriesConfig, output: string): SeriesConfig {
       : (study.family ?? label);
   return { ...study, column: deriveId(derive), derive, label: `${base} · ${output}${tag}` };
 }
+
+/** Re-spec a study to read another column of its source, **in place** — the
+ *  identity stands, like {@link respecParam}. Off its data node's own column
+ *  the label names the column it reads (`Price · High · BOLLINGER(20, 2)`);
+ *  back on it, the segment goes. */
+function respecInput(study: SeriesConfig, column: string, home: string): SeriesConfig {
+  const prev = study.derive!;
+  const was = studyColumn(prev)!.column;
+  const derive = withStudyColumn(prev, column);
+  const tag = ` · ${studyTag(prev)}`;
+  const named = ` · ${columnSegment(was)}${tag}`;
+  // `label` is untyped persisted state; a missing one must not throw here.
+  const label = typeof study.label === 'string' ? study.label : '';
+  const base =
+    was !== home && label.endsWith(named)
+      ? label.slice(0, -named.length)
+      : label.endsWith(tag)
+        ? label.slice(0, -tag.length)
+        : (study.family ?? label);
+  const segment = column === home ? '' : ` · ${columnSegment(column)}`;
+  return { ...study, column: deriveId(derive), derive, label: `${base}${segment}${tag}` };
+}
+
+/** `high` → `High`: a raw column as a label segment says it. */
+const columnSegment = (column: string): string => column.charAt(0).toUpperCase() + column.slice(1);
 
 /**
  * **Edit propagation** — re-spec `rootId` and carry everything built on it.
@@ -2334,6 +2415,8 @@ export const terminalMachine = setup({
     // actor, and the `>= 2` pre-check does not cover the registry's max).
     canSetStudyOutput: ({ context, event }) =>
       event.type === 'series.setStudyOutput' && outputAllowed(context, event.id, event.output),
+    canSetStudyInput: ({ context, event }) =>
+      event.type === 'series.setStudyInput' && inputAllowed(context, event.id, event.column),
     canSetStudyOutputs: ({ context, event }) =>
       event.type === 'series.setStudyOutputs' && outputsAllowed(context, event.id, event.outputs),
     canSetStudyParam: ({ context, event }) =>
@@ -2540,6 +2623,37 @@ export const terminalMachine = setup({
         const target = flatConfigs(context.rows).find((c) => c.id === event.id);
         if (!target?.derive) return context.rows;
         return applyRespec(context, event.id, respecOutput(target, event.output));
+      },
+    }),
+    setStudyInput: assign({
+      rows: ({ context, event }) => {
+        if (event.type !== 'series.setStudyInput') return context.rows;
+        const configs = flatConfigs(context.rows);
+        const target = configs.find((c) => c.id === event.id);
+        const home = target && dataParent(configs, target);
+        const at = target?.derive && studyColumn(target.derive);
+        if (!target || !home || !at) return context.rows;
+        const rows = applyRespec(context, event.id, respecInput(target, event.column, home.column));
+        if (rows === context.rows) return rows; // refused: never half-apply
+        // Off its home column the study finds its data node only through
+        // `parentIds`. A study that already records one keeps it; one saved
+        // before studies recorded their parents gains it — but only when the
+        // node it was found on is the ONE seated node drawing that column, so a
+        // guess is never written down as a fact (PR #33 review).
+        if (target.parentIds?.[at.index] != null) return rows;
+        const homes = configs.filter(
+          (c) => !c.derive && c.source === target.source && c.column === at.column,
+        );
+        if (homes.length !== 1) return rows;
+        return rows.map((r) => ({
+          ...r,
+          configs: r.configs.map((c) => {
+            if (c.id !== event.id) return c;
+            const parentIds = [...(c.parentIds ?? [])];
+            parentIds[at.index] = home.id;
+            return { ...c, parentIds };
+          }),
+        }));
       },
     }),
     setStudyOutputs: assign({
@@ -3223,6 +3337,7 @@ export const terminalMachine = setup({
     },
     'series.setStudyParam': { guard: 'canSetStudyParam', actions: 'setStudyParam' },
     'series.setStudyOutput': { guard: 'canSetStudyOutput', actions: 'setStudyOutput' },
+    'series.setStudyInput': { guard: 'canSetStudyInput', actions: 'setStudyInput' },
     'series.setStudyOutputs': { guard: 'canSetStudyOutputs', actions: 'setStudyOutputs' },
     'series.order': { actions: 'orderSeries' },
     'series.reindex': { actions: 'orderSeries' },

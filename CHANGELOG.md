@@ -2,6 +2,32 @@
 
 All packages release together on one version.
 
+## 0.12.0 — 2026-10-12
+
+A study can be switched to read another column of its source, and stays under
+the data node it is built on.
+
+- **`series.setStudyInput`** (terminal). Re-points a study whose TARGET is one
+  of a bar's price columns — a Bollinger of the close — at another of them
+  (`high`), in place, like `series.setStudyOutput`: the identity stands (colour,
+  axis, selection), everything built on it follows, and the spec and unit gates
+  refuse an incoherent rewrite. Deliberately narrow: not a study of a SERIES (an
+  ATR's `high`/`low`/`close` are bar roles, not a target), not a catalog metric,
+  not a vol source's columns (each is its own metric node), not a pair or a
+  fanned study. Off the price node's own column the label names the column read
+  (`Price · High · BOLLINGER(20, 2)`); back on it, the segment goes. Guard:
+  `inputAllowed`; hook: `useSetStudyInput`.
+- **A price node offers its bar's other price columns** (chart). `sourcesOf`
+  keeps a study under its RECORDED parent when that parent draws one of a bar's
+  price columns on the study's own source and the study reads another — so the
+  outliner no longer orphans a Bollinger of the high. Only through the recorded
+  parent (`parentIds`): a study that has none gains it from
+  `series.setStudyInput` only when exactly one seated node draws its column, so
+  a guess is never recorded as a fact.
+- `studyColumn` / `withStudyColumn` / `BAR_PRICE_COLUMNS` (core): the target
+  column a study reads, the spec reading another one, and the columns a bar
+  offers.
+
 ## 0.11.0 — 2026-10-12
 
 A host can measure a bar axis on what the chart actually draws.
