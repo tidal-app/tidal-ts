@@ -14,10 +14,12 @@ A host can measure a bar axis on what the chart actually draws.
   `sum` it is far too small — one-minute volumes against bars that are daily
   sums — and an axis pinned to it clips every bar. Fires when the roll-up
   changes (data, window, an Auto window that moved with a resize or zoom), not
-  on hover or on a pan within one window.
-- **The bar roll-up is no longer rebuilt on every render** (chart) when the host
-  omits `ohlcSources`: its default was a fresh `[]` per render, which re-keyed
-  the aggregate memo each time.
+  on hover or on a pan within one window, and not before the chart has measured
+  its width. Each series spans the whole source, keyed by bucket start.
+- **The bar roll-up is no longer rebuilt on every render** (chart) for a host
+  that omits `ohlcSources` or passes it inline: the default was a fresh `[]`
+  per render, and the set was keyed on the array's identity. It is now keyed on
+  its contents.
 
 ## 0.10.0 — 2026-10-12
 

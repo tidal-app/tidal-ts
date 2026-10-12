@@ -2,7 +2,7 @@
   "name": "@tidal-ts/chart",
   "version": "0.11.0",
   "private": false,
-  "description": "TimeSeriesChart — a multi-row time-series chart on @pond-ts/charts, plus the series and settings vocabulary and the prepare step. Theme, colours and settings arrive as props.",
+  "description": "TimeSeriesChart \u2014 a multi-row time-series chart on @pond-ts/charts, plus the series and settings vocabulary and the prepare step. Theme, colours and settings arrive as props.",
   "license": "MIT",
   "repository": {
     "type": "git",
