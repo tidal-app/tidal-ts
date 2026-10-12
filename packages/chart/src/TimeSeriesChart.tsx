@@ -1238,9 +1238,11 @@ function TimeSeriesChartInner({
         // sessionBreaks>`, charts 0.73; this was one layer per segment before).
         //
         // No `baseline`: since charts 0.73 the baseline only says where the fill
-        // rests and no longer widens an auto-fitted axis, so a series far from
-        // zero rests on the floor as before, and a signed one (a skew, a spread)
-        // shades toward zero.
+        // rests and no longer widens an auto-fitted axis. So the fill shades
+        // toward zero inside the axis it has: a series wholly above zero rests on
+        // the floor, a signed one (a skew, a spread) shades to the zero line, and
+        // one wholly below zero hangs from the top edge — zero clamps to the
+        // nearest edge.
         return [
           <AreaChart
             key={c.id}

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ReactNode } from 'react';
 import { renderToString } from 'react-dom/server';
-import { buildPriceSeries, type PriceRow } from '@tidal-ts/core';
+import { buildPriceSeries, deriveId, type DeriveSpec, type PriceRow } from '@tidal-ts/core';
 import type { SeriesConfig } from './series.js';
 import type { ChartSeries } from './types.js';
 
@@ -32,6 +32,7 @@ vi.mock('@pond-ts/charts', async (importOriginal) => {
     LineChart: spy('LineChart'),
     AreaChart: spy('AreaChart'),
     BandChart: spy('BandChart'),
+    BarChart: spy('BarChart'),
   };
 });
 
@@ -40,6 +41,7 @@ vi.mock('./useMeasuredWidth.js', () => ({ useMeasuredWidth: () => [{ current: nu
 
 const { defaultTheme } = await import('@pond-ts/charts');
 const { TimeSeriesChart } = await import('./TimeSeriesChart.js');
+const { prepareChart } = await import('./index.js');
 
 const MIN = 60_000;
 /** Two one-minute sessions a day apart — intraday, so the axis has a seam. */
@@ -67,46 +69,99 @@ const config = (style: SeriesConfig['style'], column = 'close'): SeriesConfig =>
   source: 'price',
 });
 
-const render = (c: SeriesConfig, price: ChartSeries) =>
+const render = (c: SeriesConfig, price: ChartSeries) => {
+  // A study's columns exist only once the prepare step has folded them in.
+  const prepared = prepareChart({ price: { series: price } }, [{ id: 'r', configs: [c] }]);
   renderToString(
     <TimeSeriesChart
-      rows={[{ id: 'r', height: 200, configs: [c] }]}
-      sources={{ price }}
+      rows={[{ id: 'r', height: 200, configs: prepared.rows[0]!.configs }]}
+      sources={prepared.sources}
       ohlcSources={['price']}
       theme={defaultTheme}
     />,
   );
+  return prepared.sources.price!;
+};
+const layers = (name: string) => seen.filter((s) => s.layer === name).map((s) => s.props);
+const study = (style: SeriesConfig['style'], spec: DeriveSpec): SeriesConfig => ({
+  ...config(style, deriveId(spec)),
+  derive: spec,
+});
 
 beforeEach(() => {
   seen.length = 0;
 });
 
 describe('a close is drawn at its bar’s end by the layer, not by a copy', () => {
-  it('a vol-style line takes the source series and an offset of one bar', () => {
-    const price = intraday();
-    render(config('line', 'high'), price);
-    const line = seen.find((s) => s.layer === 'LineChart');
-    expect(line?.props.series).toBe(price);
-    expect(line?.props.xOffset).toBe(MIN);
-    expect(line?.props.sessionBreaks).toBe(true);
+  it('a non-price line takes the source series and an offset of one bar', () => {
+    const src = render(config('line', 'high'), intraday());
+    const [line] = layers('LineChart');
+    expect(line).toBeDefined();
+    expect(line!.series).toBe(src);
+    expect(line!.xOffset).toBe(MIN);
+    expect(line!.sessionBreaks).toBe(true);
   });
 
-  it('the price close starts at the open, a series already in drawn time', () => {
-    const price = intraday();
-    render(config('line'), price);
-    const line = seen.find((s) => s.layer === 'LineChart');
-    expect(line?.props.series).not.toBe(price);
-    expect(line?.props.xOffset).toBeUndefined();
+  it('the price close starts at the open — its own series, already in drawn time', () => {
+    const src = render(config('line'), intraday());
+    const [line] = layers('LineChart');
+    expect(line).toBeDefined();
+    // The open-line: one open print per session, then every close.
+    expect((line!.series as ChartSeries).length).toBe(src.length + 2);
+    expect(line!.xOffset).toBeUndefined();
   });
 
   it('an area is ONE layer that breaks at the seam, with no baseline of its own', () => {
-    const price = intraday();
-    render(config('area', 'high'), price);
-    const areas = seen.filter((s) => s.layer === 'AreaChart');
+    const src = render(config('area', 'high'), intraday());
+    const areas = layers('AreaChart');
     expect(areas).toHaveLength(1);
-    expect(areas[0]!.props.series).toBe(price);
-    expect(areas[0]!.props.xOffset).toBe(MIN);
-    expect(areas[0]!.props.sessionBreaks).toBe(true);
-    expect(areas[0]!.props.baseline).toBeUndefined();
+    expect(areas[0]!.series).toBe(src);
+    expect(areas[0]!.xOffset).toBe(MIN);
+    expect(areas[0]!.sessionBreaks).toBe(true);
+    expect(areas[0]!.baseline).toBeUndefined();
+  });
+
+  it('an area of the price close takes the open-line, unshifted', () => {
+    const src = render(config('area'), intraday());
+    const [area] = layers('AreaChart');
+    expect(area).toBeDefined();
+    expect((area!.series as ChartSeries).length).toBe(src.length + 2);
+    expect(area!.xOffset).toBeUndefined();
+    expect(area!.sessionBreaks).toBe(true);
+  });
+
+  it('a band’s wash and centre both take the source and the one-bar offset', () => {
+    const src = render(
+      study('band', { op: 'bollinger', inputs: ['close'], params: { period: 5, stdDev: 1 } }),
+      intraday(),
+    );
+    const [wash] = layers('BandChart');
+    const [centre] = layers('LineChart');
+    for (const l of [wash, centre]) {
+      expect(l).toBeDefined();
+      expect(l!.series).toBe(src);
+      expect(l!.xOffset).toBe(MIN);
+      expect(l!.sessionBreaks).toBe(true);
+    }
+  });
+
+  it('a histogram has no xOffset, so it draws from a copy moved by exactly one bar', () => {
+    const src = render(study('lines', { op: 'macd', inputs: ['close'] }), intraday());
+    const lines = layers('LineChart');
+    const [hist] = layers('BarChart');
+    expect(lines.length).toBeGreaterThan(0);
+    for (const l of lines) {
+      expect(l.series).toBe(src);
+      expect(l.xOffset).toBe(MIN);
+    }
+    expect(hist).toBeDefined();
+    expect(hist!.xOffset).toBeUndefined();
+    const moved = hist!.series as ChartSeries;
+    expect(moved).not.toBe(src);
+    const key = (s: ChartSeries, i: number) =>
+      (s.keyColumn() as unknown as { at(i: number): number }).at(i);
+    expect(moved.length).toBe(src.length);
+    expect(key(moved, 0)).toBe(key(src, 0) + MIN);
+    expect(key(moved, src.length - 1)).toBe(key(src, src.length - 1) + MIN);
   });
 });

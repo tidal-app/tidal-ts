@@ -25,9 +25,11 @@ breaks at the session seams on its own.
   continuous axis (nothing collapsed) the fill now bridges the overnight, as its
   line always has — the per-session layers broke it even there.
 - **An area no longer forces `baseline="floor"`** (chart). Since charts 0.73 a
-  baseline no longer widens an auto-fitted axis, so a series far from zero still
-  rests on the floor, and a signed series (a skew, a spread, an oscillator)
-  shades toward zero.
+  baseline no longer widens an auto-fitted axis, so every area shades toward
+  zero within the axis it already has: a series wholly above zero rests on the
+  floor as before, a signed one (a skew, a spread, an oscillator) shades to the
+  zero line, and a series wholly **below** zero now hangs from the plot's top
+  edge (it used to rise from the floor).
 - `shiftKeys` (core) is now pond's `offsetTime`: same result, no rebuild.
   `sliceBySegments` is deprecated; nothing here calls it any more.
 
