@@ -183,6 +183,16 @@ export function useSetStudyOutput(): (id: string, output: string) => void {
   );
 }
 
+/** Switch which column of its source a study reads (`series.setStudyInput`) —
+ *  the data node's output picker. Pair it with `inputAllowed`. */
+export function useSetStudyInput(): (id: string, column: string) => void {
+  const ref = TerminalContext.useActorRef();
+  return useCallback(
+    (id: string, column: string) => ref.send({ type: 'series.setStudyInput', id, column }),
+    [ref],
+  );
+}
+
 /** Which outputs of its multi-output source a study runs on — one, several, or
  *  all (`series.setStudyOutputs`). */
 export function useSetStudyOutputs(): (id: string, outputs: readonly string[]) => void {

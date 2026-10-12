@@ -12,6 +12,7 @@ import { deriveId, isPairOp, opParams, studyPick, type DeriveSpec } from '@tidal
 import {
   activeSlot,
   outputAllowed,
+  inputAllowed,
   outputsAllowed,
   studyOutputChoices,
   canonRows,
@@ -2368,6 +2369,64 @@ describe('a study of a multi-output study reads ONE named output (TDL-STUDYCHAIN
         .rows.flatMap((r) => r.configs)
         .filter((c) => c.group).length,
     ).toBeGreaterThan(0);
+  });
+});
+
+describe("the data node's output picker: which column a study reads (series.setStudyInput)", () => {
+  const all = (ctx: () => { rows: RowState[] }) => ctx().rows.flatMap((r) => r.configs);
+  const bandOnClose = () => {
+    const h = start();
+    const close = all(h.ctx).find((c) => c.column === 'close')!;
+    h.actor.send({ type: 'series.addStudy', targetId: close.id, op: 'bollinger', period: 20 });
+    const band = all(h.ctx).find((c) => c.derive?.op === 'bollinger')!;
+    return { ...h, close, band };
+  };
+
+  it('switches the column in place, and the study stays under its price', () => {
+    const { actor, ctx, close, band } = bandOnClose();
+    expect(inputAllowed(ctx(), band.id, 'high')).toBe(true);
+    actor.send({ type: 'series.setStudyInput', id: band.id, column: 'high' });
+    const after = all(ctx).find((c) => c.id === band.id)!;
+    expect(after.derive!.inputs).toEqual(['high']);
+    expect(after.column).toBe(deriveId(after.derive!));
+    expect(after.label).toBe(`${close.label} · High · BOLLINGER(20, 2)`);
+    expect(after.color).toBe(band.color); // identity kept
+    // Off the price's own column, the price still parents it — recorded.
+    expect(sourcesOf(all(ctx), after).map((p) => p.id)).toEqual([close.id]);
+    expect(after.parentIds?.[0]).toBe(close.id);
+  });
+
+  it("back on the data node's own column, the label loses the segment", () => {
+    const { actor, ctx, close, band } = bandOnClose();
+    actor.send({ type: 'series.setStudyInput', id: band.id, column: 'high' });
+    actor.send({ type: 'series.setStudyInput', id: band.id, column: 'close' });
+    const after = all(ctx).find((c) => c.id === band.id)!;
+    expect(after.derive!.inputs).toEqual(['close']);
+    expect(after.label).toBe(`${close.label} · BOLLINGER(20, 2)`);
+  });
+
+  it('carries what is built on the study', () => {
+    const { actor, ctx, band } = bandOnClose();
+    actor.send({ type: 'series.addStudy', targetId: band.id, op: 'sma', period: 10 });
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    actor.send({ type: 'series.setStudyInput', id: band.id, column: 'low' });
+    const band2 = all(ctx).find((c) => c.id === band.id)!;
+    const sma2 = all(ctx).find((c) => c.id === sma.id)!;
+    expect(studyPick(sma2.derive!)?.from).toEqual(band2.derive);
+    expect(sma2.column).toBe(deriveId(sma2.derive!));
+  });
+
+  it('refuses the current column, a study of a study, and a data node itself', () => {
+    const { actor, ctx, close, band } = bandOnClose();
+    actor.send({ type: 'series.addStudy', targetId: band.id, op: 'sma', period: 10 });
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    expect(inputAllowed(ctx(), band.id, 'close')).toBe(false); // already read
+    expect(inputAllowed(ctx(), sma.id, 'high')).toBe(false); // reads a study, not a column
+    expect(inputAllowed(ctx(), close.id, 'high')).toBe(false); // not a study
+    expect(inputAllowed(ctx(), band.id, '')).toBe(false);
+    const before = all(ctx).find((c) => c.id === sma.id)!;
+    actor.send({ type: 'series.setStudyInput', id: sma.id, column: 'high' });
+    expect(all(ctx).find((c) => c.id === sma.id)).toEqual(before);
   });
 });
 

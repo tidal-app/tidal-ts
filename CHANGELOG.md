@@ -2,6 +2,29 @@
 
 All packages release together on one version.
 
+## 0.12.0 — 2026-10-12
+
+A study can be switched to read another column of its source, and stays under
+the data node it is built on.
+
+- **`series.setStudyInput`** (terminal). Re-points a study that reads a raw
+  column straight off its source — a Bollinger of the close — at another of
+  that source's columns (`high`), in place, like `series.setStudyOutput`: the
+  identity stands (colour, axis, selection), everything built on it follows,
+  and the same spec and unit gates refuse an incoherent rewrite. Off the data
+  node's own column the label names the column read
+  (`Price · High · BOLLINGER(20, 2)`); back on it, the segment goes. Guard:
+  `inputAllowed`; hook: `useSetStudyInput`. Which columns a source has is the
+  host's to offer — the machine does not know a series' schema.
+- **A data node offers every column of its source** (chart). `sourcesOf` keeps a
+  study under its RECORDED parent when that parent is a data node on the
+  study's own source and the study reads another of its columns — so the
+  outliner no longer orphans a Bollinger of the high. Only through the recorded
+  parent (`parentIds`), which `series.setStudyInput` writes, so nothing is
+  re-bound to some other node on the same source.
+- `studyColumn` / `withStudyColumn` (core): the raw column a study reads, and
+  the spec reading another one.
+
 ## 0.11.0 — 2026-10-12
 
 A host can measure a bar axis on what the chart actually draws.

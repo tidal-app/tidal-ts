@@ -23,6 +23,8 @@ import {
   studyInputOf,
   studyPick,
   withStudyOutput,
+  studyColumn,
+  withStudyColumn,
   type DeriveSpec,
 } from './derive.js';
 
@@ -765,6 +767,17 @@ describe('picked outputs — which output a study of a study reads (TDL-STUDYCHA
     const bare: DeriveSpec = { op: 'sma', inputs: [DONCHIAN], params: { period: 5 } };
     expect(withStudyOutput(bare, 'Middle').inputs).toEqual([{ from: DONCHIAN, output: 'Middle' }]);
     expect(withStudyOutput(SMA_X, 'Middle')).toBe(SMA_X);
+  });
+
+  it('studyColumn finds the raw column a study reads; withStudyColumn swaps it', () => {
+    const band: DeriveSpec = { op: 'bollinger', inputs: ['close'], params: { period: 20 } };
+    expect(studyColumn(band)).toEqual({ index: 0, column: 'close' });
+    expect(withStudyColumn(band, 'high').inputs).toEqual(['high']);
+    // A study of a study reads no raw column, so there is nothing to swap.
+    const smaOfBand: DeriveSpec = { op: 'sma', inputs: [{ from: band, output: 'Upper' }] };
+    expect(studyColumn(smaOfBand)).toBeUndefined();
+    expect(withStudyColumn(smaOfBand, 'high')).toBe(smaOfBand);
+    expect(studyColumn(null as unknown as DeriveSpec)).toBeUndefined();
   });
 
   it('isPickedInput is total over persisted garbage', () => {

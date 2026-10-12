@@ -76,6 +76,8 @@ export {
   fanPick,
   withFanOutput,
   withStudyOutput,
+  studyColumn,
+  withStudyColumn,
   type StudyPick,
   isPickedInput,
   opNeedsColumns,

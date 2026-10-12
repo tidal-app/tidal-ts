@@ -1067,6 +1067,28 @@ export function withStudyOutput(spec: DeriveSpec, output: string): DeriveSpec {
 }
 
 /**
+ * The raw COLUMN a study reads straight off its source — `close` for a
+ * Bollinger of the close — or `undefined` when it reads none (a study of a
+ * study, a pair). The data node's output picker's question: which of the
+ * source's columns drives the chain. The first raw input, by position.
+ */
+export function studyColumn(spec: DeriveSpec): { index: number; column: string } | undefined {
+  if (!isSpecLike(spec) || isPairOp(spec.op)) return undefined;
+  const index = (spec.inputs ?? []).findIndex((i) => typeof i === 'string');
+  return index < 0 ? undefined : { index, column: spec.inputs[index] as string };
+}
+
+/** `spec` reading `column` of its source instead — the same spec when it reads
+ *  no raw column ({@link studyColumn}). */
+export function withStudyColumn(spec: DeriveSpec, column: string): DeriveSpec {
+  const at = studyColumn(spec);
+  if (!at) return spec;
+  const inputs = [...spec.inputs];
+  inputs[at.index] = column;
+  return { ...spec, inputs };
+}
+
+/**
  * The pick at the BOTTOM of a study chain — the multi-output source a chain
  * of single-output studies ultimately reads, and which of its outputs.
  *
