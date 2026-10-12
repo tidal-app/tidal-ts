@@ -27,6 +27,7 @@ import {
   withStudyOutput,
   studyColumn,
   withStudyColumn,
+  BAR_PRICE_COLUMNS,
   fanPick,
   primaryOutput,
   withFanOutput,
@@ -1070,7 +1071,7 @@ export interface PairLegInput {
  *  derived metrics that stand alone instead of travelling with a source. A
  *  seated config's id no longer says where it came from, so catalog-ness is
  *  read off what it computes. */
-const isCatalogColumn = (context: TerminalContext) => {
+const isCatalogColumn = (context: { catalog: EditScope['catalog'] }) => {
   const cols = new Set(context.catalog.map(entryColumn));
   return (column: string) => cols.has(column);
 };
@@ -1431,12 +1432,13 @@ export function outputAllowed(scope: EditScope, id: string, output: string): boo
  * Whether study `id` can be re-pointed to read `column` of its source — the
  * data node's output picker (`series.setStudyInput`).
  *
- * False when it reads no raw column (a study of a study: that is the output
- * picker's), when `column` is already the one read, when it is not built on a
- * seated data node on its own source (off its home column only that node can
- * keep it), or when the rewrite would be incoherent — the same unit and spec
- * gates as {@link outputAllowed}. Which columns the source HAS is the host's to
- * offer; the machine does not know a series' schema.
+ * Narrow on purpose (PR #33 review): only a study whose TARGET is one of a
+ * bar's price columns ({@link studyColumn} — an ATR's bar roles are not a
+ * target), re-pointed at another of them, off a seated price data node on its
+ * own source. So not a catalog metric (a derived vol is a metric, not a study
+ * of a column), not a vol source's columns (each is its own metric node), not
+ * the column already read, not a fanned study; and never a rewrite the spec or
+ * unit gates of {@link outputAllowed} refuse.
  *
  * Total: it runs in a guard, where a throw kills the actor.
  */
@@ -1445,10 +1447,12 @@ export function inputAllowed(scope: EditScope, id: string, column: string): bool
     const configs = flatConfigs(scope.rows);
     const target = configs.find((c) => c.id === id);
     if (!target?.derive || (target.fan && target.fan.length > 0)) return false;
+    if (isCatalogColumn(scope)(target.column)) return false;
     const at = studyColumn(target.derive);
-    if (!at || at.column === column || column === '') return false;
+    if (!at || at.column === column) return false;
+    if (!BAR_PRICE_COLUMNS.includes(at.column) || !BAR_PRICE_COLUMNS.includes(column)) return false;
     const home = dataParent(configs, target);
-    if (!home) return false;
+    if (!home || !BAR_PRICE_COLUMNS.includes(home.column)) return false;
     if (!isValidSpec(withStudyColumn(target.derive, column))) return false;
     const next = propagateRespec(
       configs,
@@ -2631,9 +2635,16 @@ export const terminalMachine = setup({
         if (!target || !home || !at) return context.rows;
         const rows = applyRespec(context, event.id, respecInput(target, event.column, home.column));
         if (rows === context.rows) return rows; // refused: never half-apply
-        // RECORD the data node it is built on: off its home column, the study
-        // finds that node only through `parentIds` (a layout saved before
-        // studies recorded their parents would otherwise lose it here).
+        // Off its home column the study finds its data node only through
+        // `parentIds`. A study that already records one keeps it; one saved
+        // before studies recorded their parents gains it — but only when the
+        // node it was found on is the ONE seated node drawing that column, so a
+        // guess is never written down as a fact (PR #33 review).
+        if (target.parentIds?.[at.index] != null) return rows;
+        const homes = configs.filter(
+          (c) => !c.derive && c.source === target.source && c.column === at.column,
+        );
+        if (homes.length !== 1) return rows;
         return rows.map((r) => ({
           ...r,
           configs: r.configs.map((c) => {

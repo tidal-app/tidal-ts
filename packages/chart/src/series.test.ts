@@ -614,6 +614,23 @@ describe('sourcesOf / readsFrom (TDL-CMPDUP)', () => {
     expect(sourcesOf([a, b, s], s).map((x) => x.id)).toEqual(['a']);
   });
 
+  it("a recorded PRICE node keeps a study of another of its bar's columns", () => {
+    const price = cfg('p', 'close', { source: 'price' });
+    const band = { op: 'bollinger', inputs: ['high'], params: { period: 20 } } as const;
+    const s = cfg('s', 'band', { derive: band, source: 'price', parentIds: ['p'] });
+    expect(sourcesOf([price, s], s).map((x) => x.id)).toEqual(['p']);
+  });
+
+  it("…but a vol node does not offer its source's other metrics, nor a pair its legs", () => {
+    // Each vol column is its own metric node: a study of iv63 recorded on the
+    // iv21 node is stale, and finds the iv63 node by its column.
+    const iv63 = cfg('c', 'iv63', { source: 'vol' });
+    const onA = { op: 'sma', inputs: ['iv63'], params: { period: 20 } } as const;
+    const s = cfg('s', 'sma', { derive: onA, source: 'vol', parentIds: ['a'] });
+    const a2 = cfg('a', 'iv21', { source: 'vol' });
+    expect(sourcesOf([a2, iv63, s], s).map((x) => x.id)).toEqual(['c']);
+  });
+
   it('a STALE record (the parent computes something else now) falls back to the column', () => {
     const moved = cfg('b', 'iv63');
     const s = cfg('s', 'sma', { derive: sma, parentIds: ['b'] });

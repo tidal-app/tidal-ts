@@ -77,6 +77,7 @@ export {
   withFanOutput,
   withStudyOutput,
   studyColumn,
+  BAR_PRICE_COLUMNS,
   withStudyColumn,
   type StudyPick,
   isPickedInput,

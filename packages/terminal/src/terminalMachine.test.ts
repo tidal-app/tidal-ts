@@ -2416,6 +2416,41 @@ describe("the data node's output picker: which column a study reads (series.setS
     expect(sma2.column).toBe(deriveId(sma2.derive!));
   });
 
+  it("refuses a study of a SERIES: an ATR's bar roles are not a target", () => {
+    const { actor, ctx, close } = bandOnClose();
+    actor.send({ type: 'series.addStudy', targetId: close.id, op: 'atr', period: 14 });
+    const atr = all(ctx).find((c) => c.derive?.op === 'atr')!;
+    for (const col of ['open', 'high', 'low', 'close'])
+      expect(inputAllowed(ctx(), atr.id, col)).toBe(false);
+  });
+
+  it("refuses a vol source's columns and a catalog metric", () => {
+    const h = start();
+    const iv21 = all(h.ctx).find((c) => c.column === 'iv21')!;
+    h.actor.send({ type: 'series.addStudy', targetId: iv21.id, op: 'sma', period: 20 });
+    const sma = all(h.ctx).find((c) => c.derive?.op === 'sma')!;
+    expect(inputAllowed(h.ctx(), sma.id, 'iv63')).toBe(false); // each is its own metric
+    h.actor.send({ type: 'series.add', catalogId: RV, rowId: 'top' });
+    const rv = all(h.ctx).find((c) => c.column === RV)!;
+    expect(rv).toBeDefined();
+    expect(inputAllowed(h.ctx(), rv.id, 'iv21')).toBe(false); // a metric, not a study
+  });
+
+  it('records the price node for a study saved before studies recorded parents', () => {
+    const { ctx, close, band } = bandOnClose();
+    // Strip the record, as a layout from before `parentIds` would carry it.
+    const legacy = ctx().rows.map((r) => ({
+      ...r,
+      configs: r.configs.map((c) => (c.id === band.id ? { ...c, parentIds: undefined } : c)),
+    }));
+    const h = start(legacy);
+    expect(all(h.ctx).find((c) => c.id === band.id)!.parentIds).toBeUndefined();
+    h.actor.send({ type: 'series.setStudyInput', id: band.id, column: 'high' });
+    const after = all(h.ctx).find((c) => c.id === band.id)!;
+    expect(after.parentIds?.[0]).toBe(close.id);
+    expect(sourcesOf(all(h.ctx), after).map((p) => p.id)).toEqual([close.id]);
+  });
+
   it('refuses the current column, a study of a study, and a data node itself', () => {
     const { actor, ctx, close, band } = bandOnClose();
     actor.send({ type: 'series.addStudy', targetId: band.id, op: 'sma', period: 10 });
