@@ -101,6 +101,7 @@ The props most hosts use:
 | `dimmed`                                       | Series ids to fade, to emphasise the rest.                                                              |
 | `viewRange`, `onViewRangeChange`               | Control the visible time window (pan and zoom).                                                         |
 | `axisOptions`                                  | Per-axis fixed bounds, decimals, log scale, title and tick count.                                       |
+| `onBarSeries`                                  | The series each bar is drawn from (the roll-up), to measure a bar axis on what it shows.                |
 | `annotations`                                  | Date markers, such as earnings or expiries, drawn across every row.                                     |
 | `coarseSources`                                | Sources held across a finer axis (see `hold` above), so they are not broken at each session.            |
 | `pricePill`                                    | A live last-price tag on the axis; ticks repaint only the tag.                                          |

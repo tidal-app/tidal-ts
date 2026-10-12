@@ -2,6 +2,23 @@
 
 All packages release together on one version.
 
+## 0.11.0 — 2026-10-12
+
+A host can measure a bar axis on what the chart actually draws.
+
+- **`onBarSeries`** (chart). `TimeSeriesChart` reports the series each `bar`
+  config is drawn from — the roll-up (`avg` per window, `sum` for `volume`, over
+  the resolved Auto window), keyed by config id. A host that measures an axis
+  itself (to pin a fit, or to print its range) and reads the source column gets
+  the wrong number for a bar: for `avg` the raw extent is merely loose, but for
+  `sum` it is far too small — one-minute volumes against bars that are daily
+  sums — and an axis pinned to it clips every bar. Fires when the roll-up
+  changes (data, window, an Auto window that moved with a resize or zoom), not
+  on hover or on a pan within one window.
+- **The bar roll-up is no longer rebuilt on every render** (chart) when the host
+  omits `ohlcSources`: its default was a fresh `[]` per render, which re-keyed
+  the aggregate memo each time.
+
 ## 0.10.0 — 2026-10-12
 
 On pond-ts 0.73: a line is drawn at its bar's end by the layer, and an area
