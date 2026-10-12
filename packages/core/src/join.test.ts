@@ -13,7 +13,7 @@ const mk = (vals: number[]) =>
     name: 's',
     schema: SCHEMA,
     columns: { time: vals.map((_, i) => i * 86_400_000), iv21: vals },
-    sort: true,
+    ordering: 'reorder',
   }) as unknown as TimeSeries<typeof SCHEMA>;
 
 describe('joinUnderPrefix', () => {
@@ -43,7 +43,7 @@ describe('joinUnderPrefix', () => {
       schema: SCHEMA,
       // Only the first and third timestamps — the middle row has no compare match.
       columns: { time: [0, 2 * 86_400_000], iv21: [10, 12] },
-      sort: true,
+      ordering: 'reorder',
     }) as unknown as TimeSeries<typeof SCHEMA>;
     const joined = joinUnderPrefix(primary, compare);
     const objs = joined.toObjects() as Record<string, number | null>[];

@@ -149,9 +149,10 @@ export function holdAcrossGrid<S extends SeriesSchema>(
   for (const spec of valueSpecs) {
     const src = (coarse as unknown as { column(n: string): HeldColumn }).column(spec.name);
     if (spec.kind === 'number') {
-      // Through `at`, not `toFloat64Array()`: the raw buffer does not mark a
-      // missing cell (a join's unmatched row reads 0 there). The coarse side is
-      // the short one, so this is a few hundred reads.
+      // Through `at`, which reads a missing cell as `undefined`. Before pond
+      // 0.73 the raw buffer did not mark one (a join's unmatched row read 0);
+      // since 0.73 `toFloat64Array()` holds `NaN` there too, so either works.
+      // The coarse side is the short one, so this is a few hundred reads.
       const values = new Float64Array(n);
       for (let r = 0; r < n; r += 1) {
         const v = src.at(r);

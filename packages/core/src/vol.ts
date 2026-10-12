@@ -194,7 +194,7 @@ export function buildVolSeries(name: string, columns: VolColumns): VolSeries {
     name,
     schema: VOL_SCHEMA,
     columns: columns as Record<string, readonly number[]>,
-    sort: true,
+    ordering: 'reorder',
   }) as VolSeries;
 }
 

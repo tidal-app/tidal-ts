@@ -178,27 +178,21 @@ function median(values: number[]): number {
  *
  * Shifting the KEY rather than fixing it at the source is deliberate: a candle
  * needs the span `[open, close]` and draws from the open, so the two styles want
- * different x for the same row. Charts plots a line at the key's `begin`
- * whichever key kind it is, so the only way to move the line is to move the key —
- * and only for the layers that want it moved.
+ * different x for the same row. A line, area or band layer takes charts'
+ * `xOffset` for this (charts 0.73) and needs no copy; this is for a layer that
+ * has no such prop — `<BarChart>`, whose point-keyed histogram must sit under the
+ * shifted lines it explains.
  *
- * Costs one pass over the key column plus a rebuild (~14 ms at 100k rows), so it
- * belongs behind a per-fetch memo, never in a render path.
+ * pond's `offsetTime` does the move: one pass over the key, value columns shared
+ * (0.26 ms on 97k rows × 118 columns, by pond's measurement — the rebuild this
+ * used to do cost 235–442 ms on the same shape).
  */
 export function shiftKeys(series: TimeSeries<SeriesSchema>, ms: number): TimeSeries<SeriesSchema> {
   if (ms === 0) return series;
-  const out = (series as unknown as { toColumns(): ColumnarOut }).toColumns();
-  const key = out.schema.find((c) => c.kind === 'time')?.name;
-  // No time key (a value-keyed series) ⇒ nothing to shift, and shifting the wrong
-  // column would corrupt values rather than fail.
-  if (key === undefined) return series;
-  const src = out.columns[key] as ArrayLike<number>;
-  const shifted = new Float64Array(src.length);
-  for (let i = 0; i < src.length; i += 1) shifted[i] = src[i]! + ms;
-  return TimeSeries.fromColumns({
-    ...out,
-    columns: { ...out.columns, [key]: shifted },
-  } as never) as unknown as TimeSeries<SeriesSchema>;
+  // Only a time key moves by a constant duration; anything else comes back as it
+  // is rather than failing in the render path.
+  if (series.schema[0]?.kind !== 'time') return series;
+  return series.offsetTime(ms);
 }
 
 interface ColumnarOut {
@@ -211,14 +205,15 @@ interface ColumnarOut {
  * The series cut into one sub-series per live segment — `[start, end)` on the
  * time key, empty segments dropped.
  *
- * For the layer pond gives no `sessionBreaks` of its own — `<AreaChart>`
- * (`<LineChart>` has always had it; `<BandChart>` gained it in charts 0.70.0,
- * which retired this function's other caller). A fill drawn across a
- * collapsed overnight gap bridges seventeen hours of closed market in one
- * confident sweep and contradicts the line drawn over it; one layer per segment
- * ends the fill at the close and restarts it at the open, which is what that
- * line already does. The cost is `segments.length` layers instead of one, so a
- * caller asks only when the axis actually collapses.
+ * @deprecated No longer needed to break a fill at a session seam: every charts
+ * layer that fills or strokes takes `sessionBreaks` since charts 0.73
+ * (`<AreaChart>` was the last), so `TimeSeriesChart` no longer calls this. Kept
+ * for a host that slices a series per session for some other reason.
+ *
+ * It existed for `<AreaChart>` before it had `sessionBreaks`: a fill drawn
+ * across a collapsed overnight gap bridges seventeen hours of closed market in
+ * one confident sweep, and one layer per segment ended it at the close and
+ * restarted it at the open, as the line over it did.
  *
  * Pond does the cutting — `bisect` finds each edge in O(log n) on the packed key
  * buffer and `slice` is positional and half-open — so nothing here is

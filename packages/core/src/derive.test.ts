@@ -38,7 +38,7 @@ const series = (xs: number[]) =>
     name: 't',
     schema: SCHEMA,
     columns: { time: xs.map((_, i) => i * 86_400_000), x: xs },
-    sort: true,
+    ordering: 'reorder',
   }) as unknown as TimeSeries<typeof SCHEMA>;
 
 describe('deriveId', () => {
@@ -316,7 +316,7 @@ const pairSeries = (as: (number | undefined)[], bs: (number | undefined)[]) =>
       a: as.map((v) => (v == null ? NaN : v)),
       b: bs.map((v) => (v == null ? NaN : v)),
     },
-    sort: true,
+    ordering: 'reorder',
   }) as unknown as TimeSeries<typeof PAIR_SCHEMA>;
 
 describe('pair ops', () => {
@@ -588,7 +588,7 @@ describe('picked outputs — which output a study of a study reads (TDL-STUDYCHA
       low: close.map((c) => c - 2),
       close,
     },
-    sort: true,
+    ordering: 'reorder',
   }) as unknown as TimeSeries<SeriesSchema>;
   const DONCHIAN: DeriveSpec = { op: 'donchian', inputs: ['high', 'low'], params: { period: 10 } };
   const read = (s: TimeSeries<SeriesSchema>, col: string) => {

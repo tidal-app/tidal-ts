@@ -91,7 +91,7 @@ function assertAligned(
 
 /**
  * Adapt a decoded {@link PondSnapshot} into a pond `TimeSeries`. Drops string
- * columns (partition metadata), coerces gaps to null, and `sort: true` since
+ * columns (partition metadata), coerces gaps to null, and `ordering: 'reorder'` since
  * wire rows aren't guaranteed ascending.
  */
 export function snapshotToTimeSeries(snap: PondSnapshot) {
@@ -108,7 +108,7 @@ export function snapshotToTimeSeries(snap: PondSnapshot) {
   for (const c of cols) {
     columns[c.name] = (snap.columns[c.name] ?? []).map((v) => (typeof v === 'number' ? v : null));
   }
-  return TimeSeries.fromColumns({ name: snap.name, schema, columns, sort: true });
+  return TimeSeries.fromColumns({ name: snap.name, schema, columns, ordering: 'reorder' });
 }
 
 /**

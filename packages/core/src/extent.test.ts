@@ -13,7 +13,7 @@ const mk = (vals: (number | null)[]) =>
     name: 's',
     schema: SCHEMA,
     columns: { time: vals.map((_, i) => i * DAY), iv21: vals },
-    sort: true,
+    ordering: 'reorder',
   }) as unknown as TimeSeries<typeof SCHEMA>;
 
 describe('columnExtent', () => {
