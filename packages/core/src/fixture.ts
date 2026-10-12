@@ -90,7 +90,7 @@ export type PriceSeries = TimeSeries<typeof PRICE_SCHEMA>;
 /** Build a {@link PriceSeries} from raw OHLCV rows. The one place the price
  *  `TimeSeries` is constructed — fixture, HTTP source, and the real ticker-history
  *  adapter all funnel through here. Uses the **columnar** ingress (gap-tolerant,
- *  `sort:true`) so a non-finite cell reads as a gap rather than being rejected —
+ *  `ordering: 'reorder'`) so a non-finite cell reads as a gap rather than being rejected —
  *  real data can carry the occasional missing OHLCV cell. */
 export function buildPriceSeries(name: string, rows: readonly PriceRow[]): PriceSeries {
   return TimeSeries.fromColumns({
@@ -104,7 +104,7 @@ export function buildPriceSeries(name: string, rows: readonly PriceRow[]): Price
       close: rows.map((r) => r[4]),
       volume: rows.map((r) => r[5]),
     },
-    sort: true,
+    ordering: 'reorder',
   });
 }
 

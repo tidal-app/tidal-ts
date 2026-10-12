@@ -187,6 +187,31 @@ export const IntradayBand: Story = {
   },
 };
 
+/** The close as an area across the same seam. One `<AreaChart sessionBreaks>`
+ *  (charts 0.73): the fill ends on the day's last close and restarts at the
+ *  next open, and it rests on the plot's floor without widening the axis to
+ *  zero. The price source carries OHLC, so the fill starts at the open print. */
+export const IntradayArea: Story = {
+  args: {
+    rows: [
+      {
+        id: 'only',
+        height: 380,
+        configs: [
+          line('close', 'close', 'Price', '#c9a94a', {
+            unit: '',
+            source: 'price',
+            style: 'area',
+          }),
+        ],
+      },
+    ],
+    sources: intraday.sources,
+    ohlcSources: ['price'],
+    collapseWeekends: true,
+  },
+};
+
 /** A line's own texture and opacity — `lineDash` and `opacity`, both
  *  overrides of what the series' category would draw. Solid, dashed and dotted
  *  term-structure lines, the last at half opacity. */

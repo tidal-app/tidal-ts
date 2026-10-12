@@ -2,6 +2,35 @@
 
 All packages release together on one version.
 
+## 0.10.0 — 2026-10-12
+
+On pond-ts 0.73: a line is drawn at its bar's end by the layer, and an area
+breaks at the session seams on its own.
+
+- **pond-ts 0.73.** The family's peers move from `^0.72.0` to `^0.73.0`
+  (`@pond-ts/process` exact `0.73.0`); the install commands in the docs follow.
+  0.73 is breaking in places a host may touch directly — see pond's changelog:
+  any non-finite number in a number column now reads as missing, `select()`
+  throws on an unknown column, and `sort: true` is deprecated for
+  `ordering: 'reorder'` (used here throughout).
+- **No more key-shifted copies** (chart). A line, area or band draws its closes
+  at the bar's end with charts' `xOffset` (one bar) on the source series itself,
+  instead of a copy of the series with every key moved. The copy was the
+  largest single cost of a one-minute grain change. `<BarChart>` has no
+  `xOffset`, so a study's histogram still draws from a moved copy, now made by
+  pond's `offsetTime` (key only, value columns shared).
+- **An area breaks at the session seams** (chart) through
+  `<AreaChart sessionBreaks>`, as the line and the band already did, so it is
+  one layer instead of one per session. Same semantics as theirs, too: on a
+  continuous axis (nothing collapsed) the fill now bridges the overnight, as its
+  line always has — the per-session layers broke it even there.
+- **An area no longer forces `baseline="floor"`** (chart). Since charts 0.73 a
+  baseline no longer widens an auto-fitted axis, so a series far from zero still
+  rests on the floor, and a signed series (a skew, a spread, an oscillator)
+  shades toward zero.
+- `shiftKeys` (core) is now pond's `offsetTime`: same result, no rebuild.
+  `sliceBySegments` is deprecated; nothing here calls it any more.
+
 ## 0.9.0 — 2026-10-11
 
 A study can run on several outputs of its parent, and every line of a

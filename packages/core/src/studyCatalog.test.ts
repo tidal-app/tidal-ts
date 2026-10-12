@@ -75,7 +75,7 @@ const series = (n = 1_200) =>
         ),
       };
     })(),
-    sort: true,
+    ordering: 'reorder',
   });
 
 describe('studyCatalog — the corpus folded into the registry', () => {
