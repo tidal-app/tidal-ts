@@ -397,6 +397,33 @@ export interface TimeSeriesChartProps {
    * the same manual pin and can never disagree about which axis is manual.
    */
   onAxisBounds?: (axisId: string, bounds: readonly [number, number] | null) => void;
+  /**
+   * The series each **bar** config is actually drawn from, keyed by config id —
+   * the roll-up, not the source.
+   *
+   * A bar does not draw its source column. It draws an aggregate built here:
+   * `avg` per window, or `sum` for `volume`, over a window that in Auto is
+   * chosen from the plot width and the view. So a host that measures an axis
+   * itself (to pin a fit, or to print the range in a readout) and reads the raw
+   * column gets the wrong number for a bar. For `avg` the raw extent is merely
+   * loose; for `sum` it is far too small — 1-minute volumes against bars that
+   * are daily sums — and an axis pinned to it clips every bar. Measure these
+   * instead: the summed column keeps its name (`config.column`), and the split
+   * halves (`<col>__up` / `<col>__dn`) ride beside it.
+   *
+   * Each series is the roll-up of the WHOLE source, keyed by bucket START. A
+   * host measuring the visible window should keep a bucket that overlaps the
+   * view's left edge, or it can drop the tallest bar on screen.
+   *
+   * Fires after a render whose roll-up changed: new data (a new `sources`
+   * object counts — keep it stable), a new window, or an Auto window that moved
+   * with a resize or a zoom. Not on hover or pan within one window, and not
+   * before the chart has measured its width (the Auto window is meaningless
+   * until then). A config that draws no bars (hidden, or its column absent) is
+   * not in the map. The map is the one the chart draws from: read it, never
+   * mutate it.
+   */
+  onBarSeries?: (bars: ReadonlyMap<string, ChartSeries>) => void;
   /** A CLICK on a y-axis gutter (pond 0.61 `onMouseEvent`), with the row/side
    *  it landed on and the viewport point — the axis panel's anchor. Row + side
    *  are passed apart because axis ids embed config ids (engine specIds with
@@ -669,7 +696,7 @@ export function splitBarColumns(
 function TimeSeriesChartInner({
   rows,
   sources,
-  ohlcSources = [],
+  ohlcSources = EMPTY_SOURCES,
   calendarDays = EMPTY_DAYS,
   annotations = EMPTY_ANNOTATIONS,
   coarseSources = EMPTY_SOURCES,
@@ -689,6 +716,7 @@ function TimeSeriesChartInner({
   axisOptions,
   onAxisClick,
   onAxisBounds,
+  onBarSeries,
 }: TimeSeriesChartProps) {
   const [ref, width] = useMeasuredWidth<HTMLDivElement>();
   // Which y-axis gutter the pointer is over (the hover affordance). Axis
@@ -696,7 +724,12 @@ function TimeSeriesChartInner({
   const [hoverAxis, setHoverAxis] = useState<string | null>(null);
 
   const allConfigs = useMemo(() => rows.flatMap((r) => r.configs), [rows]);
-  const ohlc = useMemo(() => new Set(ohlcSources), [ohlcSources]);
+  // Keyed on CONTENT, not identity: an inline `ohlcSources={['price']}` is a new
+  // array every render, and it feeds the bar roll-up — which `onBarSeries`
+  // reports, and a host may feed back into its own state.
+  const ohlcKey = ohlcSources.join('\u0000');
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const ohlc = useMemo(() => new Set(ohlcSources), [ohlcKey]);
 
   const dimKey = dimmed.join(',');
   // The category styles + split defaults shape the theme too — one compact key
@@ -1053,6 +1086,21 @@ function TimeSeriesChartInner({
     return { bar, candle };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sources, ohlc, sessionsFor, aggSig]);
+
+  // Report the roll-up to a host that measures axes (`onBarSeries`). Keyed on
+  // the memo's identity, so it fires when the bars change and not on every
+  // render; the callback rides a ref so a host passing an inline function does
+  // not re-fire it. Held until the width is measured: before that Auto picks the
+  // finest window, a roll-up that is never drawn. Re-fires when a callback is
+  // newly attached, so a host that starts listening is not left waiting for the
+  // next window change.
+  const onBarSeriesRef = useRef(onBarSeries);
+  onBarSeriesRef.current = onBarSeries;
+  const measured = width > 0;
+  const listening = onBarSeries !== undefined;
+  useEffect(() => {
+    if (measured) onBarSeriesRef.current?.(derived.bar);
+  }, [derived.bar, measured, listening]);
 
   // A line through `close` belongs at the bar's END, not its start.
   //
