@@ -17,6 +17,7 @@ import {
   carries,
   foldKey,
   foldSources,
+  foldSourcesReport,
   prepareChart,
   sourceFacts,
 } from './prepare.js';
@@ -40,6 +41,24 @@ const cfg = (over: Partial<SeriesConfig> & Pick<SeriesConfig, 'id' | 'column'>):
 const sma: DeriveSpec = { op: 'sma', inputs: ['close'], params: { period: 5 } };
 const smaOfNothing: DeriveSpec = { op: 'sma', inputs: ['nope'], params: { period: 5 } };
 const ratioVsCompare: DeriveSpec = { op: 'ratio', inputs: ['close', 'cmp_close'] };
+
+describe('foldSourcesReport', () => {
+  it('is the same fold, with a report per source: rows, skipped, steps, cost', () => {
+    const study = cfg({ id: 's-1', column: deriveId(sma), derive: sma });
+    const ghost = cfg({ id: 's-2', column: deriveId(smaOfNothing), derive: smaOfNothing });
+    const inputs = { price: { series: price }, vol: { series: vol } };
+    const { sources, reports } = foldSourcesReport(inputs, [study, ghost]);
+    expect(sourceFacts(sources)).toEqual(sourceFacts(foldSources(inputs, [study, ghost])));
+    expect(reports.price).toMatchObject({ rows: price.length });
+    expect(reports.price!.nodes.map((n) => n.id)).toContain(deriveId(sma));
+    expect(reports.price!.skipped).toMatchObject([
+      { id: deriveId(smaOfNothing), code: 'UnknownColumnError' },
+    ]);
+    expect(reports.price!.ms).toBeGreaterThanOrEqual(0);
+    // A source with nothing to fold still reports what it holds.
+    expect(reports.vol).toMatchObject({ rows: vol.length, skipped: [], nodes: [] });
+  });
+});
 
 describe('foldSources', () => {
   it('folds a study onto its source so the derived column exists before the chart reads it', () => {

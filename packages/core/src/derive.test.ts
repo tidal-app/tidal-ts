@@ -246,6 +246,27 @@ describe('applyDerived', () => {
     expect(skipped.length).toBeGreaterThanOrEqual(2); // both broken shapes land, no throw
   });
 
+  it('reports each step as the engine ran it — id, pulled, cold, cost, inputs', () => {
+    const s = series([1, 2, 3, 4, 5]);
+    const inner: DeriveSpec = { op: 'sma', inputs: ['x'], params: { period: 2 } };
+    const outer: DeriveSpec = { op: 'ema', inputs: [inner], params: { period: 2 } };
+    const { nodes } = applyDerivedReport(s, [outer]);
+    const byId = new Map(nodes.map((n) => [n.id, n]));
+    // Ids are `deriveId`'s, so a host keys them on the same string as its
+    // configs and columns — and the nested step is reported too.
+    expect(byId.get(deriveId(inner))).toMatchObject({ pulled: true, inputs: ['x'] });
+    expect(byId.get(deriveId(outer))).toMatchObject({
+      pulled: true,
+      inputs: [deriveId(inner)],
+    });
+    for (const n of nodes) {
+      // A cold bind per fold: nothing is served warm yet.
+      expect(n.cached).toBe(false);
+      expect(n.ms).toBeGreaterThanOrEqual(0);
+    }
+    expect(applyDerivedReport(s, []).nodes).toEqual([]);
+  });
+
   it('reports a gone column as UnknownColumnError, deduped across passes', () => {
     const s = series([1, 2, 3]);
     const gone: DeriveSpec = { op: 'sma', inputs: ['vanished'], params: { period: 2 } };

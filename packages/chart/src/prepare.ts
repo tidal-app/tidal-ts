@@ -1,11 +1,11 @@
 import {
-  applyDerived,
+  applyDerivedReport,
   COMPARE_PREFIX,
   holdAcrossGrid,
   joinUnderPrefix,
   usesCompare,
 } from '@tidal-ts/core';
-import type { DeriveSpec } from '@tidal-ts/core';
+import type { DeriveNodeTiming, DeriveSkip, DeriveSpec } from '@tidal-ts/core';
 import { configColumns, configSpecs, type SeriesConfig } from './series.js';
 import type { ChartSeries } from './types.js';
 import { finiteColumns, lastRow } from './seriesFacts.js';
@@ -168,10 +168,36 @@ export function foldSources(
   inputs: SourceInputs,
   configs: readonly SeriesConfig[],
 ): Record<string, ChartSeries> {
+  return foldSourcesReport(inputs, configs).sources;
+}
+
+/** What a fold did to one source — {@link foldSourcesReport}. */
+export interface SourceFoldReport {
+  /** Rows in the folded series. */
+  rows: number;
+  /** The specs the engine could not run, once each (`applyDerivedReport`). */
+  skipped: DeriveSkip[];
+  /** Each step as the engine ran it: cost, and whether it was served warm. */
+  nodes: DeriveNodeTiming[];
+  /** The whole fold of this source, join and hold included, in ms. */
+  ms: number;
+}
+
+/**
+ * {@link foldSources} with the report: per source, what the engine skipped and
+ * what each step cost — what a pipeline view shows on its nodes. The same fold;
+ * `foldSources` is this without the report.
+ */
+export function foldSourcesReport(
+  inputs: SourceInputs,
+  configs: readonly SeriesConfig[],
+): { sources: Record<string, ChartSeries>; reports: Record<string, SourceFoldReport> } {
   const specs = specsBySource(configs);
   const rawCompare = new Set(rawCompareSources(configs));
-  const out: Record<string, ChartSeries> = {};
+  const sources: Record<string, ChartSeries> = {};
+  const reports: Record<string, SourceFoldReport> = {};
   for (const [key, input] of Object.entries(inputs)) {
+    const t0 = performance.now();
     const mine = specs[key] ?? [];
     // A coarse source is folded before it is held, so a restated row has to go
     // first, or the join pairs it with nothing and a study counts it as a bar
@@ -186,10 +212,19 @@ export function foldSources(
     // not the library's `onConflict: 'prefix'`).
     if (compare && (rawCompare.has(key) || mine.some(usesCompare)))
       series = joinUnderPrefix(series, compare);
-    const folded = applyDerived(series, mine);
-    out[key] = input.hold ? holdAcrossGrid(folded, input.hold.grid, input.hold.grainMs) : folded;
+    const folded = applyDerivedReport(series, mine);
+    const out = input.hold
+      ? holdAcrossGrid(folded.series, input.hold.grid, input.hold.grainMs)
+      : folded.series;
+    sources[key] = out;
+    reports[key] = {
+      rows: out.length,
+      skipped: folded.skipped,
+      nodes: folded.nodes,
+      ms: Math.round((performance.now() - t0) * 1000) / 1000,
+    };
   }
-  return out;
+  return { sources, reports };
 }
 
 /** Per-source data facts, read columnar: which columns carry real (finite)
