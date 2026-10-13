@@ -19,6 +19,7 @@ import {
   axisMoveAllowed,
   respecAllowed,
   studyChainTail,
+  rowBlocks,
   terminalMachine,
   type MetricEntry,
   type PresetStorage,
@@ -1878,6 +1879,24 @@ describe('axis ranges — AUTO | manual with memory', () => {
 });
 
 describe('studies are a pipeline', () => {
+  it('a study with nothing to tune is in the chain too (tidal-ts#34 review)', () => {
+    // Typical Price declares no params; "has params?" left it out of both walks
+    // — + Study on its chain branched instead of appending.
+    const { actor, ctx, idOf } = start();
+    const all = () => ctx().rows.flatMap((r) => r.configs);
+    const close = idOf('close');
+    actor.send({ type: 'series.addStudy', targetId: close, op: 'typicalPrice', period: 20 });
+    const tp = all().find((c) => c.derive?.op === 'typicalPrice')!;
+    expect(tp).toBeDefined();
+    expect(studyChainTail(all(), close)).toBe(tp.id);
+    const row = ctx().rows.find((r) => r.configs.some((c) => c.id === tp.id))!;
+    if (row.configs.some((c) => c.id === close)) {
+      // Same row: ONE block holds the price and its study (it used to be two).
+      const blocks = rowBlocks(row.configs).map((b) => b.map((c) => c.id));
+      expect(blocks.find((b) => b.includes(close))).toContain(tp.id);
+    }
+  });
+
   it('studyChainTail walks to the END of the chain, so + Study appends', () => {
     const { actor, ctx, idOf } = start();
     const root = idOf('iv21');

@@ -28,6 +28,7 @@ import {
   isStudyOp,
   type DeriveSpec,
 } from './derive.js';
+import { ADOPTED_STUDIES } from './studyCatalog.js';
 
 const SMA_X: DeriveSpec = { op: 'sma', inputs: ['x'], params: { period: 3 } };
 
@@ -448,6 +449,14 @@ describe('reading a spec back as a tree', () => {
     expect(readPart(chained)?.base).toBe('iv21');
   });
 
+  it('a tunable study with no `period` is a study in a leg too (isStudyOp)', () => {
+    // `percentChange` tunes a lookback, not a `period`: `opHasPeriod` read it as
+    // the leg's metric. It is a study, as `isStudySeries` has always said.
+    const pc: DeriveSpec = { op: 'percentChange', inputs: ['close'] };
+    expect(readPart(pc)?.base).toBe('close');
+    expect(readPart(pc)?.studies.map((s) => s.op)).toEqual(['percentChange']);
+  });
+
   it('a windowless single-input op is the METRIC, not a study', () => {
     // `RV · SMA(20)` is one metric with one study — the same discriminator the
     // config layer uses (a study declares a period).
@@ -813,6 +822,10 @@ describe('fanPick / withFanOutput — the pick at the bottom of a study chain', 
 });
 
 describe('isStudyOp — a study is a study even with nothing to tune', () => {
+  it('every adopted corpus study is a study', () => {
+    for (const d of ADOPTED_STUDIES) expect(isStudyOp(d.name), d.name).toBe(true);
+  });
+
   it('a corpus study with no params is a study; a derived metric is not', () => {
     expect(isStudyOp('priceMomentumOscillator')).toBe(true);
     expect(isStudyOp('obv')).toBe(true);

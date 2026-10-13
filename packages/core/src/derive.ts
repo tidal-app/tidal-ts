@@ -854,14 +854,6 @@ export interface OpParam {
 }
 
 /**
- * An op's numeric params, in declaration order.
- *
- * The registry is the single source of truth for what a study can be tuned by
- * — `sma` has one param, a band has two — so anything that offers those knobs
- * reads them from here. Non-numeric params (none today) are skipped rather
- * than coerced.
- */
-/**
  * Whether an op is a STUDY — something laid on a series and read as such —
  * rather than a derived METRIC (the realized-vol line, a catalog entry).
  *
@@ -876,6 +868,14 @@ export function isStudyOp(op: DeriveOp): boolean {
 }
 const CORPUS_OPS: ReadonlySet<string> = new Set(ADOPTED_STUDIES.map((d) => d.name));
 
+/**
+ * An op's numeric params, in declaration order.
+ *
+ * The registry is the single source of truth for what a study can be tuned by
+ * — `sma` has one param, a band has two — so anything that offers those knobs
+ * reads them from here. Non-numeric params (none today) are skipped rather
+ * than coerced.
+ */
 export function opParams(op: DeriveOp): OpParam[] {
   const def = TIDAL_OPS.describe().find((d) => d.name === op);
   if (!def) return [];

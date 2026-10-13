@@ -11,8 +11,16 @@ All packages release together on one version.
   family (a PMO on the price read "Price"), never nested them under the series
   they study, and gave them a metric's style category. New `isStudyOp` (core):
   an op with params, or any corpus study. A derived metric (`realizedVol`) is
-  still a metric. `readPart`'s pair-leg walk uses the same test, so a PMO in a
-  leg reads as a study there too.
+  still a metric. Every "is this a study?" walk now asks the same question:
+  - the terminal's `rowBlocks` and `studyChainTail` (a Typical Price stays in
+    its price's block, and + Study on its chain appends rather than branching);
+  - `ownsRow` follows: a study laid on one of these opens in that study's row,
+    as on any other study;
+  - `readPart`, the pair-leg walk, moves from `opHasPeriod` to `isStudyOp` —
+    that also reclassifies the 20 TUNABLE corpus studies with no `period`
+    (`macd`, `percentChange`, `kst`, …): a `percentChange(close)` leg now reads
+    as `close` plus a study, so a saved pair's part label can change.
+  - Their lines take the `derived` style category (a study's default weight).
 
 ## 0.12.0 — 2026-10-12
 
