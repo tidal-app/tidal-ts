@@ -4,6 +4,7 @@ import {
   configBand,
   configColumns,
   configOutputs,
+  hasBarOutput,
   dashPattern,
   DOT_PATTERN,
   OUTPUT_DASHES,
@@ -728,6 +729,15 @@ describe('outputLook — the ink each output of a multi-output config draws with
       opacity: 0.5,
     });
     expect(outputLook(styled, 0).color).toBe('blue');
+  });
+
+  it('draws the histogram as bars — or, outputBars: false, as a third line', () => {
+    expect(configOutputs(macd).map((o) => o.mark)).toEqual(['line', 'line', 'bar']);
+    expect(hasBarOutput(macd)).toBe(true);
+    const lines = { ...macd, outputBars: false };
+    expect(configOutputs(lines).map((o) => o.mark)).toEqual(['line', 'line', 'line']);
+    // Nothing drawn as bars, so the rise/fall toggle has nothing to colour.
+    expect(hasBarOutput(lines)).toBe(false);
   });
 
   it("a series' own texture overrides its category, but never a comparison's", () => {

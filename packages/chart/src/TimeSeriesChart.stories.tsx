@@ -255,6 +255,30 @@ export const PerOutputInk: Story = {
   },
 };
 
+/** A MACD with every output a line — `outputBars: false` draws its histogram
+ *  as a third (dotted) line instead of bars. */
+const macdLines = prepareChart({ price: { series: priceSeries as unknown as ChartSeries } }, [
+  {
+    id: 'only',
+    configs: [
+      line('macd', deriveId(macdSpec), 'Price · MACD', '#4f9cd9', {
+        style: 'lines',
+        unit: '',
+        source: 'price',
+        derive: macdSpec,
+        outputBars: false,
+      }),
+    ],
+  },
+]);
+export const MacdAllLines: Story = {
+  args: {
+    rows: [{ id: 'only', height: 380, configs: macdLines.rows[0]!.configs }],
+    sources: macdLines.sources,
+    ohlcSources: [],
+  },
+};
+
 /** One SMA run on a band's two edges (`fan: ['Upper', 'Lower']`) draws a band
  *  of its own: the smoothed edges, washed between, with no centre line — over
  *  the band it smooths, which keeps its own. */

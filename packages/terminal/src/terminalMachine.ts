@@ -2355,6 +2355,7 @@ export function canonRows(rows: readonly RowState[]): string {
           c.lineDash ?? null,
           c.opacity ?? null,
           c.bandMiddle ?? null,
+          c.outputBars ?? null,
           // Per-output ink, key-sorted so two equal maps written in different
           // orders hash alike. A fan is composition: which lines a study draws.
           c.outputStyles

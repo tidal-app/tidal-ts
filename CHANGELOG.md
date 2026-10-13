@@ -2,6 +2,16 @@
 
 All packages release together on one version.
 
+## 0.14.0 — 2026-10-13
+
+A study that draws an output as bars can draw it as a line instead.
+
+- **`SeriesConfig.outputBars`** (chart). `false` draws every output of a `lines`
+  study as a line — a MACD's `Hist` as a third line (the next texture in the
+  ladder) rather than a histogram. `configOutputs` marks every output `line`,
+  so `hasBarOutput` is false and the rise/fall toggle drops away. Omitted ⇒
+  each output takes its op's own mark (`outputMark`). Part of the preset hash.
+
 ## 0.13.0 — 2026-10-13
 
 A data node can draw several of its bar's columns, and a band can draw without
