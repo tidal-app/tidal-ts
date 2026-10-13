@@ -183,6 +183,17 @@ export function useSetStudyOutput(): (id: string, output: string) => void {
   );
 }
 
+/** Which columns of its bar a data node draws (`series.setDataColumns`). Pair
+ *  it with `dataColumnsAllowed`. */
+export function useSetDataColumns(): (id: string, columns: readonly string[]) => void {
+  const ref = TerminalContext.useActorRef();
+  return useCallback(
+    (id: string, columns: readonly string[]) =>
+      ref.send({ type: 'series.setDataColumns', id, columns }),
+    [ref],
+  );
+}
+
 /** Switch which column of its source a study reads (`series.setStudyInput`) —
  *  the data node's output picker. Pair it with `inputAllowed`. */
 export function useSetStudyInput(): (id: string, column: string) => void {

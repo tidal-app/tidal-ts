@@ -813,7 +813,10 @@ function TimeSeriesChartInner({
       // "colour = series" — and whatever the user has set per output on top.
       // A band's one line (its centre) draws under `c.id`, so its look lands
       // there; a stack's lines each get their own key.
-      if ((c.style === 'lines' && c.derive) || c.style === 'band') {
+      if (
+        (c.style === 'lines' && (c.derive || (c.fan && c.fan.length > 0))) ||
+        c.style === 'band'
+      ) {
         configOutputs(c).forEach((out, i) => {
           const look = outputLook(c, i, settings);
           const ink = withAlpha(
@@ -1405,8 +1408,9 @@ function TimeSeriesChartInner({
         // N layers for ONE config — one per declared output, each on its own
         // theme key so the textures above apply. `col` is the SPEC ID, so every
         // column is named off it by suffix; reading `col` itself finds nothing,
-        // exactly as for a band.
-        if (!c.derive) return [];
+        // exactly as for a band. A multi-column DATA node (`fan`, no `derive`)
+        // draws one line per column, named by the column.
+        if (!c.derive && !(c.fan && c.fan.length > 0)) return [];
         const histSplit = effectiveSplit(c, settings);
         const histSeries = (c.source ? histSeriesFor(c.source) : undefined) ?? panelSeries;
         // One per OUTPUT (`configOutputs`): a multi-output op's declared

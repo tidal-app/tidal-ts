@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   isStudySeries,
+  configBand,
   configColumns,
   configOutputs,
   dashPattern,
@@ -760,5 +761,32 @@ describe('isStudySeries', () => {
     const rv = { ...base, column: 'rv', derive: { op: 'realizedVol', inputs: ['ccVar'] } };
     expect(isStudySeries(rv as never)).toBe(false);
     expect(isStudySeries({ ...base, column: 'close' } as never)).toBe(false);
+  });
+});
+
+describe('a multi-column data node, and a band without its middle', () => {
+  const base = {
+    id: 'p',
+    label: 'Price',
+    color: 'blue',
+    axis: 'L',
+    visible: true,
+    value: null,
+  } as const;
+  it('draws one output per column, and a band between its first two', () => {
+    const p = { ...base, style: 'band', column: 'open', fan: ['open', 'close'] } as const;
+    expect(configOutputs(p as never).map((o) => [o.name, o.column])).toEqual([
+      ['open', 'open'],
+      ['close', 'close'],
+    ]);
+    expect(configBand(p as never)).toEqual({ lower: 'open', upper: 'close' });
+    expect(configColumns(p as never).sort()).toEqual(['close', 'open']);
+  });
+  it('bandMiddle: false drops the centre a band would otherwise draw', () => {
+    const band = { op: 'bollinger', inputs: ['close'], params: { period: 20 } } as const;
+    const col = 'p1:bollinger(close;period=20)';
+    const on = { ...base, style: 'band', column: col, derive: band } as const;
+    expect(configBand(on as never).middle).toBeDefined();
+    expect(configBand({ ...on, bandMiddle: false } as never).middle).toBeUndefined();
   });
 });

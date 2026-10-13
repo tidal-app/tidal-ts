@@ -294,3 +294,53 @@ export const FannedBand: Story = {
     ohlcSources: [],
   },
 };
+
+/** A DATA node drawing two of its bar's columns: the price's open and close as
+ *  a band between them (`fan` on a raw config, `style: 'band'`), and as two
+ *  lines. The band's edges cross wherever a bar closes below its open. */
+const openClose = (style: 'band' | 'lines'): SeriesConfig =>
+  line('oc', 'open', 'Price · Open, Close', '#c9a94a', {
+    unit: '',
+    source: 'price',
+    style,
+    fan: ['open', 'close'],
+  });
+export const PriceOpenCloseBand: Story = {
+  args: {
+    rows: [{ id: 'only', height: 380, configs: [openClose('band')] }],
+    sources: { price: priceSeries as unknown as ChartSeries },
+    ohlcSources: [],
+  },
+};
+export const PriceOpenCloseLines: Story = {
+  args: {
+    rows: [{ id: 'only', height: 380, configs: [openClose('lines')] }],
+    sources: { price: priceSeries as unknown as ChartSeries },
+    ohlcSources: [],
+  },
+};
+
+/** A Bollinger drawn as just its band — `bandMiddle: false` drops the centre. */
+const bandOnlySpec: DeriveSpec = { op: 'bollinger', inputs: ['close'], params: { period: 20 } };
+const bandOnly = prepareChart({ price: { series: priceSeries as unknown as ChartSeries } }, [
+  {
+    id: 'only',
+    configs: [
+      line('close', 'close', 'Price', '#c9a94a', { unit: '', source: 'price' }),
+      line('bb', deriveId(bandOnlySpec), 'Price · BOLLINGER(20, 2)', '#4f9cd9', {
+        style: 'band',
+        unit: '',
+        source: 'price',
+        derive: bandOnlySpec,
+        bandMiddle: false,
+      }),
+    ],
+  },
+]);
+export const BandWithoutMiddle: Story = {
+  args: {
+    rows: [{ id: 'only', height: 380, configs: bandOnly.rows[0]!.configs }],
+    sources: bandOnly.sources,
+    ohlcSources: [],
+  },
+};
