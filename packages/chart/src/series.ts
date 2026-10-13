@@ -178,6 +178,7 @@ import {
   deriveId,
   inputNames,
   isPairOp,
+  isStudyOp,
   opOutputs,
   opParams,
   outputMark,
@@ -804,14 +805,12 @@ export const LINE_WIDTHS = [0.5, 1, 1.5, 2] as const;
 /** The dash pattern a `'dashed'` category draws with (also the compare texture). */
 export const DASH_PATTERN: readonly [number, number] = [6, 4];
 
-/** Whether a series is a windowed **study** (an SMA/EMA overlay — the "Derived"
- *  style category). A pointwise derived metric (the realized-vol line) and every
- *  raw column read as **metrics**. */
+/** Whether a series is a **study** (an SMA overlay, an oscillator — the
+ *  "Derived" style category). A derived metric (the realized-vol line) and
+ *  every raw column read as **metrics**. Asked of the op ({@link isStudyOp}),
+ *  so a study with nothing to tune is still a study. */
 export function isStudySeries(s: SeriesConfig): boolean {
-  // Asked of the REGISTRY, not of `params.period`: a period-shaped test answers
-  // "is this windowed?", which was the same question only while every tunable
-  // op had exactly one param with that name (PR #181 review, MEDIUM).
-  return s.derive ? opParams(s.derive.op).length > 0 : false;
+  return s.derive ? isStudyOp(s.derive.op) : false;
 }
 
 /** True if a series reads the COMPARISON symbol — a spec whose leaves are

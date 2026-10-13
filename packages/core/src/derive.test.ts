@@ -25,6 +25,7 @@ import {
   withStudyOutput,
   studyColumn,
   withStudyColumn,
+  isStudyOp,
   type DeriveSpec,
 } from './derive.js';
 
@@ -808,5 +809,14 @@ describe('fanPick / withFanOutput — the pick at the bottom of a study chain', 
     // A spec reading no multi-output source comes back as it was.
     const plain = { op: 'sma', inputs: ['close'], params: { period: 5 } };
     expect(withFanOutput(plain, 'Lower')).toBe(plain);
+  });
+});
+
+describe('isStudyOp — a study is a study even with nothing to tune', () => {
+  it('a corpus study with no params is a study; a derived metric is not', () => {
+    expect(isStudyOp('priceMomentumOscillator')).toBe(true);
+    expect(isStudyOp('obv')).toBe(true);
+    expect(isStudyOp('sma')).toBe(true);
+    expect(isStudyOp('realizedVol')).toBe(false);
   });
 });

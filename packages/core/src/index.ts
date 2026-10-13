@@ -65,6 +65,7 @@ export {
   TIDAL_OPS,
   BAND_OUTPUTS,
   opParams,
+  isStudyOp,
   studyTag,
   opIsBand,
   opInputs,

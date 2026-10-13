@@ -2,6 +2,18 @@
 
 All packages release together on one version.
 
+## 0.12.1 — 2026-10-13
+
+- **A study with nothing to tune is still a study** (core, chart). `isStudySeries`
+  asked "does the op declare params?", so the twelve parameterless corpus
+  studies — a Price Momentum Oscillator, OBV, Accumulation/Distribution,
+  Typical Price, Special K, … — read as metrics: a host named them after their
+  family (a PMO on the price read "Price"), never nested them under the series
+  they study, and gave them a metric's style category. New `isStudyOp` (core):
+  an op with params, or any corpus study. A derived metric (`realizedVol`) is
+  still a metric. `readPart`'s pair-leg walk uses the same test, so a PMO in a
+  leg reads as a study there too.
+
 ## 0.12.0 — 2026-10-12
 
 A study can be switched to read another column of its source, and stays under
