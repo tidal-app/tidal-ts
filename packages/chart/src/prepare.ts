@@ -220,7 +220,7 @@ export function sourceFacts(sources: Record<string, ChartSeries>): SourceFacts {
  *  because one op's fold either produces all its outputs or none. */
 export function carries(
   facts: SourceFacts,
-  c: Pick<SeriesConfig, 'source' | 'column' | 'style' | 'derive'>,
+  c: Pick<SeriesConfig, 'source' | 'column' | 'style' | 'derive' | 'fan' | 'bandMiddle'>,
 ): boolean {
   const cols = c.source ? facts.columns[c.source] : undefined;
   if (!cols) return false;

@@ -901,7 +901,7 @@ function studyConfig(
     // group landed on the row's shared axis instead, a line near zero drawn on
     // the price's scale.
     ...(shares ? (target.axisGroup ? { axisGroup: target.axisGroup } : {}) : { axisGroup: id }),
-    label: `${target.label}${segment ? ` · ${segment}` : ''} · ${studyTag(derive)}`, // legend chip
+    label: `${studyBaseLabel(target, derive)}${segment ? ` · ${segment}` : ''} · ${studyTag(derive)}`, // legend chip
     family: target.family ?? target.label, // main line = the source's name
     tenor: target.tenor, // carry the source's tenor into the params sub-line
     // A study is the same reading, smoothed — so it takes its metric's COLOUR
@@ -1464,7 +1464,7 @@ export function inputAllowed(scope: EditScope, id: string, column: string): bool
     const next = propagateRespec(
       configs,
       id,
-      respecInput(target, column, home.column),
+      respecInput(target, column, barHome(home)),
       unitOfColumn(scope),
     );
     if (next === null || !unitsStayCoherent(scope.rows, next)) return false;
@@ -1494,12 +1494,39 @@ export function dataColumnsAllowed(
     if (!BAR_PRICE_COLUMNS.includes(node.column)) return false;
     if (columns.length === 0 || new Set(columns).size !== columns.length) return false;
     if (!columns.every((c) => BAR_PRICE_COLUMNS.includes(c))) return false;
+    // In the bar's own order, so `['close', 'open']` is the same as
+    // `['open', 'close']` and not a change that swaps the band's edges.
     const now = node.fan && node.fan.length > 0 ? node.fan : [node.column];
-    return !(now.length === columns.length && now.every((c, i) => c === columns[i]));
+    const next = barOrder(columns);
+    return !(now.length === next.length && now.every((c, i) => c === next[i]));
   } catch {
     return false;
   }
 }
+
+/**
+ * A config patched, kept drawable (PR #35 review): a DATA node's `fan` means
+ * something only as `lines` or a `band`, so a patch to another style drops it
+ * (the node keeps its first column); a `band` needs a band to draw, so a
+ * one-column data node keeps its style. `parentIds` is the graph, not a
+ * presentation field: a patch may not rewrite which config a study is on.
+ */
+function coherentPatch(c: SeriesConfig, patch: Partial<SeriesConfig>): SeriesConfig {
+  const next: SeriesConfig = { ...c, ...patch, parentIds: c.parentIds };
+  if (next.derive) return next;
+  const fanned = !!next.fan && next.fan.length > 0;
+  if (fanned && next.style !== 'lines' && next.style !== 'band') {
+    const { fan: _fan, ...rest } = next;
+    return rest;
+  }
+  if (!fanned && next.style === 'band')
+    return { ...next, style: c.style === 'band' ? 'line' : c.style };
+  return next;
+}
+
+/** Bar price columns in the bar's own order. */
+const barOrder = (columns: readonly string[]): string[] =>
+  [...columns].sort((a, b) => BAR_PRICE_COLUMNS.indexOf(a) - BAR_PRICE_COLUMNS.indexOf(b));
 
 /**
  * A data node drawing `columns`: the first is its `column`, more than one its
@@ -1507,17 +1534,22 @@ export function dataColumnsAllowed(
  * unless two are a `band`; one draws as it did, or as a `line` if it was drawing
  * several. The label names the columns off the close (`Price · Open, Close`).
  */
-function dataColumnsConfig(node: SeriesConfig, columns: readonly string[]): SeriesConfig {
+function dataColumnsConfig(node: SeriesConfig, wanted: readonly string[]): SeriesConfig {
+  const columns = barOrder(wanted);
   const many = columns.length > 1;
+  // A candle draws the whole bar whatever `column` says, so drawn from one
+  // other column it becomes that column's line — or the change shows nothing.
   const style: SeriesStyle = many
     ? node.style === 'band' && columns.length === 2
       ? 'band'
       : 'lines'
     : node.style === 'band' || node.style === 'lines'
       ? 'line'
-      : node.style;
+      : node.style === 'candle' && columns[0] !== 'close'
+        ? 'line'
+        : node.style;
   const label = typeof node.label === 'string' ? node.label : '';
-  const base = label.replace(/ · (Open|High|Low|Close)(, (Open|High|Low|Close))*$/, '');
+  const base = label.replace(BAR_SEGMENT, '');
   const named = columns.length === 1 && columns[0] === 'close';
   const { fan: _fan, ...rest } = node;
   return {
@@ -1527,6 +1559,29 @@ function dataColumnsConfig(node: SeriesConfig, columns: readonly string[]): Seri
     style,
     label: named ? base : `${base} · ${columns.map(columnSegment).join(', ')}`,
   };
+}
+
+/** The column a bar data node's label is named off — its close; a study of
+ *  any other of its columns names that column (`Price · High · SMA(20)`). A
+ *  non-bar node's own column. */
+const barHome = (node: Pick<SeriesConfig, 'column'>): string =>
+  BAR_PRICE_COLUMNS.includes(node.column) ? 'close' : node.column;
+
+/** A label with its bar-column segment (`· Low`, `· Open, Close`) removed. */
+const BAR_SEGMENT = / · (Open|High|Low|Close)(, (Open|High|Low|Close))*$/;
+
+/**
+ * What a new study's label starts with: its target's label — except on a bar
+ * data node, whose label names the columns IT draws: the study names the column
+ * IT reads, off the close (a study added on `Price · Open, Close` reading the
+ * open is `Price · Open · SMA(20)`, not `Price · Open, Close · SMA(20)`).
+ */
+function studyBaseLabel(target: SeriesConfig, derive: DeriveSpec): string {
+  const label = typeof target.label === 'string' ? target.label : '';
+  if (target.derive || !BAR_PRICE_COLUMNS.includes(target.column)) return label;
+  const read = studyColumn(derive)?.column;
+  const base = label.replace(BAR_SEGMENT, '');
+  return read && read !== 'close' ? `${base} · ${columnSegment(read)}` : base;
 }
 
 /** The seated DATA node a study reads its raw column off — a node with no
@@ -1556,7 +1611,8 @@ export function studyOutputChoices(scope: EditScope, id: string): string[] {
 
 /** The outputs a study runs on now: its fan, else the one its chain picks. */
 export function studyOutputsRead(study: Pick<SeriesConfig, 'derive' | 'fan'>): string[] {
-  if (study.fan && study.fan.length > 0) return [...study.fan];
+  // A DATA node's fan is columns, not outputs of a source.
+  if (study.derive && study.fan && study.fan.length > 0) return [...study.fan];
   const pick = study.derive ? fanPick(study.derive) : undefined;
   return pick ? [pick.output] : [];
 }
@@ -2298,6 +2354,7 @@ export function canonRows(rows: readonly RowState[]): string {
           c.group ? [groupSlot(c.group.id), c.group.side, c.group.hidden ?? false] : null,
           c.lineDash ?? null,
           c.opacity ?? null,
+          c.bandMiddle ?? null,
           // Per-output ink, key-sorted so two equal maps written in different
           // orders hash alike. A fan is composition: which lines a study draws.
           c.outputStyles
@@ -2697,7 +2754,11 @@ export const terminalMachine = setup({
         const home = target && dataParent(configs, target);
         const at = target?.derive && studyColumn(target.derive);
         if (!target || !home || !at) return context.rows;
-        const rows = applyRespec(context, event.id, respecInput(target, event.column, home.column));
+        const rows = applyRespec(
+          context,
+          event.id,
+          respecInput(target, event.column, barHome(home)),
+        );
         if (rows === context.rows) return rows; // refused: never half-apply
         // Off its home column the study finds its data node only through
         // `parentIds`. A study that already records one keeps it; one saved
@@ -2730,12 +2791,15 @@ export const terminalMachine = setup({
         // the column is about to move, so record it first — where the match
         // is unambiguous (one seated node draws that column).
         const sameColumn = configs.filter(
-          (c) => !c.derive && c.source === node.source && c.column === node.column,
+          (c) =>
+            !c.derive &&
+            c.source === node.source &&
+            (c.column === node.column || !!c.fan?.includes(node.column)),
         );
         const orphans = new Map<string, number>();
         if (sameColumn.length === 1)
           for (const c of configs) {
-            if (!c.derive) continue;
+            if (!c.derive || c.source !== node.source) continue;
             const i = inputNames(c.derive).findIndex(
               (n, k) => n === node.column && typeof c.derive!.inputs[k] === 'string',
             );
@@ -3025,7 +3089,7 @@ export const terminalMachine = setup({
             // may not rewrite which config a study is on (an untyped host
             // could still send one).
             c.id === event.id
-              ? { ...c, ...event.patch, parentIds: c.parentIds }
+              ? coherentPatch(c, event.patch)
               : follow.has(c.id)
                 ? { ...c, color: color! }
                 : c,

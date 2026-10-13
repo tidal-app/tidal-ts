@@ -25,6 +25,15 @@ its middle.
 - **`SeriesConfig.bandMiddle`** (chart). `false` draws a band's wash without its
   centre line — a Bollinger as just its band. `configBand` (and with it
   `configColumns`) leaves the middle out.
+- Studies of a bar data node are labelled for the column THEY read, off the
+  close (`Price · High · SMA(20)`), whatever the node draws: a study added on
+  `Price · Open, Close` reading the open is `Price · Open · SMA(20)`.
+- `series.patch` keeps a data node drawable: away from `lines`/`band` it drops
+  the node's `fan`; a one-column node is not made a `band`. A candle drawn from
+  one other column becomes that column's line. Columns are kept in the bar's
+  order. `bandMiddle` is preset identity (`canonRows`).
+- A multi-column node's resting value is its first column (`lines`) or its
+  upper edge (`band`); with `bandMiddle: false` a Bollinger's is its upper edge.
 - A study added on a multi-column data node reads its `column`; it is not
   fanned over the node's columns (`studyOutputsOf` / `defaultStudyOutputs` are
   a study's fan only).
