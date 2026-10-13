@@ -42,6 +42,19 @@ export function hasBarOutput(
 }
 
 /**
+ * Whether {@link SeriesConfig.outputBars} means anything for a config: a
+ * `lines` study whose op draws an output as bars (a MACD), however it is drawn
+ * now. {@link hasBarOutput} answers "does it draw bars?", which turns false
+ * the moment the bars become lines — a host gating its bars/lines control on
+ * that would hide the control with no way back.
+ */
+export function offersOutputBars(
+  c: Pick<SeriesConfig, 'style' | 'derive' | 'column' | 'fan'>,
+): boolean {
+  return hasBarOutput({ ...c, outputBars: undefined });
+}
+
+/**
  * The per-output theme key for a `lines` config.
  *
  * One colour, N textures — a study's outputs are ONE series (a MACD is one
@@ -392,7 +405,9 @@ export interface SeriesConfig {
   /**
    * Whether a `lines` study draws the outputs its op draws as BARS (a MACD's
    * `Hist`) as bars. `false` draws every output as a line; omitted ⇒ each
-   * output takes its op's own mark (`outputMark`).
+   * output takes its op's own mark (`outputMark`). Only a `lines` study reads
+   * it ({@link offersOutputBars}): a single-output histogram (an Awesome
+   * Oscillator) is `style: 'bar'`, and becomes a line by its `style`.
    */
   outputBars?: boolean;
 }

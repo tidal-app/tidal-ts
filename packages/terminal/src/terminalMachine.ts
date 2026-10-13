@@ -83,6 +83,7 @@ import {
   readsFrom,
   sourcesOf,
   fanIsBand,
+  offersOutputBars,
   publishedColumns,
 } from '@tidal-ts/chart';
 import {
@@ -2355,7 +2356,9 @@ export function canonRows(rows: readonly RowState[]): string {
           c.lineDash ?? null,
           c.opacity ?? null,
           c.bandMiddle ?? null,
-          c.outputBars ?? null,
+          // Identity only where it draws something different: `true` is the
+          // default, and `false` on a study with no bars changes nothing.
+          c.outputBars === false && offersOutputBars(c) ? false : null,
           // Per-output ink, key-sorted so two equal maps written in different
           // orders hash alike. A fan is composition: which lines a study draws.
           c.outputStyles
