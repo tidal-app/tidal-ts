@@ -164,4 +164,18 @@ describe('a close is drawn at its bar’s end by the layer, not by a copy', () =
     expect(key(moved, 0)).toBe(key(src, 0) + MIN);
     expect(key(moved, src.length - 1)).toBe(key(src, src.length - 1) + MIN);
   });
+
+  it('a MACD with outputBars: false draws its histogram as a third line, not bars', () => {
+    const src = render(
+      { ...study('lines', { op: 'macd', inputs: ['close'] }), outputBars: false },
+      intraday(),
+    );
+    expect(layers('BarChart')).toHaveLength(0);
+    const lines = layers('LineChart');
+    expect(lines).toHaveLength(3);
+    for (const l of lines) {
+      expect(l.series).toBe(src);
+      expect(l.xOffset).toBe(MIN);
+    }
+  });
 });

@@ -35,10 +35,23 @@ export function bandColumns(column: string): { middle: string; upper: string; lo
  * nothing.
  */
 export function hasBarOutput(
-  c: Pick<SeriesConfig, 'style' | 'derive' | 'column' | 'fan'>,
+  c: Pick<SeriesConfig, 'style' | 'derive' | 'column' | 'fan' | 'outputBars'>,
 ): boolean {
   if (c.style !== 'lines' || !c.derive) return false;
   return configOutputs(c).some((o) => o.mark === 'bar');
+}
+
+/**
+ * Whether {@link SeriesConfig.outputBars} means anything for a config: a
+ * `lines` study whose op draws an output as bars (a MACD), however it is drawn
+ * now. {@link hasBarOutput} answers "does it draw bars?", which turns false
+ * the moment the bars become lines — a host gating its bars/lines control on
+ * that would hide the control with no way back.
+ */
+export function offersOutputBars(
+  c: Pick<SeriesConfig, 'style' | 'derive' | 'column' | 'fan'>,
+): boolean {
+  return hasBarOutput({ ...c, outputBars: undefined });
 }
 
 /**
@@ -79,11 +92,16 @@ export interface ConfigOutput {
  * A config whose `derive` is gone degrades to its bare column rather than
  * throwing (a persisted config can outlive the op that named it).
  */
-export function configOutputs(c: Pick<SeriesConfig, 'column' | 'derive' | 'fan'>): ConfigOutput[] {
+export function configOutputs(
+  c: Pick<SeriesConfig, 'column' | 'derive' | 'fan'> & { outputBars?: boolean },
+): ConfigOutput[] {
+  // `outputBars: false` draws an op's bar outputs as lines.
+  const markOf = (op: string, name: string) =>
+    c.outputBars === false ? 'line' : outputMark(op, name);
   if (!c.derive && c.fan && c.fan.length > 0)
     return c.fan.map((column) => ({ name: column, column, mark: 'line' }));
   if (c.derive && c.fan && c.fan.length > 0) {
-    const mark = outputMark(c.derive.op, '');
+    const mark = markOf(c.derive.op, '');
     const derive = c.derive;
     return c.fan.map((name) => ({ name, column: deriveId(withFanOutput(derive, name)), mark }));
   }
@@ -94,7 +112,7 @@ export function configOutputs(c: Pick<SeriesConfig, 'column' | 'derive' | 'fan'>
       return outs.map((name) => ({
         name,
         column: `${c.column}${name}`,
-        mark: outputMark(op, name),
+        mark: markOf(op, name),
       }));
   }
   return [{ name: '', column: c.column, mark: 'line' }];
@@ -384,6 +402,14 @@ export interface SeriesConfig {
    * has one.
    */
   bandMiddle?: boolean;
+  /**
+   * Whether a `lines` study draws the outputs its op draws as BARS (a MACD's
+   * `Hist`) as bars. `false` draws every output as a line; omitted ⇒ each
+   * output takes its op's own mark (`outputMark`). Only a `lines` study reads
+   * it ({@link offersOutputBars}): a single-output histogram (an Awesome
+   * Oscillator) is `style: 'bar'`, and becomes a line by its `style`.
+   */
+  outputBars?: boolean;
 }
 
 /** The textures in display order. */

@@ -2507,6 +2507,25 @@ describe("a data node draws one or several of its bar's columns (series.setDataC
     expect(canonRows(ctx().rows)).not.toBe(before);
   });
 
+  it('outputBars: false is preset identity only where it draws differently', () => {
+    const { actor, ctx, idOf } = start();
+    actor.send({ type: 'series.addStudy', targetId: idOf('close'), op: 'macd', period: 20 });
+    const macd = all(ctx).find((c) => c.derive?.op === 'macd')!;
+    const before = canonRows(ctx().rows);
+    // `true` is the default: the same preset.
+    actor.send({ type: 'series.patch', id: macd.id, patch: { outputBars: true } });
+    expect(canonRows(ctx().rows)).toBe(before);
+    actor.send({ type: 'series.patch', id: macd.id, patch: { outputBars: false } });
+    const lines = canonRows(ctx().rows);
+    expect(lines).not.toBe(before);
+    // A study with no bars draws the same either way.
+    actor.send({ type: 'series.addStudy', targetId: idOf('close'), op: 'stochastic', period: 20 });
+    const sto = all(ctx).find((c) => c.derive?.op === 'stochastic')!;
+    const withSto = canonRows(ctx().rows);
+    actor.send({ type: 'series.patch', id: sto.id, patch: { outputBars: false } });
+    expect(canonRows(ctx().rows)).toBe(withSto);
+  });
+
   it('records a parent only on its own source', () => {
     const rows = initialRows();
     rows[1]!.configs.push(

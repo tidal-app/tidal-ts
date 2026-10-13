@@ -59,6 +59,7 @@ export {
   type OutputLook,
   type OutputStyle,
   hasBarOutput,
+  offersOutputBars,
   logAllowed,
   AXIS_PRECISIONS,
   type PairJoinOp,

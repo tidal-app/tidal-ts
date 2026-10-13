@@ -746,8 +746,13 @@ function TimeSeriesChartInner({
       .map((c) => {
         const sp = effectiveSplit(c, settings);
         // The per-output ink, texture and opacity too — and the FAN, whose
-        // outputs are what the per-output keys are named after.
-        return `${c.id}:${c.color}:${sp.mode}:${sp.rise}:${sp.fall}:${c.style}:${seriesLineWidth(c, settings)}:${c.lineDash ?? ''}:${c.opacity ?? ''}:${c.fan?.join(',') ?? ''}:${c.outputStyles ? JSON.stringify(c.outputStyles) : ''}`;
+        // outputs are what the per-output keys are named after, and each
+        // output's MARK, which says whether its ink is a line's or a bar's
+        // (`outputBars` moves a MACD's Hist from one to the other).
+        const marks = configOutputs(c)
+          .map((o) => o.mark[0])
+          .join('');
+        return `${c.id}:${c.color}:${sp.mode}:${sp.rise}:${sp.fall}:${c.style}:${seriesLineWidth(c, settings)}:${c.lineDash ?? ''}:${c.opacity ?? ''}:${c.fan?.join(',') ?? ''}:${marks}:${c.outputStyles ? JSON.stringify(c.outputStyles) : ''}`;
       })
       .join('|') +
     '#' +
