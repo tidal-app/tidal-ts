@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  isStudySeries,
   configColumns,
   configOutputs,
   dashPattern,
@@ -734,5 +735,30 @@ describe('outputLook — the ink each output of a multi-output config draws with
     expect(seriesLineDashArray({ ...line, column: 'cmp_close' })).toEqual(
       dashPattern(DEFAULT_CHART_SETTINGS.comparisons.dash),
     );
+  });
+});
+
+describe('isStudySeries', () => {
+  const base = {
+    id: 's',
+    label: 'Price',
+    color: 'blue',
+    axis: 'L',
+    style: 'line',
+    visible: true,
+    value: null,
+  } as const;
+  it('a parameterless corpus study (a PMO) is a study, so it is named and nested as one', () => {
+    const pmo = {
+      ...base,
+      column: 'pmo',
+      derive: { op: 'priceMomentumOscillator', inputs: ['close'] },
+    };
+    expect(isStudySeries(pmo as never)).toBe(true);
+  });
+  it('a derived metric and a raw column are not', () => {
+    const rv = { ...base, column: 'rv', derive: { op: 'realizedVol', inputs: ['ccVar'] } };
+    expect(isStudySeries(rv as never)).toBe(false);
+    expect(isStudySeries({ ...base, column: 'close' } as never)).toBe(false);
   });
 });

@@ -625,10 +625,9 @@ function unCompare(input: DeriveInput): DeriveInput {
  * Such a leg has no single metric to name, so the panel degrades to rendering
  * it flat rather than inventing a decomposition.
  *
- * "Study" here means a WINDOWED op ({@link opHasPeriod}) — the same
- * discriminator the config layer uses (`isStudySeries`). A single-input op with
- * no period (`realizedVol`) is a derived METRIC and terminates the walk, so
- * `RV · SMA(20)` reads as one metric with one study rather than two studies.
+ * "Study" here is {@link isStudyOp} — the same discriminator the config layer
+ * uses (`isStudySeries`). A derived METRIC (`realizedVol`) terminates the walk,
+ * so `RV · SMA(20)` reads as one metric with one study rather than two studies.
  */
 export function readPart(input: DeriveInput): PairPart | null {
   const studies: PartStudy[] = [];
@@ -642,7 +641,7 @@ export function readPart(input: DeriveInput): PairPart | null {
     // multi-output study can be picked from, and a MACD's knobs are
     // `fastPeriod`/`slowPeriod`/`signalPeriod`. Requiring `period` left a pair
     // over an SMA of a MACD's Line rendering flat (tidal #210 review).
-    if (!isSpecLike(node) || (!picked && !opHasPeriod(node.op))) {
+    if (!isSpecLike(node) || (!picked && !isStudyOp(node.op))) {
       if (picked) return null; // a pick of garbage: refuse, as below
       break;
     }
@@ -853,6 +852,21 @@ export interface OpParam {
   /** The useful range a control should be drawn on, when narrower than legal. */
   suggest?: readonly [number, number];
 }
+
+/**
+ * Whether an op is a STUDY — something laid on a series and read as such —
+ * rather than a derived METRIC (the realized-vol line, a catalog entry).
+ *
+ * A corpus study is a study even with nothing to tune. "Has it params?" was the
+ * test, and it read the twelve parameterless corpus studies (a Price Momentum
+ * Oscillator, an OBV, Typical Price…) as metrics: named after their family
+ * ("Price"), never nested under the series they study, and offered nothing in
+ * their properties but "Nothing to set on Price" (Peter, 2026-10-13).
+ */
+export function isStudyOp(op: DeriveOp): boolean {
+  return opParams(op).length > 0 || CORPUS_OPS.has(op);
+}
+const CORPUS_OPS: ReadonlySet<string> = new Set(ADOPTED_STUDIES.map((d) => d.name));
 
 /**
  * An op's numeric params, in declaration order.

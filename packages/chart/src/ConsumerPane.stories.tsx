@@ -76,7 +76,8 @@ import type { ChartSeries, SeriesConfig, TimeSeriesChartRow } from './index.js';
  *
  * A `SeriesConfig` has no texture field. `seriesCategoryStyle` answers for one:
  * `comparisons` when the spec reads the compare symbol, else `derived` when it
- * is WINDOWED (`isStudySeries` — an op with params), else `metrics`; each
+ * is a STUDY (`isStudySeries` — `isStudyOp`: an op with params or a corpus
+ * study), else `metrics`; each
  * category is solid-or-dashed from a single `DASH_PATTERN`. Both relatives here
  * are pointwise (`ratio`/`diff` declare no params), so they land in `metrics`
  * and draw exactly like a raw column. Dashing that category would dash every

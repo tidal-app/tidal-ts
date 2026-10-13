@@ -27,6 +27,7 @@ import {
   withStudyOutput,
   studyColumn,
   withStudyColumn,
+  isStudyOp,
   BAR_PRICE_COLUMNS,
   fanPick,
   primaryOutput,
@@ -617,11 +618,11 @@ function placeOnRow(
 export function rowBlocks(configs: readonly SeriesConfig[]): SeriesConfig[][] {
   const parentOf = new Map<string, string>();
   for (const c of configs) {
-    // Only a tunable STUDY attaches to a parent; a derived catalog metric and a
-    // pair stand alone (the same rule `layeredOn` travels by). Asked of the
-    // registry — a period-shaped test was the same question only while every
-    // tunable op had one param called `period` (PR #181 review, MEDIUM).
-    if (!c.derive || opParams(c.derive.op).length === 0) continue;
+    // Only a STUDY attaches to a parent (`isStudyOp` — the test `isStudySeries`
+    // uses, so the panel's parenting and these blocks agree); a derived catalog
+    // metric and a pair stand alone. "Has params?" left a parameterless study
+    // (a Typical Price) out of its chain (tidal-ts#34 review, HIGH).
+    if (!c.derive || !isStudyOp(c.derive.op)) continue;
     const parent = sourcesOf(configs, c)[0];
     if (parent) parentOf.set(c.id, parent.id);
   }
@@ -685,7 +686,7 @@ export function studyChainTail(configs: readonly SeriesConfig[], rootId: string)
         c.id !== cur!.id &&
         !seen.has(c.id) &&
         !!c.derive &&
-        opParams(c.derive.op).length > 0 &&
+        isStudyOp(c.derive.op) &&
         readsFrom(configs, c, cur!),
     );
     if (!next) return cur.id;
