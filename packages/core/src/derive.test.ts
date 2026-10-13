@@ -252,8 +252,9 @@ describe('applyDerived', () => {
     const outer: DeriveSpec = { op: 'ema', inputs: [inner], params: { period: 2 } };
     const { nodes } = applyDerivedReport(s, [outer]);
     const byId = new Map(nodes.map((n) => [n.id, n]));
-    // Ids are `deriveId`'s, so a host keys them on the same string as its
-    // configs and columns — and the nested step is reported too.
+    // Ids are `deriveId`'s, so a host keys them on `deriveId(config.derive)`
+    // (not on a column: a multi-output step's columns are `<id><Output>`) —
+    // and the nested step is reported too.
     expect(byId.get(deriveId(inner))).toMatchObject({ pulled: true, inputs: ['x'] });
     expect(byId.get(deriveId(outer))).toMatchObject({
       pulled: true,

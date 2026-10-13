@@ -173,7 +173,8 @@ export function foldSources(
 
 /** What a fold did to one source — {@link foldSourcesReport}. */
 export interface SourceFoldReport {
-  /** Rows in the folded series. */
+  /** Rows in the series as the chart gets it: for a held source (`hold`),
+   *  the grid's length, not the source's own. */
   rows: number;
   /** The specs the engine could not run, once each (`applyDerivedReport`). */
   skipped: DeriveSkip[];

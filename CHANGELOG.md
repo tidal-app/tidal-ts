@@ -10,10 +10,13 @@ A fold says what it did: per step, what it cost and whether it was served warm.
   (`@pond-ts/process`'s `RunResult.nodes`) passed through as
   `DeriveNodeTiming`: the step's id (the same string as `deriveId`), whether
   this fold pulled it, whether it was served from cache, its cost in ms, and
-  its upstream ids. Under today's cold bind per fold `cached` is always
-  false; the warm long-lived graph is where it starts saying `true`.
+  its upstream ids. Under today's cold bind per fold `pulled` is always true
+  and `cached` always false; the warm long-lived graph is where `cached`
+  starts saying `true`. A spec that fails before it compiles is in `skipped`
+  only, not in `nodes`. A picked input is its source step's id, without the
+  output it read. `ms` is wall-clock: `series` and `skipped` stay pure.
 - **`foldSourcesReport`** (chart). `foldSources` with the report: per source,
-  the folded row count, the specs the engine skipped, each step's timing, and
+  the row count the chart gets (after a hold, the grid's), the specs the engine skipped, each step's timing, and
   the whole fold's cost (join and hold included). `foldSources` is it without
   the report. Type: `SourceFoldReport`.
 
