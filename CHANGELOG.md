@@ -2,6 +2,34 @@
 
 All packages release together on one version.
 
+## 0.13.0 — 2026-10-13
+
+A data node can draw several of its bar's columns, and a band can draw without
+its middle.
+
+- **A multi-column data node** (chart). `SeriesConfig.fan` on a DATA node (no
+  `derive`) names the columns of its source it draws — a price's `open` and
+  `close` — with `column` the first. `configOutputs` gives one output per
+  column (named by it); `style: 'lines'` draws one line per column (one colour,
+  the output texture ladder) and `style: 'band'` fills between the first two.
+  `publishedColumns` includes them, so a study of any of those columns is built
+  on the node.
+- **`series.setDataColumns`** (terminal). Which of its bar's price columns a
+  data node draws — one (the price drawn from the low) or several. Guard
+  `dataColumnsAllowed`: a seated data node drawing a bar price column, onto
+  distinct bar price columns, as a change. The style follows: several draw as
+  `lines` unless two were a `band`; back to one, a `line`. The label names the
+  columns off the close (`Price · Open, Close`; `Price` on the close alone). A
+  study found on the node only by its column records the node first, so the
+  move cannot orphan it. Hook: `useSetDataColumns`.
+- **`SeriesConfig.bandMiddle`** (chart). `false` draws a band's wash without its
+  centre line — a Bollinger as just its band. `configBand` (and with it
+  `configColumns`) leaves the middle out.
+- A study added on a multi-column data node reads its `column`; it is not
+  fanned over the node's columns (`studyOutputsOf` / `defaultStudyOutputs` are
+  a study's fan only).
+- Stories: `PriceOpenCloseBand`, `PriceOpenCloseLines`, `BandWithoutMiddle`.
+
 ## 0.12.1 — 2026-10-13
 
 - **A study with nothing to tune is still a study** (core, chart). `isStudySeries`

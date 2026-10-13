@@ -67,8 +67,10 @@ export interface ConfigOutput {
  * The outputs a config draws, in order — the one answer to "what lines does
  * this config put on the canvas, and what is each called?".
  *
- * Three shapes:
+ * Four shapes:
  *
+ * - **A multi-column data node** ({@link SeriesConfig.fan} on a raw config):
+ *   one output per column of its source it draws, named by the column.
  * - **A fanned study** ({@link SeriesConfig.fan}): one output per source output
  *   it runs on, each its own spec (`withFanOutput`) and so its own column.
  * - **A multi-output op**: one per declared suffix, named off the spec id.
@@ -78,6 +80,8 @@ export interface ConfigOutput {
  * throwing (a persisted config can outlive the op that named it).
  */
 export function configOutputs(c: Pick<SeriesConfig, 'column' | 'derive' | 'fan'>): ConfigOutput[] {
+  if (!c.derive && c.fan && c.fan.length > 0)
+    return c.fan.map((column) => ({ name: column, column, mark: 'line' }));
   if (c.derive && c.fan && c.fan.length > 0) {
     const mark = outputMark(c.derive.op, '');
     const derive = c.derive;
@@ -99,13 +103,29 @@ export function configOutputs(c: Pick<SeriesConfig, 'column' | 'derive' | 'fan'>
 /**
  * The columns a `band` config draws between (and its centre line, when it has
  * one). A fanned band — an SMA of a band's `Upper` and `Lower` — may have no
- * centre at all; an op's own band always does (`bandColumns`).
+ * centre at all; an op's own band always does (`bandColumns`) unless it is told
+ * not to draw it (`bandMiddle: false`). A multi-column data node's band runs
+ * between its first two columns, with no centre.
  */
-export function configBand(c: Pick<SeriesConfig, 'column' | 'derive' | 'fan'>): {
+export function configBand(
+  c: Pick<SeriesConfig, 'column' | 'derive' | 'fan'> & { bandMiddle?: boolean },
+): {
   middle?: string;
   upper: string;
   lower: string;
 } {
+  const b = bandOf(c);
+  if (c.bandMiddle === false && b.middle) return { upper: b.upper, lower: b.lower };
+  return b;
+}
+
+function bandOf(c: Pick<SeriesConfig, 'column' | 'derive' | 'fan'>): {
+  middle?: string;
+  upper: string;
+  lower: string;
+} {
+  if (!c.derive && c.fan && c.fan.length > 0)
+    return { lower: c.fan[0]!, upper: c.fan[1] ?? c.fan[0]! };
   if (c.derive && c.fan && c.fan.length > 0) {
     const by = new Map(configOutputs(c).map((o) => [o.name, o.column]));
     const middle = by.get('Middle');
@@ -157,6 +177,7 @@ export function configColumns(c: {
   style: SeriesStyle;
   derive?: DeriveSpec;
   fan?: readonly string[];
+  bandMiddle?: boolean;
 }): string[] {
   if (c.style === 'band') {
     const b = configBand(c);
@@ -351,8 +372,18 @@ export interface SeriesConfig {
    * spec is the same chain with the bottom pick swapped (`withFanOutput`), so a
    * retune moves every line together. Absent ⇒ the one output `derive` picks.
    * A fan over a band's two edges draws as a `band`; anything else as `lines`.
+   *
+   * On a DATA node (no `derive`) it is the columns of its source it draws —
+   * a price's `open` and `close` — `column` being the first: two may draw as a
+   * `band` between them, any number as `lines`.
    */
   fan?: readonly string[];
+  /**
+   * Whether a `band` draws its centre line. `false` draws the wash alone (a
+   * Bollinger as just its band); omitted ⇒ the centre is drawn when the band
+   * has one.
+   */
+  bandMiddle?: boolean;
 }
 
 /** The textures in display order. */

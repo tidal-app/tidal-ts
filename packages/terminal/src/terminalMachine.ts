@@ -91,6 +91,7 @@ import {
   sharedAxisId,
   type AxisRange,
   type SeriesAxis,
+  type SeriesStyle,
   type SeriesConfig,
 } from '@tidal-ts/chart';
 import { axisForAdd, canAddUnit, type AxisMember } from './axisPolicy.js';
@@ -347,6 +348,10 @@ export type TerminalEvent =
    *  `high`) — the data node's output picker. The study stays under the data
    *  node it is built on, which offers every column of its source. */
   | { type: 'series.setStudyInput'; id: string; column: string }
+  /** Which columns of its bar a DATA node draws — one (the price drawn from
+   *  the low), or several (its open and close, as lines or a band between
+   *  them). The first is the node's `column`; more than one is its `fan`. */
+  | { type: 'series.setDataColumns'; id: string; columns: readonly string[] }
   /** Which outputs of its multi-output source a study runs on — one, several
    *  (a FAN: one study drawing a line per output), or all. Generalises
    *  `series.setStudyOutput`, and reaches a study of a fanned study too. */
@@ -762,7 +767,8 @@ function toConfig(e: MetricEntry, id: string, axis: SeriesAxis = e.axis): Series
  * else offers none: it is one line, and a study of it reads that.
  */
 export function studyOutputsOf(target: Pick<SeriesConfig, 'derive' | 'fan'>): string[] {
-  if (target.fan && target.fan.length > 0) return [...target.fan];
+  // A DATA node's fan is columns, not outputs: a study of it reads its column.
+  if (target.derive && target.fan && target.fan.length > 0) return [...target.fan];
   if (target.derive && opOutputs(target.derive.op).length > 1) return opOutputs(target.derive.op);
   return [];
 }
@@ -774,7 +780,7 @@ export function studyOutputsOf(target: Pick<SeriesConfig, 'derive' | 'fan'>): st
  * named for. Empty for a single-output target.
  */
 export function defaultStudyOutputs(target: Pick<SeriesConfig, 'derive' | 'fan'>): string[] {
-  if (target.fan && target.fan.length > 0) return [...target.fan];
+  if (target.derive && target.fan && target.fan.length > 0) return [...target.fan];
   const primary = target.derive ? primaryOutput(target.derive.op) : undefined;
   return primary ? [primary] : [];
 }
@@ -1467,6 +1473,60 @@ export function inputAllowed(scope: EditScope, id: string, column: string): bool
   } catch {
     return false;
   }
+}
+
+/**
+ * Whether data node `id` can draw `columns` of its bar (`series.setDataColumns`).
+ *
+ * A seated DATA node (no `derive`, not a pair leg's group) drawing one of a
+ * bar's price columns, re-pointed at one or more of them, distinct, and not
+ * already exactly those. Which columns a source HAS is the host's to offer; the
+ * machine knows a bar's price columns and nothing else of a series' schema.
+ */
+export function dataColumnsAllowed(
+  scope: EditScope,
+  id: string,
+  columns: readonly string[],
+): boolean {
+  try {
+    const node = flatConfigs(scope.rows).find((c) => c.id === id);
+    if (!node || node.derive || node.group) return false;
+    if (!BAR_PRICE_COLUMNS.includes(node.column)) return false;
+    if (columns.length === 0 || new Set(columns).size !== columns.length) return false;
+    if (!columns.every((c) => BAR_PRICE_COLUMNS.includes(c))) return false;
+    const now = node.fan && node.fan.length > 0 ? node.fan : [node.column];
+    return !(now.length === columns.length && now.every((c, i) => c === columns[i]));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A data node drawing `columns`: the first is its `column`, more than one its
+ * `fan`. The style follows what the columns can draw — several draw as `lines`
+ * unless two are a `band`; one draws as it did, or as a `line` if it was drawing
+ * several. The label names the columns off the close (`Price · Open, Close`).
+ */
+function dataColumnsConfig(node: SeriesConfig, columns: readonly string[]): SeriesConfig {
+  const many = columns.length > 1;
+  const style: SeriesStyle = many
+    ? node.style === 'band' && columns.length === 2
+      ? 'band'
+      : 'lines'
+    : node.style === 'band' || node.style === 'lines'
+      ? 'line'
+      : node.style;
+  const label = typeof node.label === 'string' ? node.label : '';
+  const base = label.replace(/ · (Open|High|Low|Close)(, (Open|High|Low|Close))*$/, '');
+  const named = columns.length === 1 && columns[0] === 'close';
+  const { fan: _fan, ...rest } = node;
+  return {
+    ...rest,
+    column: columns[0]!,
+    ...(many ? { fan: [...columns] } : {}),
+    style,
+    label: named ? base : `${base} · ${columns.map(columnSegment).join(', ')}`,
+  };
 }
 
 /** The seated DATA node a study reads its raw column off — a node with no
@@ -2418,6 +2478,9 @@ export const terminalMachine = setup({
       event.type === 'series.setStudyOutput' && outputAllowed(context, event.id, event.output),
     canSetStudyInput: ({ context, event }) =>
       event.type === 'series.setStudyInput' && inputAllowed(context, event.id, event.column),
+    canSetDataColumns: ({ context, event }) =>
+      event.type === 'series.setDataColumns' &&
+      dataColumnsAllowed(context, event.id, event.columns),
     canSetStudyOutputs: ({ context, event }) =>
       event.type === 'series.setStudyOutputs' && outputsAllowed(context, event.id, event.outputs),
     canSetStudyParam: ({ context, event }) =>
@@ -2652,6 +2715,41 @@ export const terminalMachine = setup({
             if (c.id !== event.id) return c;
             const parentIds = [...(c.parentIds ?? [])];
             parentIds[at.index] = home.id;
+            return { ...c, parentIds };
+          }),
+        }));
+      },
+    }),
+    setDataColumns: assign({
+      rows: ({ context, event }) => {
+        if (event.type !== 'series.setDataColumns') return context.rows;
+        const configs = flatConfigs(context.rows);
+        const node = configs.find((c) => c.id === event.id);
+        if (!node) return context.rows;
+        // What is built on this node finds it by COLUMN unless it records it;
+        // the column is about to move, so record it first — where the match
+        // is unambiguous (one seated node draws that column).
+        const sameColumn = configs.filter(
+          (c) => !c.derive && c.source === node.source && c.column === node.column,
+        );
+        const orphans = new Map<string, number>();
+        if (sameColumn.length === 1)
+          for (const c of configs) {
+            if (!c.derive) continue;
+            const i = inputNames(c.derive).findIndex(
+              (n, k) => n === node.column && typeof c.derive!.inputs[k] === 'string',
+            );
+            if (i >= 0 && c.parentIds?.[i] == null) orphans.set(c.id, i);
+          }
+        const next = dataColumnsConfig(node, event.columns);
+        return context.rows.map((r) => ({
+          ...r,
+          configs: r.configs.map((c) => {
+            if (c.id === event.id) return next;
+            const i = orphans.get(c.id);
+            if (i == null) return c;
+            const parentIds = [...(c.parentIds ?? [])];
+            parentIds[i] = node.id;
             return { ...c, parentIds };
           }),
         }));
@@ -3339,6 +3437,7 @@ export const terminalMachine = setup({
     'series.setStudyParam': { guard: 'canSetStudyParam', actions: 'setStudyParam' },
     'series.setStudyOutput': { guard: 'canSetStudyOutput', actions: 'setStudyOutput' },
     'series.setStudyInput': { guard: 'canSetStudyInput', actions: 'setStudyInput' },
+    'series.setDataColumns': { guard: 'canSetDataColumns', actions: 'setDataColumns' },
     'series.setStudyOutputs': { guard: 'canSetStudyOutputs', actions: 'setStudyOutputs' },
     'series.order': { actions: 'orderSeries' },
     'series.reindex': { actions: 'orderSeries' },

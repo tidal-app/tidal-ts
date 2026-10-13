@@ -13,6 +13,7 @@ import {
   activeSlot,
   outputAllowed,
   inputAllowed,
+  dataColumnsAllowed,
   outputsAllowed,
   studyOutputChoices,
   canonRows,
@@ -2388,6 +2389,82 @@ describe('a study of a multi-output study reads ONE named output (TDL-STUDYCHAIN
         .rows.flatMap((r) => r.configs)
         .filter((c) => c.group).length,
     ).toBeGreaterThan(0);
+  });
+});
+
+describe("a data node draws one or several of its bar's columns (series.setDataColumns)", () => {
+  const all = (ctx: () => { rows: RowState[] }) => ctx().rows.flatMap((r) => r.configs);
+  it('re-points to one column, and the label names it off the close', () => {
+    const { actor, ctx, idOf } = start();
+    const price = idOf('close');
+    const base = all(ctx).find((c) => c.id === price)!.label;
+    actor.send({ type: 'series.setDataColumns', id: price, columns: ['low'] });
+    const p = all(ctx).find((c) => c.id === price)!;
+    expect(p.column).toBe('low');
+    expect(p.fan).toBeUndefined();
+    expect(p.label).toBe(`${base} · Low`);
+    actor.send({ type: 'series.setDataColumns', id: price, columns: ['close'] });
+    expect(all(ctx).find((c) => c.id === price)!.label).toBe(base);
+  });
+
+  it('draws several as lines (a band from two), and back to one line', () => {
+    const { actor, ctx, idOf } = start();
+    const price = idOf('close');
+    const base = all(ctx).find((c) => c.id === price)!.label;
+    actor.send({ type: 'series.setDataColumns', id: price, columns: ['open', 'close'] });
+    let p = all(ctx).find((c) => c.id === price)!;
+    expect([p.column, p.fan, p.style, p.label]).toEqual([
+      'open',
+      ['open', 'close'],
+      'lines',
+      `${base} · Open, Close`,
+    ]);
+    actor.send({ type: 'series.patch', id: price, patch: { style: 'band' } });
+    actor.send({ type: 'series.setDataColumns', id: price, columns: ['open', 'high', 'close'] });
+    p = all(ctx).find((c) => c.id === price)!;
+    expect(p.style).toBe('lines'); // three cannot be a band
+    actor.send({ type: 'series.setDataColumns', id: price, columns: ['close'] });
+    p = all(ctx).find((c) => c.id === price)!;
+    expect([p.column, p.fan, p.style]).toEqual(['close', undefined, 'line']);
+  });
+
+  it('keeps a study built on it, recording the node where it was found by column', () => {
+    const { actor, ctx, idOf } = start();
+    const price = idOf('close');
+    actor.send({ type: 'series.addStudy', targetId: price, op: 'sma', period: 20 });
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    const legacy = ctx().rows.map((r) => ({
+      ...r,
+      configs: r.configs.map((c) => (c.id === sma.id ? { ...c, parentIds: undefined } : c)),
+    }));
+    const h = start(legacy);
+    h.actor.send({ type: 'series.setDataColumns', id: price, columns: ['low'] });
+    const after = all(h.ctx).find((c) => c.id === sma.id)!;
+    expect(after.parentIds?.[0]).toBe(price);
+    expect(sourcesOf(all(h.ctx), after).map((p) => p.id)).toEqual([price]);
+  });
+
+  it('refuses a non-bar node, a study, duplicates, nothing, and no change', () => {
+    const { actor, ctx, idOf } = start();
+    const price = idOf('close');
+    actor.send({ type: 'series.addStudy', targetId: price, op: 'sma', period: 20 });
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    expect(dataColumnsAllowed(ctx(), idOf('iv21'), ['iv63'])).toBe(false);
+    expect(dataColumnsAllowed(ctx(), sma.id, ['low'])).toBe(false);
+    expect(dataColumnsAllowed(ctx(), price, ['low', 'low'])).toBe(false);
+    expect(dataColumnsAllowed(ctx(), price, [])).toBe(false);
+    expect(dataColumnsAllowed(ctx(), price, ['close'])).toBe(false);
+    expect(dataColumnsAllowed(ctx(), price, ['volume'])).toBe(false);
+  });
+
+  it('a study added on a multi-column node reads its column, not a fan', () => {
+    const { actor, ctx, idOf } = start();
+    const price = idOf('close');
+    actor.send({ type: 'series.setDataColumns', id: price, columns: ['open', 'close'] });
+    actor.send({ type: 'series.addStudy', targetId: price, op: 'sma', period: 20 });
+    const sma = all(ctx).find((c) => c.derive?.op === 'sma')!;
+    expect(sma.fan).toBeUndefined();
+    expect(sma.derive!.inputs).toEqual(['open']);
   });
 });
 
