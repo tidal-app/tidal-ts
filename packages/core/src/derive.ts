@@ -748,17 +748,50 @@ export interface DeriveSkip {
 }
 
 /**
+ * One step of a fold as the engine ran it — `@pond-ts/process`'s per-node
+ * report (`RunResult.nodes`), passed through so a host can show what each
+ * step cost and whether it was served warm (a pipeline view's badges).
+ *
+ * How it relates to `skipped`: a spec that fails BEFORE it compiles (an
+ * unknown column or op, a bad param, the wrong inputs) is in `skipped` only —
+ * a view that draws `nodes` alone loses it. A spec that ran but whose column
+ * could not be appended (refolding a folded series) is in both: here with a
+ * real `ms`, and in `skipped`.
+ */
+export interface DeriveNodeTiming {
+  /** The step's id — the same string as `deriveId(spec)`. */
+  id: string;
+  /** Whether this fold read the step's value. The engine reports a compiled
+   *  spec nothing selected as not pulled (its `ms` then says nothing);
+   *  {@link applyDerivedReport} selects every spec, so here it is always
+   *  true. */
+  pulled: boolean;
+  /** Served from the engine's cache rather than computed this fold. Under the
+   *  cold bind {@link applyDerivedReport} does today, always false. */
+  cached: boolean;
+  /** Milliseconds attributable to the step, to 3 decimal places. */
+  ms: number;
+  /** Upstream ids in input order: a step's `deriveId`, or a raw column. A
+   *  PICKED input (`{ from, output }`) is its source step's id alone — which
+   *  output it read is not said, so two picks of one step read the same. */
+  inputs: readonly string[];
+}
+
+/**
  * Fold a set of derive specs onto a series, appending each spec's output
  * column (`deriveId(spec)`) and REPORTING what didn't fold — `bind` + `run`
  * over {@link TIDAL_OPS} with `onError: 'skip'`: a spec that can't resolve
  * (unknown column, bad params — a preset can reference a column that no
  * longer exists) is skipped rather than thrown, its dependents skip with it,
  * and each lands in `skipped` exactly once (the engine reports a failing spec
- * per pass — plan + selector — so entries dedupe on the spec's id). Since
+ * per pass — plan + selector — so entries dedupe on the spec's id). `nodes`
+ * is the engine's per-step report: what each step cost, and whether it was
+ * served warm ({@link DeriveNodeTiming}). Since
  * 0.62.0 nothing is pre-filtered: broken specs flow through and report, which
  * is what the chip UI reads (Tidal's pairs plan, the ghost-spread debt).
- * Duplicate specs in the set are one node by content-addressing. Pure +
- * deterministic (memo-friendly).
+ * Duplicate specs in the set are one node by content-addressing. `series`
+ * and `skipped` are pure + deterministic (memo-friendly); the `ms` in `nodes`
+ * is wall-clock.
  *
  * Deliberately a **cold bind per fold** for now — same cost shape as the local
  * fold it replaced, kept simple while semantics settle. The warm long-lived
@@ -769,8 +802,8 @@ export function applyDerivedReport(
   series: DerivedSeries,
   specs: readonly DeriveSpec[],
   units?: Units,
-): { series: DerivedSeries; skipped: DeriveSkip[] } {
-  if (specs.length === 0) return { series, skipped: [] };
+): { series: DerivedSeries; skipped: DeriveSkip[]; nodes: DeriveNodeTiming[] } {
+  if (specs.length === 0) return { series, skipped: [], nodes: [] };
   // NOT idempotent over an already-folded series: an output column that
   // already exists collides at assembly, that spec skips, and any spec
   // NESTING it skips with it (pinned by test). No render path refolds today
@@ -805,7 +838,14 @@ export function applyDerivedReport(
     }
     if (!skipped.has(id)) skipped.set(id, { id, code: s.code, reason: s.reason });
   }
-  return { series: result.series ?? series, skipped: [...skipped.values()] };
+  const nodes = result.nodes.map(({ id, pulled, cached, ms, inputs }) => ({
+    id,
+    pulled,
+    cached,
+    ms,
+    inputs,
+  }));
+  return { series: result.series ?? series, skipped: [...skipped.values()], nodes };
 }
 
 /** {@link applyDerivedReport} without the report — the fold most render paths

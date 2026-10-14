@@ -93,6 +93,8 @@ export {
   carries,
   foldKey,
   foldSources,
+  foldSourcesReport,
+  type SourceFoldReport,
   prepareChart,
   sourceFacts,
   type ConfigRow,

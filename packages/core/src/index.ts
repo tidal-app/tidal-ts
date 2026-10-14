@@ -88,6 +88,7 @@ export {
   type OpParam,
   usesCompare,
   type DeriveSkip,
+  type DeriveNodeTiming,
   type PairPart,
   type PartStudy,
   type StudyOption,
