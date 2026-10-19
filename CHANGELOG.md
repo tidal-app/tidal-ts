@@ -2,6 +2,18 @@
 
 All packages release together on one version.
 
+## 0.16.0 — 2026-10-19
+
+Moves the pond-ts family to 0.75.0. No API change here.
+
+- **pond-ts 0.75.0** (every package). The peer ranges move to `^0.75.0`, and
+  `@pond-ts/process` is pinned to `0.75.0` — install that exact version beside
+  this release. What the move brings: a streaming chart no longer rebuilds its
+  canvas on every update (charts); rolling `sum` / `avg` / `stdev` no longer
+  drift, so their results can differ from before in the last digits; and
+  `filter`, `shift`, `fill` and `mapColumns` are several times faster. pond-ts
+  0.74.0 has nothing that reaches these packages.
+
 ## 0.15.0 — 2026-10-14
 
 A fold says what it did: per step, what it cost and whether it was served warm.
