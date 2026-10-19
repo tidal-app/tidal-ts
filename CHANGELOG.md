@@ -2,6 +2,17 @@
 
 All packages release together on one version.
 
+## 0.16.0 — 2026-10-19
+
+On pond-ts 0.75.
+
+- **Peers move to pond-ts 0.75** (`pond-ts`, `@pond-ts/charts`, `@pond-ts/react`,
+  `@pond-ts/financial` at `^0.75.0`; `@pond-ts/process` pinned `0.75.0`). The
+  install commands in the READMEs and Getting started say the same. 0.75's
+  `<Canvas>` resizes a row's backing buffer only when its size changes, so a
+  streaming chart no longer rebuilds every row canvas on every update. No API
+  change here; every suite passes unchanged.
+
 ## 0.15.0 — 2026-10-14
 
 A fold says what it did: per step, what it cost and whether it was served warm.
