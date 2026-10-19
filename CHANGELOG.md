@@ -2,6 +2,24 @@
 
 All packages release together on one version.
 
+## 0.15.0 — 2026-10-14
+
+A fold says what it did: per step, what it cost and whether it was served warm.
+
+- **`applyDerivedReport` returns `nodes`** (core). The engine's per-step report
+  (`@pond-ts/process`'s `RunResult.nodes`) passed through as
+  `DeriveNodeTiming`: the step's id (the same string as `deriveId`), whether
+  this fold pulled it, whether it was served from cache, its cost in ms, and
+  its upstream ids. Under today's cold bind per fold `pulled` is always true
+  and `cached` always false; the warm long-lived graph is where `cached`
+  starts saying `true`. A spec that fails before it compiles is in `skipped`
+  only, not in `nodes`. A picked input is its source step's id, without the
+  output it read. `ms` is wall-clock: `series` and `skipped` stay pure.
+- **`foldSourcesReport`** (chart). `foldSources` with the report: per source,
+  the row count the chart gets (after a hold, the grid's), the specs the engine skipped, each step's timing, and
+  the whole fold's cost (join and hold included). `foldSources` is it without
+  the report. Type: `SourceFoldReport`.
+
 ## 0.14.0 — 2026-10-13
 
 A study that draws an output as bars can draw it as a line instead.
