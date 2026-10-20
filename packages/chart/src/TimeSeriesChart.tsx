@@ -30,6 +30,7 @@ import {
 import type {
   AxisMouseEvent,
   CandleStyle,
+  ChartContainerProps,
   ChartTheme,
   DrawStatsFrame,
   LiveValue,
@@ -336,6 +337,14 @@ export interface TimeSeriesChartProps {
    *  with {@link onViewRangeChange} (pan + wheel-zoom round-trip through the
    *  host, so pill state / persistence can react). */
   viewRange?: readonly [number, number] | null;
+  /**
+   * The plot's own pan/zoom gesture, passed to charts' `ChartContainer`. Default
+   * `true`: drag pans the window and the wheel zooms it. A chart inside a
+   * scrolling container wants `'none'` (or `'pan'`), since a wheel the plot
+   * takes for zoom can never scroll the page under it. The y gutters' gesture is
+   * {@link onAxisBounds}'s, not this.
+   */
+  panZoom?: ChartContainerProps['panZoom'];
   /** Fires on every pan/zoom step with the new window. Wiring it makes the
    *  view CONTROLLED (the library keys controlled-ness on this callback);
    *  omitting it falls back to the library's uncontrolled internal view, which
@@ -713,6 +722,7 @@ function TimeSeriesChartInner({
   colorScheme = 'dark',
   viewRange,
   onViewRangeChange,
+  panZoom = true,
   axisOptions,
   onAxisClick,
   onAxisBounds,
@@ -1597,7 +1607,7 @@ function TimeSeriesChartInner({
           // onTimeRangeChange), so pill state and persistence stay in sync and a
           // pill click can reset the viewport (uncontrolled mode ignores later
           // `range` changes once the user pans). No view ⇒ auto-fit the data.
-          panZoom
+          panZoom={panZoom}
           // …and the y GUTTERS take their own gesture: drag one to PAN that axis
           // alone, wheel to zoom it (0.64 aligned the drag with the x strip —
           // before that a drag scaled). Deliberately `'y'` — the x strip would

@@ -2,6 +2,19 @@
 
 All packages release together on one version.
 
+## 0.17.0 — 2026-10-20
+
+A chart inside a scrolling container can let the wheel scroll it.
+
+- **`TimeSeriesChart` takes `panZoom`** (chart). It goes straight to charts'
+  `ChartContainer`, with the same values. The default `true` is unchanged:
+  drag pans the window and the wheel zooms it. `'none'` or `'pan'` leaves the
+  wheel alone. A chart that takes every wheel for zoom can never scroll the page
+  or pane around it. A stack of short charts that scrolls in its own box is the
+  case: a two-finger swipe over any row zoomed that row's window instead of
+  moving the stack. The y gutters' gesture is unchanged and still follows
+  `onAxisBounds`.
+
 ## 0.16.0 — 2026-10-19
 
 Moves the pond-ts family to 0.75.0. No API change here.
