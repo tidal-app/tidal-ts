@@ -217,6 +217,7 @@ import {
   deriveId,
   inputNames,
   isPairOp,
+  isPickedInput,
   isStudyOp,
   opOutputs,
   opParams,
@@ -874,6 +875,32 @@ export function isStudySeries(s: SeriesConfig): boolean {
  *  `cmp_`-prefixed, or (an unjoined pair's leg) a raw `cmp_` column. */
 export function readsCompare(s: Pick<SeriesConfig, 'derive' | 'column'>): boolean {
   return s.derive ? usesCompare(s.derive) : s.column.startsWith(COMPARE_PREFIX);
+}
+
+/**
+ * True if a series is the **compared side** of a comparison: every leaf it
+ * reads is on the comparison symbol (a raw `cmp_` column, or a study whose
+ * inputs are all `cmp_`). Narrower than {@link readsCompare}: a joined pair
+ * such as `ratio(iv21, cmp_iv21)` reads both symbols, so it is the ANSWER of
+ * the comparison, not its "before" — it is dashed (it reads the compare) but
+ * keeps its own colour under {@link TimeSeriesChartProps.compareInk}.
+ */
+export function isCompareSide(s: Pick<SeriesConfig, 'derive' | 'column'>): boolean {
+  return s.derive ? onlyCompare(s.derive) : s.column.startsWith(COMPARE_PREFIX);
+}
+
+/** Every leaf of a spec is on the comparison symbol (and it has one) — the
+ *  "all" twin of core's `usesCompare`, walked the same way. */
+function onlyCompare(spec: DeriveSpec): boolean {
+  const leaves = (spec.inputs ?? []).filter((i) => typeof i === 'string' || typeof i === 'object');
+  return (
+    leaves.length > 0 &&
+    leaves.every((i) =>
+      typeof i === 'string'
+        ? i.startsWith(COMPARE_PREFIX)
+        : onlyCompare(isPickedInput(i) ? i.from : (i as DeriveSpec)),
+    )
+  );
 }
 
 /** The style category a series' line defaults come from. A comparison-reading

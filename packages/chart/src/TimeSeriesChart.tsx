@@ -71,6 +71,7 @@ import {
   seriesAxisId,
   seriesLineDashArray,
   seriesLineWidth,
+  isCompareSide,
   sharedAxisId,
   axisFormat,
   fractionTicks,
@@ -326,6 +327,20 @@ export interface TimeSeriesChartProps {
    * Keep the identity stable (module-level or memoised): it keys the theme memo.
    */
   resolveColor?: (color: string) => string;
+  /**
+   * The **BEFORE ink** of a comparison: a concrete canvas colour that the
+   * compared side ({@link isCompareSide} — a series whose every leaf is on the
+   * comparison symbol) draws in, in place of its own. The reference keeps its
+   * own colour, so the answer is always the solid line in its own ink and the
+   * thing compared is the muted, dashed one ("before / after").
+   *
+   * The canvas only: the config keeps its colour, so an axis still takes its
+   * members' colour when they agree (a mirror and its primary share one), and
+   * a host's legend and swatches are untouched. A joined pair reads both
+   * symbols and keeps its colour. Absent (the default), colour = series, as
+   * before.
+   */
+  compareInk?: string;
   /**
    * Which way a hovered axis's ink lifts: toward white on a dark surface, toward
    * black on a light one. The one presentation fact the theme object does not
@@ -719,6 +734,7 @@ function TimeSeriesChartInner({
   timeZone,
   theme: base,
   resolveColor = sameColor,
+  compareInk,
   colorScheme = 'dark',
   viewRange,
   onViewRangeChange,
@@ -788,7 +804,12 @@ function TimeSeriesChartInner({
     const candle: Record<string, CandleStyle> = { ...base.candle };
     const band: Record<string, ChartTheme['band'][string]> = { ...base.band };
     for (const c of allConfigs) {
-      const stroke = resolveColor(c.color);
+      // The compared side draws in the host's BEFORE ink (`compareInk`); every
+      // other series in its own. Its outputs follow it, so a study on the
+      // compared leg is "before" too.
+      const before = compareInk !== undefined && isCompareSide(c);
+      const inkOf = (color: string) => (before ? compareInk! : resolveColor(color));
+      const stroke = inkOf(c.color);
       const isDim = dim.has(c.id);
       // The user's opacity and the chart's dimming compose: a half-opaque line
       // that is also dimmed is fainter still, never back to full strength.
@@ -834,10 +855,7 @@ function TimeSeriesChartInner({
       ) {
         configOutputs(c).forEach((out, i) => {
           const look = outputLook(c, i, settings);
-          const ink = withAlpha(
-            resolveColor(look.color),
-            opacityOf(look.opacity) * (isDim ? 0.22 : 1),
-          );
+          const ink = withAlpha(inkOf(look.color), opacityOf(look.opacity) * (isDim ? 0.22 : 1));
           const style = {
             color: ink,
             width: look.width,
@@ -907,7 +925,7 @@ function TimeSeriesChartInner({
       annotation,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [base, resolveColor, themeSig, annotationSig]);
+  }, [base, resolveColor, compareInk, themeSig, annotationSig]);
 
   // The trading sessions on this axis, derived from the data rather than from a
   // calendar. ONE session model with TWO consumers — the axis (which collapses
