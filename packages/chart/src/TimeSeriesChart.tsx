@@ -26,6 +26,7 @@ import {
   TimeAxis,
   YAxis,
   YAxisIndicator,
+  Zone,
 } from '@pond-ts/charts';
 import type {
   AxisMouseEvent,
@@ -58,6 +59,13 @@ import {
 import { candleStyleForColor, candleStyleForPair } from './candleStyle.js';
 import { useMeasuredWidth } from './useMeasuredWidth.js';
 import { withAlpha } from './withAlpha.js';
+import {
+  FALLBACK_REGISTER,
+  levelRoles,
+  levelsSig,
+  rowLevelMarks,
+  type ChartLevel,
+} from './levels.js';
 import { DEFAULT_CHART_SETTINGS, type ChartSettings } from './chartSettings.js';
 import {
   configAxisId,
@@ -212,6 +220,13 @@ export interface TimeSeriesChartRow {
   id: string;
   height: number;
   configs: SeriesConfig[];
+  /**
+   * Host levels: a value (or a low and a high) drawn across the plot on the
+   * axis of one of this row's series, in an ink the host chooses. Beside the
+   * study guides, never instead of them. They do not move the axis, and they
+   * hide with the series they ride on. See {@link ChartLevel}.
+   */
+  levels?: readonly ChartLevel[];
 }
 
 export interface TimeSeriesChartProps {
@@ -797,6 +812,9 @@ function TimeSeriesChartInner({
   const annotationSig = [...new Set(annotations.map((a) => `${a.role}:${a.color}`))]
     .sort()
     .join('|');
+  // Each host level's ink is a theme role (the library's only channel for a
+  // mark's colour), so its style fields key the theme too.
+  const levelSig = levelsSig(rows);
   const theme = useMemo<ChartTheme>(() => {
     const dim = new Set(dimmed);
     // One entry per series per draw kind — the canvas can't read the host's
@@ -908,18 +926,28 @@ function TimeSeriesChartInner({
     // role, so N marks of one kind cost one entry, and the theme's own per-role
     // `dash` survives: hue is the user's, texture stays ours (it is what tells
     // the two kinds apart).
-    const annotation = base.annotation
+    // Host levels (`TimeSeriesChartRow.levels`) take the same route, one role
+    // per level. A base theme with no register would leave their roles
+    // nowhere to live, so they fall back to a copy of charts' own default
+    // register: the ink every other mark already draws in there.
+    const levelRoleMap = levelRoles(rows, resolveColor, dim);
+    const register =
+      base.annotation ?? (Object.keys(levelRoleMap).length > 0 ? FALLBACK_REGISTER : undefined);
+    const annotation = register
       ? {
-          ...base.annotation,
-          roles: annotations.reduce<NonNullable<ChartTheme['annotation']>['roles']>(
-            (acc, a) => ({
-              ...acc,
-              [a.role]: { ...acc?.[a.role], color: resolveColor(a.color) },
-            }),
-            base.annotation.roles ?? {},
-          ),
+          ...register,
+          roles: {
+            ...annotations.reduce<NonNullable<ChartTheme['annotation']>['roles']>(
+              (acc, a) => ({
+                ...acc,
+                [a.role]: { ...acc?.[a.role], color: resolveColor(a.color) },
+              }),
+              register.roles ?? {},
+            ),
+            ...levelRoleMap,
+          },
         }
-      : base.annotation;
+      : register;
     return {
       ...base,
       line: line as ChartTheme['line'],
@@ -930,7 +958,7 @@ function TimeSeriesChartInner({
       annotation,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [base, resolveColor, compareInk, themeSig, annotationSig]);
+  }, [base, resolveColor, compareInk, themeSig, annotationSig, levelSig]);
 
   // The trading sessions on this axis, derived from the data rather than from a
   // calendar. ONE session model with TWO consumers — the axis (which collapses
@@ -1855,6 +1883,41 @@ function TimeSeriesChartInner({
                         role="guide"
                       />
                     ))}
+                    {/* HOST LEVELS — the row's `levels`: a value, or a range's
+                        two edges and its wash, on the axis of the series each
+                        names, in that level's own role. Inert, like the guides,
+                        and like them they read the axis without moving it. */}
+                    {(() => {
+                      const marks = rowLevelMarks(
+                        row.levels,
+                        drawable,
+                        row.id,
+                        (a) => axisOptions?.[a]?.scaleType === 'log',
+                      );
+                      return [
+                        ...marks.washes.map((w) => (
+                          <Zone
+                            key={w.key}
+                            id={w.key}
+                            from={w.from}
+                            to={w.to}
+                            axis={w.axis}
+                            role={w.role}
+                          />
+                        )),
+                        ...marks.lines.map((l) => (
+                          <Baseline
+                            key={l.key}
+                            id={l.key}
+                            value={l.value}
+                            axis={l.axis}
+                            label={l.label}
+                            selectable={false}
+                            role={l.role}
+                          />
+                        )),
+                      ];
+                    })()}
                     {/* `<Layers>` z-orders by declaration (last child on top), so
                         the configs render REVERSED: the row's FIRST config paints
                         last = on top. That makes the controls list read

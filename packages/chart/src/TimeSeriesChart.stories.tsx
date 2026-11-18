@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react';
 import {
   buildPriceSeries,
   DEMO_INSTRUMENTS,
+  readNumericColumn,
   deriveId,
   generatePriceSeries,
   generateVolSeries,
@@ -15,7 +16,7 @@ import {
   type TimeSeriesChartProps,
   type TimeSeriesChartRow,
 } from './index.js';
-import type { ChartSeries, SeriesConfig } from './index.js';
+import type { ChartLevel, ChartSeries, SeriesConfig } from './index.js';
 
 /**
  * The chart's workshop, hosted the way a CONSUMER hosts it: a literal
@@ -366,5 +367,57 @@ export const BandWithoutMiddle: Story = {
     rows: [{ id: 'only', height: 380, configs: bandOnly.rows[0]!.configs }],
     sources: bandOnly.sources,
     ohlcSources: [],
+  },
+};
+
+// --- Host levels -------------------------------------------------------------
+// A host's own numbers drawn across a row: the 21D vol's last value as one
+// level, and its low and high over the data as a range with a light wash.
+// The host computed them (here, a plain read of the column); the chart only
+// draws them on the series' axis, in the ink it is given.
+const iv21Facts = (() => {
+  const col = readNumericColumn(volSeries as never, 'iv21')!;
+  let low = Infinity;
+  let high = -Infinity;
+  let last = NaN;
+  for (let i = 0; i < col.length; i += 1) {
+    const v = col.read(i);
+    if (v == null || !Number.isFinite(v)) continue;
+    low = Math.min(low, v);
+    high = Math.max(high, v);
+    last = v;
+  }
+  return { low, high, last };
+})();
+const hostLevels: ChartLevel[] = [
+  {
+    kind: 'level',
+    id: 'last',
+    series: 'iv21',
+    value: iv21Facts.last,
+    color: '#4f9cd9',
+    lineDash: 'dashed',
+    label: `Last ${iv21Facts.last.toFixed(2)}`,
+  },
+  {
+    kind: 'range',
+    id: 'extremes',
+    series: 'iv21',
+    low: iv21Facts.low,
+    high: iv21Facts.high,
+    color: '#c9a06a',
+    lineDash: 'dotted',
+    fill: 0.08,
+    labels: { low: 'Low', high: 'High' },
+  },
+];
+
+/** Host levels: a level and a range on the 21D vol's axis. Hide the series
+ *  and its levels go with it; they never widen the axis. */
+export const HostLevels: Story = {
+  args: {
+    rows: [
+      { id: 'only', height: 380, configs: [volConfigs[0]!, volConfigs[2]!], levels: hostLevels },
+    ],
   },
 };

@@ -21,6 +21,18 @@ export {
 } from './TimeSeriesChart.js';
 export type { ChartSeries } from './types.js';
 export {
+  levelRole,
+  levelRoles,
+  rowLevelMarks,
+  type ChartLevel,
+  type ChartLevelLine,
+  type ChartLevelRange,
+  type ChartLevelStyle,
+  type LevelLineMark,
+  type LevelRoleStyle,
+  type LevelWashMark,
+} from './levels.js';
+export {
   configAxisId,
   effectiveSplit,
   formatSeriesValue,
