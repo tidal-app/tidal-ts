@@ -27,7 +27,6 @@ import {
   YAxis,
   YAxisIndicator,
   Zone,
-  defaultTheme,
 } from '@pond-ts/charts';
 import type {
   AxisMouseEvent,
@@ -60,7 +59,13 @@ import {
 import { candleStyleForColor, candleStyleForPair } from './candleStyle.js';
 import { useMeasuredWidth } from './useMeasuredWidth.js';
 import { withAlpha } from './withAlpha.js';
-import { levelRoles, levelsSig, rowLevelMarks, type ChartLevel } from './levels.js';
+import {
+  FALLBACK_REGISTER,
+  levelRoles,
+  levelsSig,
+  rowLevelMarks,
+  type ChartLevel,
+} from './levels.js';
 import { DEFAULT_CHART_SETTINGS, type ChartSettings } from './chartSettings.js';
 import {
   configAxisId,
@@ -923,11 +928,11 @@ function TimeSeriesChartInner({
     // the two kinds apart).
     // Host levels (`TimeSeriesChartRow.levels`) take the same route, one role
     // per level. A base theme with no register would leave their roles
-    // nowhere to live, so they fall back to charts' default register.
+    // nowhere to live, so they fall back to a copy of charts' own default
+    // register: the ink every other mark already draws in there.
     const levelRoleMap = levelRoles(rows, resolveColor, dim);
     const register =
-      base.annotation ??
-      (Object.keys(levelRoleMap).length > 0 ? defaultTheme.annotation : undefined);
+      base.annotation ?? (Object.keys(levelRoleMap).length > 0 ? FALLBACK_REGISTER : undefined);
     const annotation = register
       ? {
           ...register,

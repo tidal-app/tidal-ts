@@ -6,8 +6,8 @@
  *
  * Drawn with `@pond-ts/charts`' `<Baseline>` (a level, each edge of a range)
  * and `<Zone>` (a range's wash). Like the guides, they never move an axis:
- * the marks read the axis's scale and do not feed its extent, so a level
- * outside the window is simply off the plot. A level that should be on screen
+ * the marks read the axis's scale and do not feed its extent, so the line of a
+ * level outside the window is off the plot. A level that should be on screen
  * is the host's to frame (`axisOptions`).
  *
  * Library friction, recorded here for upstream (charts' annotation register):
@@ -26,12 +26,23 @@
  *    markers do. A host wanting a level at full strength today has to raise
  *    `depth[2]` for every mark. Asked for: a per-role depth, or a per-mark
  *    opacity.
+ * 4. **A baseline's chip is not culled.** The line is clipped to the row, but
+ *    `<Baseline>` places its label chip at the line's y with no clamp (`<Zone>`
+ *    clamps, `<Marker>` culls). So a LABELLED level panned or pinned off the
+ *    axis prints its chip over the next row or the time axis. Culling it here
+ *    would need the axis domain, which the chart does not hold. Asked for: cull
+ *    or clamp the chip like the rest of the family. Until then, label sparingly.
+ * 5. **The default register is private.** A base theme with no `annotation`
+ *    makes charts draw in its internal default, which is not exported. The
+ *    level roles need a register to live in, so {@link FALLBACK_REGISTER}
+ *    copies it, and adding a level does not recolour every other mark.
  *
  * @module
  */
 import { configAxisId, dashPattern, type SeriesConfig } from './series.js';
 import type { LineDash } from './chartSettings.js';
 import { withAlpha } from './withAlpha.js';
+import type { ChartTheme } from '@pond-ts/charts';
 
 /** How a level draws. Every field but `color` is optional. */
 export interface ChartLevelStyle {
@@ -84,7 +95,19 @@ export interface ChartLevelRange extends ChartLevelBase {
 export type ChartLevel = ChartLevelLine | ChartLevelRange;
 
 /** The theme role a level draws in. Unique per (row, level id). */
-export const levelRole = (rowId: string, levelId: string): string => `level:${rowId}:${levelId}`;
+export const levelRole = (rowId: string, levelId: string): string =>
+  `level\u0000${rowId}\u0000${levelId}`;
+
+/**
+ * charts' internal annotation register (`DEFAULT_ANNOTATION`, not exported):
+ * what a base theme with no `annotation` draws in. The chart supplies it only
+ * when it must add level roles, so the guides and date markers keep their ink.
+ */
+export const FALLBACK_REGISTER: NonNullable<ChartTheme['annotation']> = {
+  color: '#14b8a6',
+  fillOpacity: 0.1,
+  depth: [1, 0.7, 0.4],
+};
 
 /** One `<Baseline>` to draw. */
 export interface LevelLineMark {
@@ -131,17 +154,31 @@ export function rowLevelMarks(
     const log = isLog(axis);
     const ok = (v: number) => Number.isFinite(v) && !(log && v <= 0);
     const role = levelRole(rowId, l.id);
-    const key = `level:${rowId}:${l.id}`;
+    // The role doubles as the key: NUL-separated, so no row or level id can
+    // collide with another's, nor with a host's own annotation role or id.
+    const key = role;
     if (l.kind === 'level') {
       if (ok(l.value)) lines.push({ key, role, axis, value: l.value, label: l.label || false });
       continue;
     }
     if (ok(l.low))
-      lines.push({ key: `${key}:low`, role, axis, value: l.low, label: l.labels?.low || false });
+      lines.push({
+        key: `${key}\u0000low`,
+        role,
+        axis,
+        value: l.low,
+        label: l.labels?.low || false,
+      });
     if (ok(l.high))
-      lines.push({ key: `${key}:high`, role, axis, value: l.high, label: l.labels?.high || false });
+      lines.push({
+        key: `${key}\u0000high`,
+        role,
+        axis,
+        value: l.high,
+        label: l.labels?.high || false,
+      });
     if (l.fill !== undefined && l.fill > 0 && ok(l.low) && ok(l.high)) {
-      washes.push({ key: `${key}:fill`, role, axis, from: l.low, to: l.high });
+      washes.push({ key: `${key}\u0000fill`, role, axis, from: l.low, to: l.high });
     }
   }
   return { lines, washes };

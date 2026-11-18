@@ -141,7 +141,9 @@ const row: TimeSeriesChartRow = {
 ```
 
 A level scales with its series and hides with it. It never moves the axis, so
-one outside the window is off the plot. A range is two lines, with a wash
+the line of one outside the window is off the plot. Its label chip is not
+culled, so label sparingly: a labelled level panned off the axis prints its
+chip outside the row. A range is two lines, with a wash
 between them when it has a `fill`. Lines are 1px, and an inert mark paints at
 the theme's resting annotation depth (`annotation.depth[2]`), so `opacity`
 composes with it.
