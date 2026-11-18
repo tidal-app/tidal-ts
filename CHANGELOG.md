@@ -2,6 +2,28 @@
 
 All packages release together on one version.
 
+## 0.19.0 — 2026-11-18
+
+A host can draw its own levels on a row: a value, or a low and a high.
+
+- **`TimeSeriesChartRow` takes `levels`** (chart). Each is a `ChartLevel`:
+  `kind: 'level'` (one `value`) or `kind: 'range'` (`low` and `high`, and an
+  optional `fill`, the opacity of a wash between them). A level names the
+  `series` in its row whose axis it rides on, so it scales with that series and
+  hides with it. Its ink is `color` (a palette key or CSS), `lineDash` and
+  `opacity`, plus an optional chip (`label`, or `labels.low` / `labels.high` on
+  a range). Levels never move an axis: like the study guides, they read the
+  scale and do not feed its extent, so a level outside the window is off the
+  plot. On a log axis a value at or below zero is skipped. Drawn with charts'
+  `<Baseline>` and `<Zone>`, inert, beside the study guides.
+- **No `lineWidth` yet, and a level reads at the register's resting depth.**
+  Charts' baseline is always 1px, and an inert mark always paints at
+  `theme.annotation.depth[2]`, so `opacity` composes with it. Both are recorded
+  as library friction (`levels.ts`) and asked for upstream.
+- **`rowLevelMarks`, `levelRoles`, `levelRole`** (chart). The pure steps
+  behind the above, exported with their types: which marks a row draws, and
+  the theme role each level draws in.
+
 ## 0.18.0 — 2026-11-18
 
 A comparison can draw as "before / after": the compared side in a muted ink of

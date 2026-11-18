@@ -107,6 +107,45 @@ The props most hosts use:
 | `pricePill`                                    | A live last-price tag on the axis; ticks repaint only the tag.                                          |
 | `collapseWeekends`, `calendarDays`, `timeZone` | How the time axis treats closed markets and which zone it reads in.                                     |
 
+### Levels on a row
+
+A row can carry `levels`: values the host already has, drawn across the plot on
+the axis of one of the row's series.
+
+```ts
+const row: TimeSeriesChartRow = {
+  id: 'vol',
+  height: 300,
+  configs: [iv],
+  levels: [
+    {
+      kind: 'level',
+      id: 'last',
+      series: iv.id,
+      value: 20.36,
+      color: '#4f9cd9',
+      lineDash: 'dashed',
+      label: 'Last',
+    },
+    {
+      kind: 'range',
+      id: 'window',
+      series: iv.id,
+      low: 18.1,
+      high: 24.7,
+      color: '#c9a06a',
+      fill: 0.08,
+    },
+  ],
+};
+```
+
+A level scales with its series and hides with it. It never moves the axis, so
+one outside the window is off the plot. A range is two lines, with a wash
+between them when it has a `fill`. Lines are 1px, and an inert mark paints at
+the theme's resting annotation depth (`annotation.depth[2]`), so `opacity`
+composes with it.
+
 ## Settings
 
 `ChartSettings` (with `DEFAULT_CHART_SETTINGS` and `mergeChartSettings`) holds
