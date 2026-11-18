@@ -13,8 +13,9 @@ the host's choosing, the reference in its own colour.
   outputs in it. Every other series keeps its own colour. The configs are not
   touched, so an axis shared by a series and its comparison still takes their
   colour, and a host's legend and swatches are unchanged. A joined pair
-  (`ratio(a, cmp_b)`) reads both symbols and keeps its colour. Absent (the
-  default), nothing changes.
+  (`ratio(a, cmp_b)`) reads both symbols and keeps its colour. A split mark
+  (bars, candles, a split histogram) keeps its rise / fall colours: direction
+  is market data, not "which symbol". Absent (the default), nothing changes.
 - **`isCompareSide(config)`** (chart). The test above, exported. Narrower than
   `readsCompare`, which is true for anything that reads the comparison symbol
   at all.

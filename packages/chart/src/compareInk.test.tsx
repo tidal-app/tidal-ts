@@ -30,7 +30,7 @@ vi.mock('./useMeasuredWidth.js', () => ({ useMeasuredWidth: () => [{ current: nu
 
 const { defaultTheme } = await import('@pond-ts/charts');
 const { TimeSeriesChart } = await import('./TimeSeriesChart.js');
-const { prepareChart, isCompareSide } = await import('./index.js');
+const { prepareChart, isCompareSide, outputKey } = await import('./index.js');
 
 const DAY = 86_400_000;
 const rows: PriceRow[] = [];
@@ -63,6 +63,9 @@ describe('isCompareSide', () => {
     // A joined pair reads BOTH symbols: it is the answer, not the before.
     const joined: DeriveSpec = { op: 'ratio', inputs: ['close', 'cmp_close'] };
     expect(isCompareSide({ column: deriveId(joined), derive: joined })).toBe(false);
+    // Safe on a malformed persisted spec, as `usesCompare` is.
+    const broken = { op: 'sma', inputs: [null] } as unknown as DeriveSpec;
+    expect(isCompareSide({ column: 'x', derive: broken })).toBe(false);
   });
 });
 
@@ -103,5 +106,51 @@ describe('compareInk', () => {
   it('changes nothing when absent', () => {
     const t = render(undefined);
     expect(t.line['p__auto']!.color).toBe('#c53d26');
+  });
+
+  it('inks a study on the compared leg, outputs and all', () => {
+    const spec: DeriveSpec = { op: 'macd', inputs: ['cmp_close'] };
+    const study = cfg('m', deriveId(spec), { style: 'lines', derive: spec, axis: 'L' });
+    const p = prepareChart({ price: { series: price, compare: other } }, [
+      { id: 'r', configs: [study] },
+    ]);
+    act(() => {
+      create(
+        <TimeSeriesChart
+          rows={[{ id: 'r', height: 200, configs: p.rows[0]!.configs }]}
+          sources={p.sources}
+          theme={defaultTheme}
+          compareInk="#8c8882"
+        />,
+      );
+    });
+    const t = themes.at(-1)!;
+    expect(t.line[outputKey('m', 0)]!.color).toBe('#8c8882');
+  });
+
+  it('follows a study re-pointed at the other symbol under the same id', () => {
+    const on = (input: string): SeriesConfig => {
+      const spec: DeriveSpec = { op: 'sma', inputs: [input], params: { period: 5 } };
+      // A fixed width, so only the SIDE moves in the signature.
+      return cfg('s', deriveId(spec), { derive: spec, axis: 'L', lineWidth: 1 });
+    };
+    const p = prepareChart({ price: { series: price, compare: other } }, [
+      { id: 'r', configs: [on('close'), { ...on('cmp_close'), id: 'other' }] },
+    ]);
+    const el = (c: SeriesConfig) => (
+      <TimeSeriesChart
+        rows={[{ id: 'r', height: 200, configs: [c] }]}
+        sources={p.sources}
+        theme={defaultTheme}
+        compareInk="#8c8882"
+      />
+    );
+    let r!: ReturnType<typeof create>;
+    act(() => {
+      r = create(el(on('close')));
+    });
+    expect(themes.at(-1)!.line['s']!.color).toBe('#c53d26');
+    act(() => r.update(el(on('cmp_close'))));
+    expect(themes.at(-1)!.line['s']!.color).toBe('#8c8882');
   });
 });

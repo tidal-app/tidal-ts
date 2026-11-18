@@ -892,7 +892,11 @@ export function isCompareSide(s: Pick<SeriesConfig, 'derive' | 'column'>): boole
 /** Every leaf of a spec is on the comparison symbol (and it has one) — the
  *  "all" twin of core's `usesCompare`, walked the same way. */
 function onlyCompare(spec: DeriveSpec): boolean {
-  const leaves = (spec.inputs ?? []).filter((i) => typeof i === 'string' || typeof i === 'object');
+  // Safe on any persisted shape, as `usesCompare` is.
+  if (!spec || typeof spec !== 'object') return false;
+  const leaves = (spec.inputs ?? []).filter(
+    (i) => typeof i === 'string' || (typeof i === 'object' && i !== null),
+  );
   return (
     leaves.length > 0 &&
     leaves.every((i) =>

@@ -72,6 +72,7 @@ import {
   seriesLineDashArray,
   seriesLineWidth,
   isCompareSide,
+  readsCompare,
   sharedAxisId,
   axisFormat,
   fractionTicks,
@@ -778,7 +779,11 @@ function TimeSeriesChartInner({
         const marks = configOutputs(c)
           .map((o) => o.mark[0])
           .join('');
-        return `${c.id}:${c.color}:${sp.mode}:${sp.rise}:${sp.fall}:${c.style}:${seriesLineWidth(c, settings)}:${c.lineDash ?? ''}:${c.opacity ?? ''}:${c.fan?.join(',') ?? ''}:${marks}:${c.outputStyles ? JSON.stringify(c.outputStyles) : ''}`;
+        // Which SIDE of a comparison it reads: the dash (`readsCompare`) and
+        // the before ink (`isCompareSide`) both turn on the column and spec,
+        // which a study re-pointed at the other symbol changes under one id.
+        const side = `${readsCompare(c) ? 'c' : ''}${isCompareSide(c) ? 's' : ''}`;
+        return `${c.id}:${side}:${c.color}:${sp.mode}:${sp.rise}:${sp.fall}:${c.style}:${seriesLineWidth(c, settings)}:${c.lineDash ?? ''}:${c.opacity ?? ''}:${c.fan?.join(',') ?? ''}:${marks}:${c.outputStyles ? JSON.stringify(c.outputStyles) : ''}`;
       })
       .join('|') +
     '#' +
