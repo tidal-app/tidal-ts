@@ -2,6 +2,24 @@
 
 All packages release together on one version.
 
+## 0.18.0 — 2026-11-18
+
+A comparison can draw as "before / after": the compared side in a muted ink of
+the host's choosing, the reference in its own colour.
+
+- **`TimeSeriesChart` takes `compareInk`** (chart). A concrete canvas colour.
+  When set, the compared side of a comparison (a raw `cmp_` column, or a study
+  whose every input is on the comparison symbol) draws its line, area fill and
+  outputs in it. Every other series keeps its own colour. The configs are not
+  touched, so an axis shared by a series and its comparison still takes their
+  colour, and a host's legend and swatches are unchanged. A joined pair
+  (`ratio(a, cmp_b)`) reads both symbols and keeps its colour. A split mark
+  (bars, candles, a split histogram) keeps its rise / fall colours: direction
+  is market data, not "which symbol". Absent (the default), nothing changes.
+- **`isCompareSide(config)`** (chart). The test above, exported. Narrower than
+  `readsCompare`, which is true for anything that reads the comparison symbol
+  at all.
+
 ## 0.17.0 — 2026-10-20
 
 A chart inside a scrolling container can let the wheel scroll it.

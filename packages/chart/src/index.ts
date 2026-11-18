@@ -30,6 +30,7 @@ export {
   PAIR_LENSES,
   seriesAxisId,
   readsCompare,
+  isCompareSide,
   seriesDrawn,
   seriesCategoryStyle,
   seriesLineDashArray,
