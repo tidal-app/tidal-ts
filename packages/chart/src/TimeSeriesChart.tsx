@@ -847,12 +847,19 @@ function TimeSeriesChartInner({
       };
       // Area fill wants a solid hex for its gradient, so dim via fillOpacity (not
       // an rgba fill); the outline still carries the dim.
+      //
+      // The outline takes the series' dash exactly as a line does (charts
+      // 0.78 `AreaStyle.dash` dashes the top edge, never the fill). That is
+      // what lets a comparison keep an area as an area: the compared side is
+      // the same shape with a dashed rim, the "before" of before / after. A
+      // user-picked texture on an area reaches the canvas by the same road.
       area[c.id] = {
         ...base.area.default,
         color,
         width,
         fill: stroke,
         fillOpacity: (isDim ? 0.04 : 0.14) * own,
+        ...(dash ? { dash: [...dash] } : {}),
       };
       // A band is a WASH, not a fill under a line: it carries no outline of its
       // own (the middle band draws that, as an ordinary line under the same

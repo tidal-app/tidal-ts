@@ -2,6 +2,17 @@
 
 All packages release together on one version.
 
+## Unreleased
+
+Needs pond-ts 0.78.0 (charts' `AreaStyle.dash`); the pins move to it when it
+is on npm.
+
+- **An area's outline takes the series' dash** (chart), exactly as a line does.
+  A comparison-reading area gets the `comparisons` texture (dashed by default),
+  so a host can keep an area as an area under comparison: the compared side is
+  the same shape with a dashed rim. A user-picked `lineDash` on an area now
+  draws too (it was ignored before). The fill is never dashed.
+
 ## 0.20.0 — 2026-11-20
 
 On pond-ts 0.77.0. A host level can be drawn thicker, at its own strength, and
