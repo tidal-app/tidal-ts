@@ -176,17 +176,17 @@ importers:
         specifier: ^3.0.0
         version: 3.1.1(@types/react@18.3.31)(react@18.3.1)
       '@pond-ts/charts':
-        specifier: ^0.75.0
-        version: 0.75.0(@pond-ts/react@0.75.0(pond-ts@0.75.0)(react@18.3.1))(pond-ts@0.75.0)(react@18.3.1)
+        specifier: ^0.77.0
+        version: 0.77.0(@pond-ts/react@0.77.0(pond-ts@0.77.0)(react@18.3.1))(pond-ts@0.77.0)(react@18.3.1)
       '@pond-ts/financial':
-        specifier: ^0.75.0
-        version: 0.75.0(pond-ts@0.75.0)
+        specifier: ^0.77.0
+        version: 0.77.0(@pond-ts/process@0.77.0(pond-ts@0.77.0))(pond-ts@0.77.0)
       '@pond-ts/process':
-        specifier: 0.75.0
-        version: 0.75.0(pond-ts@0.75.0)
+        specifier: 0.77.0
+        version: 0.77.0(pond-ts@0.77.0)
       '@pond-ts/react':
-        specifier: ^0.75.0
-        version: 0.75.0(pond-ts@0.75.0)(react@18.3.1)
+        specifier: ^0.77.0
+        version: 0.77.0(pond-ts@0.77.0)(react@18.3.1)
       '@tidal-ts/chart':
         specifier: workspace:*
         version: link:../packages/chart
@@ -197,8 +197,8 @@ importers:
         specifier: ^2.0.0
         version: 2.1.1
       pond-ts:
-        specifier: ^0.75.0
-        version: 0.75.0
+        specifier: ^0.77.0
+        version: 0.77.0
       prism-react-renderer:
         specifier: ^2.3.0
         version: 2.4.1(react@18.3.1)
@@ -1981,14 +1981,6 @@ packages:
   '@polka/url@1.0.0-next.29':
     resolution: {integrity: sha512-wwQAWhWSuHaag8c4q/KN/vCoeOJYshAIvMQwD4GpSb3OiZklFfvAgmj0VCBBImRpuF/aFgIRzllXlVX93Jevww==}
 
-  '@pond-ts/charts@0.75.0':
-    resolution: {integrity: sha512-37bpBJ4PB5Ik8tFtypf1ykp4n+403skw8ISmoYyShyzSp1CFRcbkmgi34ZEWHTg/0VfT9G9bf4b6l09bsEwF6Q==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      '@pond-ts/react': ^0.75.0
-      pond-ts: ^0.75.0
-      react: ^18.0.0 || ^19.0.0
-
   '@pond-ts/charts@0.77.0':
     resolution: {integrity: sha512-/ndmBokkVtzXqWh/Gs0NStG/3db5W26fO6gzVfyd4NFYbCePSLmI0GojEdxCjkd1uxxtS6sITCQD1UlN/zlSbg==}
     engines: {node: '>=18'}
@@ -1996,12 +1988,6 @@ packages:
       '@pond-ts/react': ^0.77.0
       pond-ts: ^0.77.0
       react: ^18.0.0 || ^19.0.0
-
-  '@pond-ts/financial@0.75.0':
-    resolution: {integrity: sha512-s5g4ef31aqIfjow3+XYOq604W4bCjH+VwP4r28+DsTnSsSYZANuoy2vtTE2hDGG5vM2WV1ye3jpaHcZfji12VQ==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      pond-ts: ^0.75.0
 
   '@pond-ts/financial@0.77.0':
     resolution: {integrity: sha512-lJogJYZ/lKcpnGLhkOeiKZw/2wE4cjIHTSmu0sIGdfbu51InGiUhPVS5CGTvKRqA1CU8tgipoFIC6vq5/uMbIA==}
@@ -2013,24 +1999,11 @@ packages:
       '@pond-ts/process':
         optional: true
 
-  '@pond-ts/process@0.75.0':
-    resolution: {integrity: sha512-+FJA0ztlNYreHrUWIic7nb32B6n6vDnhncCJHtPW6qxb6dDwtaVgIEcCvirSdIz7Qj2cxCF0SxLagkWqi+qvNA==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      pond-ts: ^0.75.0
-
   '@pond-ts/process@0.77.0':
     resolution: {integrity: sha512-Qd+Q/8zAfyE2t9VRRN7jaAm5TmTh/cLoLJwrPwCE+uvRSNn13Z7Sqo6zSAK8Qot69uR5ZHlbzpBSzCqo8P0G9w==}
     engines: {node: '>=18'}
     peerDependencies:
       pond-ts: ^0.77.0
-
-  '@pond-ts/react@0.75.0':
-    resolution: {integrity: sha512-0qQnnNE1kuCAhRz7VzaVw9eOAaUlqEs+H40vVwKdhpkiqvjqA6sf6mH9VD97l+/584Y4hHnEgRaXCUjKbPwUWg==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      pond-ts: ^0.75.0
-      react: ^18.0.0 || ^19.0.0
 
   '@pond-ts/react@0.77.0':
     resolution: {integrity: sha512-sI6H5uFQOCtTskCT/BY8+svwQ5aqajzEbqk8IpSjdcJUK71rZsy2DudA0D+NMb/avhkIpWp7FbUqe9+PJHmQcg==}
@@ -5366,10 +5339,6 @@ packages:
   polished@4.3.1:
     resolution: {integrity: sha512-OBatVyC/N7SCW/FaDHrSd+vn0o5cS855TOmYi4OkdWUMSJCET/xip//ch8xGUvtr3i44X9LVyWwQlRMTN3pwSA==}
     engines: {node: '>=10'}
-
-  pond-ts@0.75.0:
-    resolution: {integrity: sha512-JhQsp33wqAf2VBaKiBSB+vtoD3Tu0AuaVbx3+ZM3ncsPuugYJWII9rvtttbTKwFMD1znsE0IF/f+3xZPgQWUdA==}
-    engines: {node: '>=18'}
 
   pond-ts@0.77.0:
     resolution: {integrity: sha512-T6t/eUFhXSwBCOuXxjusRd5UdTl6psZi7hn0O83DUPB4OZHuOYyejqP8B67DBhgKPOrtj7Gfd0kW2Kh/LYI7pw==}
@@ -9806,15 +9775,6 @@ snapshots:
 
   '@polka/url@1.0.0-next.29': {}
 
-  '@pond-ts/charts@0.75.0(@pond-ts/react@0.75.0(pond-ts@0.75.0)(react@18.3.1))(pond-ts@0.75.0)(react@18.3.1)':
-    dependencies:
-      '@pond-ts/react': 0.75.0(pond-ts@0.75.0)(react@18.3.1)
-      d3-scale: 4.0.2
-      d3-shape: 3.2.0
-      d3-time-format: 4.1.0
-      pond-ts: 0.75.0
-      react: 18.3.1
-
   '@pond-ts/charts@0.77.0(@pond-ts/react@0.77.0(pond-ts@0.77.0)(react@18.3.1))(pond-ts@0.77.0)(react@18.3.1)':
     dependencies:
       '@pond-ts/react': 0.77.0(pond-ts@0.77.0)(react@18.3.1)
@@ -9824,11 +9784,6 @@ snapshots:
       pond-ts: 0.77.0
       react: 18.3.1
 
-  '@pond-ts/financial@0.75.0(pond-ts@0.75.0)':
-    dependencies:
-      '@js-temporal/polyfill': 0.5.1
-      pond-ts: 0.75.0
-
   '@pond-ts/financial@0.77.0(@pond-ts/process@0.77.0(pond-ts@0.77.0))(pond-ts@0.77.0)':
     dependencies:
       '@js-temporal/polyfill': 0.5.1
@@ -9836,18 +9791,9 @@ snapshots:
     optionalDependencies:
       '@pond-ts/process': 0.77.0(pond-ts@0.77.0)
 
-  '@pond-ts/process@0.75.0(pond-ts@0.75.0)':
-    dependencies:
-      pond-ts: 0.75.0
-
   '@pond-ts/process@0.77.0(pond-ts@0.77.0)':
     dependencies:
       pond-ts: 0.77.0
-
-  '@pond-ts/react@0.75.0(pond-ts@0.75.0)(react@18.3.1)':
-    dependencies:
-      pond-ts: 0.75.0
-      react: 18.3.1
 
   '@pond-ts/react@0.77.0(pond-ts@0.77.0)(react@18.3.1)':
     dependencies:
@@ -13524,10 +13470,6 @@ snapshots:
   polished@4.3.1:
     dependencies:
       '@babel/runtime': 7.29.7
-
-  pond-ts@0.75.0:
-    dependencies:
-      '@js-temporal/polyfill': 0.5.1
 
   pond-ts@0.77.0:
     dependencies:

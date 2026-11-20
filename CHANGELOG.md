@@ -27,6 +27,10 @@ its label stays inside its row.
 - **A theme with no annotation register gets only the level roles** (chart),
   and charts fills the rest from its now exported `defaultAnnotation`. Same
   ink as before; the private copy of that register is gone.
+- **Charts 0.77 changes two fallbacks for a theme with no annotation colour**
+  (from pond, not this package): the cross-row guides move from the grid colour
+  to the default annotation colour, and the x-axis marker pill takes that
+  colour too. A host theme that sets `annotation.color` is unaffected.
 
 ## 0.19.0 — 2026-11-18
 

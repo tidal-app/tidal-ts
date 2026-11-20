@@ -125,6 +125,7 @@ const row: TimeSeriesChartRow = {
       value: 20.36,
       color: '#4f9cd9',
       lineDash: 'dashed',
+      lineWidth: 2,
       label: 'Last',
     },
     {
@@ -141,12 +142,12 @@ const row: TimeSeriesChartRow = {
 ```
 
 A level scales with its series and hides with it. It never moves the axis, so
-the line of one outside the window is off the plot. Its label chip is not
-culled, so label sparingly: a labelled level panned off the axis prints its
-chip outside the row. A range is two lines, with a wash
-between them when it has a `fill`. Lines are 1px, and an inert mark paints at
-the theme's resting annotation depth (`annotation.depth[2]`), so `opacity`
-composes with it.
+the line of one outside the window is off the plot, and so is its label chip;
+a chip near the edge stays inside the row. A range is two lines, with a wash
+between them when it has a `fill`. `lineWidth` sets the stroke in px (omitted,
+the theme's annotation `lineWidth`, else 1px). `opacity` is the line's own
+opacity: a level draws at full strength unless it says otherwise, whatever the
+theme's resting annotation depth.
 
 ## Settings
 
