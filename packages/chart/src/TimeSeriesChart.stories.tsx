@@ -372,7 +372,7 @@ export const BandWithoutMiddle: Story = {
 
 // --- Host levels -------------------------------------------------------------
 // A host's own numbers drawn across a row: the 21D vol's last value as one
-// level, and its low and high over the data as a range with a light wash.
+// level (2px), and its low and high over the data as a range with a light wash.
 // The host computed them (here, a plain read of the column); the chart only
 // draws them on the series' axis, in the ink it is given.
 const iv21Facts = (() => {
@@ -397,6 +397,7 @@ const hostLevels: ChartLevel[] = [
     value: iv21Facts.last,
     color: '#4f9cd9',
     lineDash: 'dashed',
+    lineWidth: 2,
     label: `Last ${iv21Facts.last.toFixed(2)}`,
   },
   {

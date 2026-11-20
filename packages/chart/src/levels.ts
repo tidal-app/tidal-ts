@@ -10,32 +10,25 @@
  * level outside the window is off the plot. A level that should be on screen
  * is the host's to frame (`axisOptions`).
  *
- * Library friction, recorded here for upstream (charts' annotation register):
+ * How it meets charts' annotation register:
  *
- * 1. **No per-mark ink.** `<Baseline>` / `<Zone>` take colour and dash only from
- *    `theme.annotation.roles[role]` ("colour is a theme concern"). Each level
- *    therefore gets its own role ({@link levelRole}), folded into the theme by
- *    {@link levelRoles} — the same route `ChartAnnotation.color` takes.
- * 2. **No stroke width.** A baseline is always 1px, and a role cannot change
- *    it. So a level takes no `lineWidth` yet; adding one that is silently
- *    ignored would be worse than leaving it out.
- * 3. **An inert mark is always at the back.** `selectable={false}` paints at
- *    the register's `depth[2]` (0.4 in charts' shipped themes), and a role
- *    cannot override depth. A level's `opacity` is folded into its colour, so
- *    the line reads at `opacity × depth[2]`, as the guides and the date
- *    markers do. A host wanting a level at full strength today has to raise
- *    `depth[2]` for every mark. Asked for: a per-role depth, or a per-mark
- *    opacity.
- * 4. **A baseline's chip is not culled.** The line is clipped to the row, but
- *    `<Baseline>` places its label chip at the line's y with no clamp (`<Zone>`
- *    clamps, `<Marker>` culls). So a LABELLED level panned or pinned off the
- *    axis prints its chip over the next row or the time axis. Culling it here
- *    would need the axis domain, which the chart does not hold. Asked for: cull
- *    or clamp the chip like the rest of the family. Until then, label sparingly.
- * 5. **The default register is private.** A base theme with no `annotation`
- *    makes charts draw in its internal default, which is not exported. The
- *    level roles need a register to live in, so {@link FALLBACK_REGISTER}
- *    copies it, and adding a level does not recolour every other mark.
+ * - **Ink by role.** `<Baseline>` / `<Zone>` take colour from
+ *   `theme.annotation.roles[role]` ("colour is a theme concern"), so each level
+ *   gets its own role ({@link levelRole}), folded into the theme by
+ *   {@link levelRoles}, the same route `ChartAnnotation.color` takes. The role
+ *   carries the level's dash, `lineWidth` and wash too.
+ * - **`opacity` is the line's opacity.** An inert mark paints at its role's
+ *   `depth[2]`, so each level's role sets its depth to `[1, 1, 1]`: the line
+ *   reads at the level's own `opacity`, not at that times the register's
+ *   resting depth (0.4 in charts' themes) as it did before charts 0.76.
+ * - **A chip stays in its row.** Since charts 0.77 `<Baseline>` hides a line
+ *   and its chip when the value is off the visible y-range, and keeps a chip
+ *   near the edge inside the row.
+ * - **A bare theme keeps its ink.** A theme with no `annotation` gets one
+ *   holding only the level roles; charts fills the rest from its
+ *   `defaultAnnotation`, which is what it drew in anyway.
+ *
+ * Still open upstream: no per-mark colour prop, so a level is one theme role.
  *
  * @module
  */
@@ -50,9 +43,12 @@ export interface ChartLevelStyle {
   color: string;
   /** Texture. Omitted ⇒ `solid`, whatever the theme's register dash is. */
   lineDash?: LineDash;
-  /** `0..1`, folded into the colour. Composes with the register's resting
-   *  depth (see the module note) and with the series' dimming. */
+  /** `0..1`, folded into the colour: the line's own opacity (see the module
+   *  note). Composes with the series' dimming. Omitted ⇒ `1`. */
   opacity?: number;
+  /** Stroke width in px, for the line (or both edges of a range). Omitted ⇒
+   *  the theme's annotation `lineWidth`, else `1`. */
+  lineWidth?: number;
 }
 
 /** Shared by both kinds. */
@@ -97,17 +93,6 @@ export type ChartLevel = ChartLevelLine | ChartLevelRange;
 /** The theme role a level draws in. Unique per (row, level id). */
 export const levelRole = (rowId: string, levelId: string): string =>
   `level\u0000${rowId}\u0000${levelId}`;
-
-/**
- * charts' internal annotation register (`DEFAULT_ANNOTATION`, not exported):
- * what a base theme with no `annotation` draws in. The chart supplies it only
- * when it must add level roles, so the guides and date markers keep their ink.
- */
-export const FALLBACK_REGISTER: NonNullable<ChartTheme['annotation']> = {
-  color: '#14b8a6',
-  fillOpacity: 0.1,
-  depth: [1, 0.7, 0.4],
-};
 
 /** One `<Baseline>` to draw. */
 export interface LevelLineMark {
@@ -188,8 +173,15 @@ export function rowLevelMarks(
 export interface LevelRoleStyle {
   color: string;
   dash: readonly number[];
+  /** Always `[1, 1, 1]`: an inert mark paints at `depth[2]`, and a level's
+   *  strength is its `opacity`, already in `color`. */
+  depth: readonly [number, number, number];
+  lineWidth?: number;
   fillOpacity?: number;
 }
+
+/** A level's depth ramp: every level at full strength, so `opacity` rules. */
+const LEVEL_DEPTH = [1, 1, 1] as const;
 
 const unit = (o: number | undefined): number =>
   typeof o === 'number' && Number.isFinite(o) ? Math.min(1, Math.max(0, o)) : 1;
@@ -199,7 +191,8 @@ const unit = (o: number | undefined): number =>
  * colour is resolved and carries the level's `opacity` (and the chart's
  * dimming, when the series it rides on is dimmed, at the same `0.22` a series
  * takes). `dash` is always stated, so a `solid` level stays solid on a theme
- * whose register is dashed.
+ * whose register is dashed, and `depth` is always `[1, 1, 1]`, so the line
+ * reads at that colour. `lineWidth` is set only when the level gives one.
  */
 export function levelRoles(
   rows: readonly { id: string; levels?: readonly ChartLevel[] }[],
@@ -214,6 +207,10 @@ export function levelRoles(
       out[levelRole(r.id, l.id)] = {
         color: withAlpha(resolveColor(l.color), alpha),
         dash: dash ? [...dash] : [],
+        depth: LEVEL_DEPTH,
+        ...(typeof l.lineWidth === 'number' && Number.isFinite(l.lineWidth) && l.lineWidth > 0
+          ? { lineWidth: l.lineWidth }
+          : {}),
         ...(l.kind === 'range' && l.fill !== undefined && l.fill > 0
           ? { fillOpacity: unit(l.fill) }
           : {}),
@@ -229,7 +226,7 @@ export function levelsSig(rows: readonly { id: string; levels?: readonly ChartLe
     .flatMap((r) =>
       (r.levels ?? []).map(
         (l) =>
-          `${r.id}\u0000${l.id}\u0000${l.series}\u0000${l.color}\u0000${l.lineDash ?? ''}\u0000${l.opacity ?? ''}\u0000${l.kind === 'range' ? (l.fill ?? '') : ''}`,
+          `${r.id}\u0000${l.id}\u0000${l.series}\u0000${l.color}\u0000${l.lineDash ?? ''}\u0000${l.opacity ?? ''}\u0000${l.lineWidth ?? ''}\u0000${l.kind === 'range' ? (l.fill ?? '') : ''}`,
       ),
     )
     .join('|');

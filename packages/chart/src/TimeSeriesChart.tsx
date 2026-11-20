@@ -59,13 +59,7 @@ import {
 import { candleStyleForColor, candleStyleForPair } from './candleStyle.js';
 import { useMeasuredWidth } from './useMeasuredWidth.js';
 import { withAlpha } from './withAlpha.js';
-import {
-  FALLBACK_REGISTER,
-  levelRoles,
-  levelsSig,
-  rowLevelMarks,
-  type ChartLevel,
-} from './levels.js';
+import { levelRoles, levelsSig, rowLevelMarks, type ChartLevel } from './levels.js';
 import { DEFAULT_CHART_SETTINGS, type ChartSettings } from './chartSettings.js';
 import {
   configAxisId,
@@ -927,12 +921,12 @@ function TimeSeriesChartInner({
     // `dash` survives: hue is the user's, texture stays ours (it is what tells
     // the two kinds apart).
     // Host levels (`TimeSeriesChartRow.levels`) take the same route, one role
-    // per level. A base theme with no register would leave their roles
-    // nowhere to live, so they fall back to a copy of charts' own default
-    // register: the ink every other mark already draws in there.
+    // per level. A base theme with no register gets one holding only those
+    // roles: charts fills every field it leaves out from `defaultAnnotation`,
+    // the ink every other mark already draws in there.
     const levelRoleMap = levelRoles(rows, resolveColor, dim);
-    const register =
-      base.annotation ?? (Object.keys(levelRoleMap).length > 0 ? FALLBACK_REGISTER : undefined);
+    const register: ChartTheme['annotation'] =
+      base.annotation ?? (Object.keys(levelRoleMap).length > 0 ? {} : undefined);
     const annotation = register
       ? {
           ...register,
