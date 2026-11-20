@@ -2,6 +2,32 @@
 
 All packages release together on one version.
 
+## 0.20.0 — 2026-11-20
+
+On pond-ts 0.77.0. A host level can be drawn thicker, at its own strength, and
+its label stays inside its row.
+
+- **pond-ts family 0.77.0** (all packages). `pond-ts`, `@pond-ts/financial`,
+  `@pond-ts/react`, `@pond-ts/charts` and `@pond-ts/process` (exact) move from
+  0.75.0 to 0.77.0. Consumers should move with it: `@pond-ts/process` 0.77
+  changes `shape`'s ids (it takes `how`), so a saved id with `shape` in it no
+  longer matches.
+- **`ChartLevel` takes `lineWidth`** (chart), the stroke in px for a level or
+  both edges of a range. Omitted, the theme's annotation `lineWidth` (else 1px)
+  applies. Built on charts' new `lineWidth`, set through the level's role.
+- **A level's `opacity` is the line's opacity** (chart). Each level's role now
+  sets `depth: [1, 1, 1]`, so an inert level no longer reads at `opacity` times
+  the register's resting depth (0.4 in charts' themes). **A level with no
+  `opacity` draws at full strength**, where 0.19 drew it at 0.4: pass
+  `opacity: 0.4` for the old look. `LevelRoleStyle` gains `depth` and
+  `lineWidth`.
+- **A labelled level panned off its axis no longer prints its chip outside the
+  row.** Charts 0.77 hides a `<Baseline>` whose value is off the visible
+  y-range, and keeps a chip near the edge inside the row. No API change.
+- **A theme with no annotation register gets only the level roles** (chart),
+  and charts fills the rest from its now exported `defaultAnnotation`. Same
+  ink as before; the private copy of that register is gone.
+
 ## 0.19.0 — 2026-11-18
 
 A host can draw its own levels on a row: a value, or a low and a high.
