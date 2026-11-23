@@ -7,7 +7,10 @@ import type { ChartSeries } from './types.js';
 
 // What is under test is the THEME the frame is handed: every charts component
 // is inert, the frame records its `theme`, and the axes record their colour.
-type Theme = { line: Record<string, { color: string }>; area: Record<string, { fill: string }> };
+type Theme = {
+  line: Record<string, { color: string }>;
+  area: Record<string, { fill: string; dash?: readonly number[] }>;
+};
 const themes: Theme[] = [];
 const axisColors: (string | undefined)[] = [];
 vi.mock('@pond-ts/charts', async (importOriginal) => {
@@ -31,6 +34,7 @@ vi.mock('./useMeasuredWidth.js', () => ({ useMeasuredWidth: () => [{ current: nu
 const { defaultTheme } = await import('@pond-ts/charts');
 const { TimeSeriesChart } = await import('./TimeSeriesChart.js');
 const { prepareChart, isCompareSide, outputKey } = await import('./index.js');
+const { DASH_PATTERN } = await import('./series.js');
 
 const DAY = 86_400_000;
 const rows: PriceRow[] = [];
@@ -95,6 +99,29 @@ describe('compareInk', () => {
     expect(t.area['p']!.fill).toBe('#c53d26');
     expect(t.line['p__auto']!.color).toBe('#8c8882');
     expect(t.area['p__auto']!.fill).toBe('#8c8882');
+  });
+
+  it("dashes the compared area's outline and leaves the reference solid", () => {
+    // An area under comparison stays an area: the compared side is told apart
+    // by its dashed rim (texture), not by hue alone.
+    const t = render('#8c8882');
+    expect(t.area['p__auto']!.dash).toEqual([...DASH_PATTERN]);
+    expect(t.area['p']!.dash).toBeUndefined();
+  });
+
+  it('gives a plain area its own lineDash, with no comparison in play', () => {
+    const own = cfg('d', 'close', { style: 'area', lineDash: 'dashed' });
+    const p = prepareChart({ price: { series: price } }, [{ id: 'r', configs: [own] }]);
+    act(() => {
+      create(
+        <TimeSeriesChart
+          rows={[{ id: 'r', height: 200, configs: p.rows[0]!.configs }]}
+          sources={p.sources}
+          theme={defaultTheme}
+        />,
+      );
+    });
+    expect(themes.at(-1)!.area['d']!.dash).toEqual([...DASH_PATTERN]);
   });
 
   it('keeps the shared axis in the series colour (the configs still agree)', () => {
