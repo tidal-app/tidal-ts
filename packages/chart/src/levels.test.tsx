@@ -48,7 +48,6 @@ vi.mock('./useMeasuredWidth.js', () => ({ useMeasuredWidth: () => [{ current: nu
 const { defaultTheme } = await import('@pond-ts/charts');
 const { TimeSeriesChart } = await import('./TimeSeriesChart.js');
 const { levelRole, levelRoles, rowLevelMarks, configAxisId } = await import('./index.js');
-const { FALLBACK_REGISTER } = await import('./levels.js');
 
 const cfg = (id: string, over: Partial<SeriesConfig> = {}): SeriesConfig => ({
   id,
@@ -171,7 +170,25 @@ describe('levelRoles', () => {
     const roles = levelRoles(rows([level({ color: 'amber' })]), (c) =>
       c === 'amber' ? '#cc8800' : c,
     );
-    expect(roles[levelRole('r1', 'last')]).toEqual({ color: '#cc8800', dash: [] });
+    expect(roles[levelRole('r1', 'last')]).toEqual({
+      color: '#cc8800',
+      dash: [],
+      depth: [1, 1, 1],
+    });
+  });
+
+  it('puts every level at full depth, so its opacity is the line it draws', () => {
+    const r = levelRoles(rows([level({ opacity: 0.4 })]), (c) => c)[levelRole('r1', 'last')]!;
+    expect(r.depth).toEqual([1, 1, 1]);
+  });
+
+  it('takes a stroke width, and leaves an absent or unusable one to the theme', () => {
+    const at = (lineWidth: number | undefined) =>
+      levelRoles(rows([level({ lineWidth })]), (c) => c)[levelRole('r1', 'last')]!.lineWidth;
+    expect(at(2)).toBe(2);
+    expect(at(undefined)).toBeUndefined();
+    expect(at(0)).toBeUndefined();
+    expect(at(Number.NaN)).toBeUndefined();
   });
 
   it('takes the texture, the opacity and a range fill', () => {
@@ -234,7 +251,11 @@ describe('TimeSeriesChart — row levels', () => {
       [18.1, 24.7, 'r:L', levelRole('r', 'ext')],
     ]);
     const roles = themes.at(-1)!.annotation!.roles!;
-    expect(roles[levelRole('r', 'last')]).toEqual({ color: '#cc8800', dash: [] });
+    expect(roles[levelRole('r', 'last')]).toEqual({
+      color: '#cc8800',
+      dash: [],
+      depth: [1, 1, 1],
+    });
     expect(roles[levelRole('r', 'ext')]!.fillOpacity).toBe(0.1);
   });
 
@@ -275,8 +296,10 @@ describe('TimeSeriesChart — row levels', () => {
     render(undefined, {}, { theme: bare });
     expect(themes.at(-1)!.annotation).toBeUndefined();
     render([level()], {}, { theme: bare });
-    const ann = themes.at(-1)!.annotation as { color: string; roles: Roles };
-    expect(ann.color).toBe(FALLBACK_REGISTER.color);
+    // Only the level roles: charts fills colour, wash and depth from its own
+    // `defaultAnnotation`, which is what the bare theme drew in already.
+    const ann = themes.at(-1)!.annotation as Record<string, unknown> & { roles: Roles };
+    expect(Object.keys(ann)).toEqual(['roles']);
     expect(Object.keys(ann.roles)).toEqual([levelRole('r', 'last')]);
   });
 
