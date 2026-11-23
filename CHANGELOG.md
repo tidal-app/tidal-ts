@@ -14,8 +14,12 @@ its shape.
   on charts' new `AreaStyle.dash`. A comparison-reading area gets the
   `comparisons` texture (dashed by default), so a host can keep an area as an
   area under comparison: the compared side is the same shape with a dashed rim.
-  A user-picked `lineDash` on an area now draws too (it was ignored before).
   The fill is never dashed.
+- **Behaviour change: every area now draws its line texture.** An area takes
+  its dash from the same place a line does, so a user-picked `lineDash` on an
+  area (ignored before, including in saved layouts) now shows, and so does a
+  dashed or dotted `metrics.dash` / `derived.dash` setting, which now dashes
+  the outline of every area in that category as well as every line.
 
 ## 0.20.0 — 2026-11-20
 

@@ -109,6 +109,21 @@ describe('compareInk', () => {
     expect(t.area['p']!.dash).toBeUndefined();
   });
 
+  it('gives a plain area its own lineDash, with no comparison in play', () => {
+    const own = cfg('d', 'close', { style: 'area', lineDash: 'dashed' });
+    const p = prepareChart({ price: { series: price } }, [{ id: 'r', configs: [own] }]);
+    act(() => {
+      create(
+        <TimeSeriesChart
+          rows={[{ id: 'r', height: 200, configs: p.rows[0]!.configs }]}
+          sources={p.sources}
+          theme={defaultTheme}
+        />,
+      );
+    });
+    expect(themes.at(-1)!.area['d']!.dash).toEqual([...DASH_PATTERN]);
+  });
+
   it('keeps the shared axis in the series colour (the configs still agree)', () => {
     axisColors.length = 0;
     render('#8c8882');
