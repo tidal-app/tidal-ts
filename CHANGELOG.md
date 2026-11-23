@@ -2,16 +2,20 @@
 
 All packages release together on one version.
 
-## Unreleased
+## 0.21.0 — 2026-11-23
 
-Needs pond-ts 0.78.0 (charts' `AreaStyle.dash`); the pins move to it when it
-is on npm.
+On pond-ts 0.78.0. An area's outline can be dashed, so a compared area keeps
+its shape.
 
-- **An area's outline takes the series' dash** (chart), exactly as a line does.
-  A comparison-reading area gets the `comparisons` texture (dashed by default),
-  so a host can keep an area as an area under comparison: the compared side is
-  the same shape with a dashed rim. A user-picked `lineDash` on an area now
-  draws too (it was ignored before). The fill is never dashed.
+- **pond-ts family 0.78.0** (all packages). `pond-ts`, `@pond-ts/financial`,
+  `@pond-ts/react`, `@pond-ts/charts` and `@pond-ts/process` (exact) move from
+  0.77.0 to 0.78.0. Nothing in tidal-ts needed to change for it.
+- **An area's outline takes the series' dash** (chart), exactly as a line does,
+  on charts' new `AreaStyle.dash`. A comparison-reading area gets the
+  `comparisons` texture (dashed by default), so a host can keep an area as an
+  area under comparison: the compared side is the same shape with a dashed rim.
+  A user-picked `lineDash` on an area now draws too (it was ignored before).
+  The fill is never dashed.
 
 ## 0.20.0 — 2026-11-20
 
