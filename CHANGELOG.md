@@ -18,6 +18,8 @@ as one joined line with the metric's studies running on it.
   on a study, on anything that already states its symbols (a leg, a spread,
   anything reading the comparison) and on anything drawing several lines (a
   band, a multi-output metric, a fan). Clearing is always allowed.
+  `series.patch` cannot set it, and a metric that stops being eligible (it
+  becomes a pair leg, takes a fan or a band style) drops it.
 - **`canonRows` hashes `compareFn`**: the same rows with and without a function
   are different presets.
 - **Behaviour change: a spread is no longer dashed** (chart, TDL-SPREADINK).
