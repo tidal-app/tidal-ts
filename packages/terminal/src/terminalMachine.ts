@@ -373,7 +373,7 @@ export type TerminalEvent =
   | {
       type: 'series.patch';
       id: string;
-      patch: Partial<Omit<SeriesConfig, 'axis' | 'axisGroup' | 'parentIds'>>;
+      patch: Partial<Omit<SeriesConfig, 'axis' | 'axisGroup' | 'parentIds' | 'compareFn'>>;
     }
   | { type: 'series.toggleVisible'; id: string }
   /** Set or clear the function a compare applies to a metric
@@ -1519,6 +1519,13 @@ export function dataColumnsAllowed(
  * presentation field: a patch may not rewrite which config a study is on.
  */
 function coherentPatch(c: SeriesConfig, patch: Partial<SeriesConfig>): SeriesConfig {
+  // `compareFn` is set only through `series.setCompareFn` and its guard; a
+  // patch that names it (an untyped caller) is not let around that guard.
+  const { compareFn: _ignored, ...asked } = patch;
+  return keepCompareFnCoherent(drawablePatch(c, asked));
+}
+
+function drawablePatch(c: SeriesConfig, patch: Partial<SeriesConfig>): SeriesConfig {
   const next: SeriesConfig = { ...c, ...patch, parentIds: c.parentIds };
   if (next.derive) return next;
   const fanned = !!next.fan && next.fan.length > 0;
@@ -1529,6 +1536,18 @@ function coherentPatch(c: SeriesConfig, patch: Partial<SeriesConfig>): SeriesCon
   if (!fanned && next.style === 'band')
     return { ...next, style: c.style === 'band' ? 'line' : c.style };
   return next;
+}
+
+/**
+ * A config that has stopped being one a compare function may sit on — it
+ * joined a pair as a leg, took a fan, took a band style — drops the function,
+ * so a saved config never carries one {@link compareFnAllowed} refuses (PR #45
+ * review). Everything else passes through unchanged.
+ */
+function keepCompareFnCoherent(c: SeriesConfig): SeriesConfig {
+  if (!c.compareFn || compareFnAllowed(c)) return c;
+  const { compareFn: _drop, ...rest } = c;
+  return rest;
 }
 
 /** Bar price columns in the bar's own order. */
@@ -2729,7 +2748,7 @@ export const terminalMachine = setup({
             ...r,
             configs: (r.id === row.id ? [...plan.create, ...r.configs] : r.configs).map((c) => {
               const group = tag.get(c.id);
-              return group ? { ...c, group } : c;
+              return group ? keepCompareFnCoherent({ ...c, group }) : c;
             }),
           }));
         }
@@ -2853,7 +2872,7 @@ export const terminalMachine = setup({
             );
             if (i >= 0 && c.parentIds?.[i] == null) orphans.set(c.id, i);
           }
-        const next = dataColumnsConfig(node, event.columns);
+        const next = keepCompareFnCoherent(dataColumnsConfig(node, event.columns));
         return context.rows.map((r) => ({
           ...r,
           configs: r.configs.map((c) => {

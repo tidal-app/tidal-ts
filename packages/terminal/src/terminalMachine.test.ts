@@ -3713,6 +3713,51 @@ describe('a compare function on a metric (series.setCompareFn)', () => {
     expect(canonRows(ctx().rows)).toBe(before);
   });
 
+  it('is not set by a patch, which would go around the guard (PR #45 review)', () => {
+    const { actor, ctx, idOf } = start();
+    const iv = idOf('iv21');
+    actor.send({
+      type: 'series.patch',
+      id: iv,
+      // An untyped caller: the patch type leaves the field out.
+      patch: { compareFn: 'ratio' } as never,
+    });
+    expect('compareFn' in find(ctx, 'iv21')).toBe(false);
+    // …and a patch that names something else keeps a function set the right way.
+    actor.send({ type: 'series.setCompareFn', id: iv, fn: 'ratio' });
+    actor.send({ type: 'series.patch', id: iv, patch: { color: 'green' } });
+    expect(find(ctx, 'iv21').compareFn).toBe('ratio');
+  });
+
+  it('is dropped when the metric becomes a pair leg (PR #45 review)', () => {
+    const { actor, ctx, idOf, leg } = start();
+    actor.send({ type: 'series.add', catalogId: 'iv63' });
+    actor.send({ type: 'series.setCompareFn', id: idOf('iv63'), fn: 'ratio' });
+    expect(find(ctx, 'iv63').compareFn).toBe('ratio');
+    actor.send({
+      type: 'series.addPair',
+      a: { metricId: leg('iv63') },
+      b: { metricId: leg('iv21') },
+      op: 'none',
+    });
+    const leg63 = find(ctx, 'iv63');
+    expect(leg63.group).toBeDefined();
+    expect('compareFn' in leg63).toBe(false);
+  });
+
+  it('is dropped when a data node fans out to several columns (PR #45 review)', () => {
+    const { actor, ctx, idOf } = start();
+    const price = idOf('close');
+    actor.send({ type: 'series.setCompareFn', id: price, fn: 'ratio' });
+    expect(find(ctx, 'close').compareFn).toBe('ratio');
+    actor.send({ type: 'series.setDataColumns', id: price, columns: ['open', 'close'] });
+    const p = ctx()
+      .rows.flatMap((r) => r.configs)
+      .find((c) => c.id === price)!;
+    expect(p.fan).toBeDefined();
+    expect('compareFn' in p).toBe(false);
+  });
+
   it('hashes a config with no function exactly as before the field existed', () => {
     // A saved preset must still light its slot after the upgrade.
     const rows = initialRows();
