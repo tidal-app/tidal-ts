@@ -27,6 +27,7 @@ import {
   type RowState,
   type TerminalPreset,
   studyOfferable,
+  compareFnAllowed,
   MAX_ROWS,
 } from './terminalMachine.js';
 
@@ -3692,5 +3693,131 @@ describe("a study's colour follows its parent's", () => {
     actor.send({ type: 'series.patch', id: price, patch: { color: 'pink' } });
     expect(all(ctx).find((c) => c.id === sma.id)!.color).toBe('green');
     expect(all(ctx).find((c) => c.id === ema.id)!.color).toBe(root);
+  });
+});
+
+describe('a compare function on a metric (series.setCompareFn)', () => {
+  it('sets and clears the function on a metric, and a preset tells them apart', () => {
+    const { actor, ctx, idOf } = start();
+    const iv = idOf('iv21');
+    const before = canonRows(ctx().rows);
+    actor.send({ type: 'series.setCompareFn', id: iv, fn: 'ratio' });
+    expect(find(ctx, 'iv21').compareFn).toBe('ratio');
+    // A function is composition: the same rows with and without it are two looks.
+    expect(canonRows(ctx().rows)).not.toBe(before);
+    actor.send({ type: 'series.setCompareFn', id: iv, fn: 'diff' });
+    expect(find(ctx, 'iv21').compareFn).toBe('diff');
+    actor.send({ type: 'series.setCompareFn', id: iv, fn: null });
+    // Cleared by removing the key, so it persists like a config that never had one.
+    expect('compareFn' in find(ctx, 'iv21')).toBe(false);
+    expect(canonRows(ctx().rows)).toBe(before);
+  });
+
+  it('is not set by a patch, which would go around the guard (PR #45 review)', () => {
+    const { actor, ctx, idOf } = start();
+    const iv = idOf('iv21');
+    actor.send({
+      type: 'series.patch',
+      id: iv,
+      // An untyped caller: the patch type leaves the field out.
+      patch: { compareFn: 'ratio' } as never,
+    });
+    expect('compareFn' in find(ctx, 'iv21')).toBe(false);
+    // …and a patch that names something else keeps a function set the right way.
+    actor.send({ type: 'series.setCompareFn', id: iv, fn: 'ratio' });
+    actor.send({ type: 'series.patch', id: iv, patch: { color: 'green' } });
+    expect(find(ctx, 'iv21').compareFn).toBe('ratio');
+  });
+
+  it('is dropped when the metric becomes a pair leg (PR #45 review)', () => {
+    const { actor, ctx, idOf, leg } = start();
+    actor.send({ type: 'series.add', catalogId: 'iv63' });
+    actor.send({ type: 'series.setCompareFn', id: idOf('iv63'), fn: 'ratio' });
+    expect(find(ctx, 'iv63').compareFn).toBe('ratio');
+    actor.send({
+      type: 'series.addPair',
+      a: { metricId: leg('iv63') },
+      b: { metricId: leg('iv21') },
+      op: 'none',
+    });
+    const leg63 = find(ctx, 'iv63');
+    expect(leg63.group).toBeDefined();
+    expect('compareFn' in leg63).toBe(false);
+  });
+
+  it('is dropped when a data node fans out to several columns (PR #45 review)', () => {
+    const { actor, ctx, idOf } = start();
+    const price = idOf('close');
+    actor.send({ type: 'series.setCompareFn', id: price, fn: 'ratio' });
+    expect(find(ctx, 'close').compareFn).toBe('ratio');
+    actor.send({ type: 'series.setDataColumns', id: price, columns: ['open', 'close'] });
+    const p = ctx()
+      .rows.flatMap((r) => r.configs)
+      .find((c) => c.id === price)!;
+    expect(p.fan).toBeDefined();
+    expect('compareFn' in p).toBe(false);
+  });
+
+  it('hashes a config with no function exactly as before the field existed', () => {
+    // A saved preset must still light its slot after the upgrade.
+    const rows = initialRows();
+    const json = JSON.parse(canonRows(rows));
+    expect(json[0][1][0]).toHaveLength(23); // the 0.21 shape
+  });
+
+  it('leaves the spec, the column and the studies alone: the host rewrites at render', () => {
+    const { actor, ctx, idOf } = start();
+    const iv = idOf('iv21');
+    actor.send({ type: 'series.addStudy', targetId: iv, op: 'sma', period: 20 });
+    actor.send({ type: 'series.setCompareFn', id: iv, fn: 'ratio' });
+    expect(find(ctx, 'iv21').derive).toBeUndefined();
+    expect(find(ctx, deriveId(SMA20)).derive).toEqual(SMA20);
+    expect(find(ctx, deriveId(SMA20)).compareFn).toBeUndefined();
+  });
+
+  it('is refused on a study: the function sits straight after the metric', () => {
+    const { actor, ctx, idOf } = start();
+    actor.send({ type: 'series.addStudy', targetId: idOf('iv21'), op: 'sma', period: 20 });
+    const sma = idOf(deriveId(SMA20));
+    actor.send({ type: 'series.setCompareFn', id: sma, fn: 'ratio' });
+    expect(find(ctx, deriveId(SMA20)).compareFn).toBeUndefined();
+  });
+
+  it('is allowed on a derived catalog metric, which is a root, not a study', () => {
+    const rows: RowState[] = [
+      { id: 'top', height: 0, configs: [cfg(RV, { derive: RV_SPEC, unit: 'variance' })] },
+    ];
+    const { actor, ctx, idOf } = start(rows);
+    actor.send({ type: 'series.setCompareFn', id: idOf(RV), fn: 'logRatio' });
+    expect(find(ctx, RV).compareFn).toBe('logRatio');
+  });
+
+  it('refuses whatever already states its symbols or draws several lines', () => {
+    expect(compareFnAllowed(cfg('iv21'))).toBe(true);
+    expect(compareFnAllowed(cfg('cmp_iv21'))).toBe(false);
+    expect(compareFnAllowed(cfg(deriveId(RATIO_21_CMP), { derive: RATIO_21_CMP }))).toBe(false);
+    expect(compareFnAllowed(cfg(deriveId(RATIO_63_21), { derive: RATIO_63_21 }))).toBe(false);
+    expect(compareFnAllowed(cfg('iv21', { group: { id: 'g', side: 'A' } }))).toBe(false);
+    expect(compareFnAllowed(cfg('iv21', { style: 'band' }))).toBe(false);
+    expect(compareFnAllowed(cfg('close', { fan: ['open', 'close'] }))).toBe(false);
+    expect(compareFnAllowed(cfg(deriveId(SMA20), { derive: SMA20 }))).toBe(false);
+  });
+
+  it('can always be cleared, and an unknown function is refused', () => {
+    const rows: RowState[] = [
+      // Persisted on something that can no longer carry one: still removable.
+      { id: 'top', height: 0, configs: [cfg('iv21', { style: 'band', compareFn: 'ratio' })] },
+    ];
+    const { actor, ctx, idOf } = start(rows);
+    actor.send({ type: 'series.setCompareFn', id: idOf('iv21'), fn: null });
+    expect(find(ctx, 'iv21').compareFn).toBeUndefined();
+    const fresh = start();
+    actor.stop();
+    fresh.actor.send({
+      type: 'series.setCompareFn',
+      id: fresh.idOf('iv21'),
+      fn: 'sma' as unknown as 'ratio',
+    });
+    expect(find(fresh.ctx, 'iv21').compareFn).toBeUndefined();
   });
 });

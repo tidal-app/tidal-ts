@@ -215,6 +215,7 @@ import {
   BAR_PRICE_COLUMNS,
   COMPARE_PREFIX,
   deriveId,
+  hasPairOp,
   inputNames,
   isPairOp,
   isPickedInput,
@@ -226,7 +227,7 @@ import {
   usesCompare,
   withFanOutput,
 } from '@tidal-ts/core';
-import type { DeriveSpec, SeriesWindow } from '@tidal-ts/core';
+import type { DeriveSpec, PairOp, SeriesWindow } from '@tidal-ts/core';
 export type { DeriveSpec, SeriesWindow };
 
 // Candle-only sub-options, straight off `<Candlestick>`: the mark shape and what
@@ -411,6 +412,21 @@ export interface SeriesConfig {
    * Oscillator) is `style: 'bar'`, and becomes a line by its `style`.
    */
   outputBars?: boolean;
+  /**
+   * The function a **compare** applies to this metric and the same metric on
+   * the comparison symbol — `ratio` reads `A / B`. Set on the ROOT of a chain
+   * (a metric, never a study), it joins the two into ONE line and every study
+   * on the metric runs on that joined line: `sma(close)` draws as
+   * `sma(ratio(close, cmp_close))`.
+   *
+   * It is a setting about how to read a comparison, so with no comparison named
+   * it SLEEPS: the chain draws on the primary alone, and the function comes
+   * back with the next comparison. Absent ⇒ no function: under a comparison the
+   * metric draws twice, once per symbol. The host does the rewriting at render
+   * time; the config itself keeps its own spec, so clearing the function, or
+   * the comparison, has nothing to restore.
+   */
+  compareFn?: PairOp;
 }
 
 /** The textures in display order. */
@@ -878,6 +894,18 @@ export function readsCompare(s: Pick<SeriesConfig, 'derive' | 'column'>): boolea
 }
 
 /**
+ * True if a series draws in the **comparison texture** — it reads the
+ * comparison symbol and is not a JOINED reading of both. A spread such as
+ * `ratio(iv21, cmp_iv21)`, and any study run on one, is one derived reading OF
+ * both symbols rather than the secondary line, so it draws as an ordinary
+ * metric or study: the dash says "the other symbol", and a spread is not that
+ * (TDL-SPREADINK).
+ */
+export function drawsAsCompare(s: Pick<SeriesConfig, 'derive' | 'column'>): boolean {
+  return readsCompare(s) && !(s.derive && hasPairOp(s.derive));
+}
+
+/**
  * True if a series is the **compared side** of a comparison: every leaf it
  * reads is on the comparison symbol (a raw `cmp_` column, or a study whose
  * inputs are all `cmp_`). Narrower than {@link readsCompare}: a joined pair
@@ -911,7 +939,7 @@ function onlyCompare(spec: DeriveSpec): boolean {
  *  series takes the `comparisons` category (dashed) whatever else it is — the
  *  texture encodes the SYMBOL, so a study of a compare leg is dashed too. */
 export function seriesCategoryStyle(s: SeriesConfig, settings: ChartSettings): CategoryLineStyle {
-  if (readsCompare(s)) return settings.comparisons;
+  if (drawsAsCompare(s)) return settings.comparisons;
   return isStudySeries(s) ? settings.derived : settings.metrics;
 }
 
@@ -940,7 +968,7 @@ export function seriesLineDashArray(
   s: SeriesConfig,
   settings: ChartSettings = DEFAULT_CHART_SETTINGS,
 ): readonly [number, number] | undefined {
-  if (s.lineDash && !readsCompare(s)) return dashPattern(s.lineDash);
+  if (s.lineDash && !drawsAsCompare(s)) return dashPattern(s.lineDash);
   return dashPattern(seriesCategoryStyle(s, settings).dash);
 }
 

@@ -103,6 +103,24 @@ describe('seriesLineWidth / seriesLineDashArray', () => {
   it('honors an explicit per-series override over every default', () => {
     expect(seriesLineWidth(cfg({ unit: '$', lineWidth: 0.5 }))).toBe(0.5);
   });
+
+  it('dashes the other symbol, but not a joined reading of both (TDL-SPREADINK)', () => {
+    const RATIO = { op: 'ratio', inputs: ['iv21', 'cmp_iv21'] } as const;
+    // The secondary line, raw or studied, is dashed.
+    expect(seriesLineDashArray(cfg({ column: 'cmp_iv21' }))).toEqual([6, 4]);
+    expect(seriesLineDashArray(cfg({ derive: { ...STUDY, inputs: ['cmp_iv21'] } }))).toEqual([
+      6, 4,
+    ]);
+    // A spread, and a study run on one, draw as a metric and a study.
+    expect(seriesLineDashArray(cfg({ derive: RATIO }))).toBeUndefined();
+    expect(seriesLineWidth(cfg({ derive: RATIO }))).toBe(1.5);
+    const onSpread = { ...STUDY, inputs: [RATIO] };
+    expect(seriesLineDashArray(cfg({ derive: onSpread }))).toBeUndefined();
+    expect(seriesLineWidth(cfg({ derive: onSpread }))).toBe(0.5);
+    // …and take a texture asked for, which the secondary line never does.
+    expect(seriesLineDashArray(cfg({ derive: RATIO, lineDash: 'dotted' }))).toEqual([1.5, 3]);
+    expect(seriesLineDashArray(cfg({ column: 'cmp_iv21', lineDash: 'solid' }))).toEqual([6, 4]);
+  });
 });
 
 describe('effectiveSplit', () => {
