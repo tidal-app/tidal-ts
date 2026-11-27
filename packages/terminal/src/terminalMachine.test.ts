@@ -3713,6 +3713,13 @@ describe('a compare function on a metric (series.setCompareFn)', () => {
     expect(canonRows(ctx().rows)).toBe(before);
   });
 
+  it('hashes a config with no function exactly as before the field existed', () => {
+    // A saved preset must still light its slot after the upgrade.
+    const rows = initialRows();
+    const json = JSON.parse(canonRows(rows));
+    expect(json[0][1][0]).toHaveLength(23); // the 0.21 shape
+  });
+
   it('leaves the spec, the column and the studies alone: the host rewrites at render', () => {
     const { actor, ctx, idOf } = start();
     const iv = idOf('iv21');

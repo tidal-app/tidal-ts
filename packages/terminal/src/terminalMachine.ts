@@ -2400,7 +2400,9 @@ export function canonRows(rows: readonly RowState[]): string {
             : null,
           c.fan ?? null,
           // How the metric reads under a comparison: one joined line or two.
-          c.compareFn ?? null,
+          // Appended only when set, so a config without one hashes exactly as
+          // it did before the field existed and a saved preset still matches.
+          ...(c.compareFn ? [c.compareFn] : []),
         ]),
       ];
     }),
