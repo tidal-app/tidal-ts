@@ -42,6 +42,7 @@ export {
   PAIR_LENSES,
   seriesAxisId,
   readsCompare,
+  drawsAsCompare,
   isCompareSide,
   seriesDrawn,
   seriesCategoryStyle,

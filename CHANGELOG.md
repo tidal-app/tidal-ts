@@ -20,6 +20,11 @@ as one joined line with the metric's studies running on it.
   band, a multi-output metric, a fan). Clearing is always allowed.
 - **`canonRows` hashes `compareFn`**: the same rows with and without a function
   are different presets.
+- **Behaviour change: a spread is no longer dashed** (chart, TDL-SPREADINK).
+  The comparison texture now means "the other symbol" only: a series that
+  reads the comparison through a pair op (`ratio(iv21, cmp_iv21)`, or a study
+  run on one) draws in the metrics or studies category, solid by default, and
+  takes a `lineDash` it is given. New predicate `drawsAsCompare`.
 
 ## 0.21.0 — 2026-11-23
 
