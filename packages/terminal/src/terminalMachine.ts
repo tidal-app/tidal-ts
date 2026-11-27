@@ -376,6 +376,12 @@ export type TerminalEvent =
       patch: Partial<Omit<SeriesConfig, 'axis' | 'axisGroup' | 'parentIds'>>;
     }
   | { type: 'series.toggleVisible'; id: string }
+  /** Set or clear the function a compare applies to a metric
+   *  ({@link SeriesConfig.compareFn}) — `null` clears it, so the metric draws
+   *  once per symbol again. Refused for anything {@link compareFnAllowed}
+   *  refuses. Allowed with no comparison named: the function sleeps until
+   *  there is one, and the machine cannot see whether there is. */
+  | { type: 'series.setCompareFn'; id: string; fn: PairOp | null }
   /** The PAIR's own eye — hides both legs at once. Each leg keeps its own
    *  `visible`, so unhiding the pair restores what each leg was rather than
    *  switching everything on (Peter, 2026-08-18). */
@@ -2309,6 +2315,32 @@ function comparableMetric(c: SeriesConfig): boolean {
   return !c.column.startsWith(COMPARE_PREFIX);
 }
 
+/**
+ * Whether a seated config can carry a compare function
+ * ({@link SeriesConfig.compareFn}).
+ *
+ * Only the ROOT of a chain — a metric, raw or a derived catalog metric, never
+ * a study: the function sits straight after the metric and every study on it
+ * runs on the joined line, so a study carrying its own would be a second join
+ * inside the first. And only something that has one reading per symbol:
+ * refused for anything that already states its own symbols (a leg of a leg
+ * group, a spread, anything reading the comparison) and for anything that
+ * draws several lines (a band, a multi-output metric, a fan), which has no
+ * single line to divide by another.
+ */
+export function compareFnAllowed(c: SeriesConfig): boolean {
+  if (c.group) return false;
+  if (c.column.startsWith(COMPARE_PREFIX)) return false;
+  if (c.style === 'band' || c.style === 'lines') return false;
+  if (c.fan && c.fan.length > 0) return false;
+  if (c.derive) {
+    if (isStudyOp(c.derive.op)) return false;
+    if (hasPairOp(c.derive) || usesCompare(c.derive)) return false;
+    if (opIsMulti(c.derive.op) || opIsBand(c.derive.op)) return false;
+  }
+  return true;
+}
+
 export function canonRows(rows: readonly RowState[]): string {
   return JSON.stringify(
     rows.map((r) => {
@@ -2367,6 +2399,8 @@ export function canonRows(rows: readonly RowState[]): string {
                 .map((k) => [k, c.outputStyles![k]])
             : null,
           c.fan ?? null,
+          // How the metric reads under a comparison: one joined line or two.
+          c.compareFn ?? null,
         ]),
       ];
     }),
@@ -2544,6 +2578,14 @@ export const terminalMachine = setup({
       dataColumnsAllowed(context, event.id, event.columns),
     canSetStudyOutputs: ({ context, event }) =>
       event.type === 'series.setStudyOutputs' && outputsAllowed(context, event.id, event.outputs),
+    canSetCompareFn: ({ context, event }) => {
+      if (event.type !== 'series.setCompareFn') return false;
+      const target = flatConfigs(context.rows).find((c) => c.id === event.id);
+      if (!target) return false;
+      // Clearing is always allowed: a function persisted on something that
+      // can no longer carry one must still be removable.
+      return event.fn === null || (isPairOp(event.fn) && compareFnAllowed(target));
+    },
     canSetStudyParam: ({ context, event }) =>
       event.type === 'series.setStudyParam' &&
       respecAllowed(context, event.id, event.name, event.value),
@@ -3056,6 +3098,25 @@ export const terminalMachine = setup({
         return pruneEmptied(context.rows, mapped);
       },
     }),
+    setCompareFn: assign({
+      rows: ({ context, event }) => {
+        if (event.type !== 'series.setCompareFn') return context.rows;
+        return context.rows.map((r) =>
+          r.configs.some((c) => c.id === event.id)
+            ? {
+                ...r,
+                configs: r.configs.map((c) => {
+                  if (c.id !== event.id) return c;
+                  // Cleared by REMOVING the key, so a cleared config and one
+                  // that never had a function persist the same shape.
+                  const { compareFn: _drop, ...rest } = c;
+                  return event.fn ? { ...rest, compareFn: event.fn } : rest;
+                }),
+              }
+            : r,
+        );
+      },
+    }),
     patchSeries: assign({
       rows: ({ context, event }) => {
         if (event.type !== 'series.patch') return context.rows;
@@ -3512,6 +3573,7 @@ export const terminalMachine = setup({
     'series.moveToRow': { guard: 'canMoveToRow', actions: 'moveSeriesToRow' },
     'series.remove': { actions: 'removeSeries' },
     'series.patch': { actions: 'patchSeries' },
+    'series.setCompareFn': { guard: 'canSetCompareFn', actions: 'setCompareFn' },
     'series.toggleVisible': { actions: 'toggleVisible' },
     'group.toggleVisible': { actions: 'toggleGroupVisible' },
     'group.remove': { actions: 'removeGroup' },

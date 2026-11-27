@@ -164,6 +164,15 @@ export function useCompareAll(): () => void {
   return useCallback(() => ref.send({ type: 'series.compareAll' }), [ref]);
 }
 
+/** Set or clear (`null`) the function a compare applies to a metric. */
+export function useSetCompareFn(): (id: string, fn: PairOp | null) => void {
+  const ref = TerminalContext.useActorRef();
+  return useCallback(
+    (id: string, fn: PairOp | null) => ref.send({ type: 'series.setCompareFn', id, fn }),
+    [ref],
+  );
+}
+
 export function useSetStudyParam(): (id: string, name: string, value: number) => void {
   const ref = TerminalContext.useActorRef();
   return useCallback(

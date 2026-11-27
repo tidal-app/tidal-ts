@@ -226,7 +226,7 @@ import {
   usesCompare,
   withFanOutput,
 } from '@tidal-ts/core';
-import type { DeriveSpec, SeriesWindow } from '@tidal-ts/core';
+import type { DeriveSpec, PairOp, SeriesWindow } from '@tidal-ts/core';
 export type { DeriveSpec, SeriesWindow };
 
 // Candle-only sub-options, straight off `<Candlestick>`: the mark shape and what
@@ -411,6 +411,21 @@ export interface SeriesConfig {
    * Oscillator) is `style: 'bar'`, and becomes a line by its `style`.
    */
   outputBars?: boolean;
+  /**
+   * The function a **compare** applies to this metric and the same metric on
+   * the comparison symbol — `ratio` reads `A / B`. Set on the ROOT of a chain
+   * (a metric, never a study), it joins the two into ONE line and every study
+   * on the metric runs on that joined line: `sma(close)` draws as
+   * `sma(ratio(close, cmp_close))`.
+   *
+   * It is a setting about how to read a comparison, so with no comparison named
+   * it SLEEPS: the chain draws on the primary alone, and the function comes
+   * back with the next comparison. Absent ⇒ no function: under a comparison the
+   * metric draws twice, once per symbol. The host does the rewriting at render
+   * time; the config itself keeps its own spec, so clearing the function, or
+   * the comparison, has nothing to restore.
+   */
+  compareFn?: PairOp;
 }
 
 /** The textures in display order. */

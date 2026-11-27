@@ -2,6 +2,25 @@
 
 All packages release together on one version.
 
+## 0.22.0 — 2026-11-27
+
+A metric can carry the function its compare applies, so a comparison can read
+as one joined line with the metric's studies running on it.
+
+- **`SeriesConfig.compareFn`** (chart): `diff`, `ratio` or `logRatio`, set on
+  the root of a chain (a metric, never a study). Under a comparison the host
+  joins the metric with the same metric on the comparison symbol through it,
+  and every study on the metric runs on the joined line: `sma(close)` draws as
+  `sma(ratio(close, cmp_close))`. With no comparison named it sleeps. The
+  config keeps its own spec; the rewriting is the host's, at render time.
+- **`series.setCompareFn`** (terminal), with the hook `useSetCompareFn` and the
+  predicate `compareFnAllowed`: sets or clears (`null`) the function. Refused
+  on a study, on anything that already states its symbols (a leg, a spread,
+  anything reading the comparison) and on anything drawing several lines (a
+  band, a multi-output metric, a fan). Clearing is always allowed.
+- **`canonRows` hashes `compareFn`**: the same rows with and without a function
+  are different presets.
+
 ## 0.21.0 — 2026-11-23
 
 On pond-ts 0.78.0. An area's outline can be dashed, so a compared area keeps
