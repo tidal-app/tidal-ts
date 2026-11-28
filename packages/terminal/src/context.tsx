@@ -8,6 +8,7 @@ import {
   terminalMachine,
   type MetricEntry,
   type PairLegInput,
+  type PresetSet,
   type PresetStorage,
   type RowState,
   type TerminalPreset,
@@ -32,6 +33,10 @@ export interface TerminalProviderProps {
   /** What a new SPREAD draws in, when the host reserves a colour for one —
    *  see {@link TerminalInput.spreadColor}. Absent ⇒ the first free palette key. */
   spreadColor?: string;
+  /** The preset set showing at start — `compare` when the host reloads with a
+   *  comparison named. Default `plain`; later changes go through
+   *  {@link useSetPresetSet}. */
+  presetSet?: PresetSet;
   /** An XState inspector (`@statelyai/inspect`'s `inspect`, or any observer of
    *  inspection events). The host decides whether and when to attach one; the
    *  machine has no opinion and no build-time flag. */
@@ -45,6 +50,7 @@ export function TerminalProvider({
   storage,
   palette,
   spreadColor,
+  presetSet,
   inspect,
   children,
 }: TerminalProviderProps) {
@@ -57,6 +63,7 @@ export function TerminalProvider({
           storage,
           ...(palette ? { palette } : {}),
           ...(spreadColor ? { spreadColor } : {}),
+          ...(presetSet ? { presetSet } : {}),
         },
         ...(inspect ? { inspect } : {}),
       }}
@@ -73,7 +80,11 @@ export function TerminalProvider({
  *  nothing. */
 function PersistActive({ storage }: { storage: PresetStorage }) {
   const active = useActiveSlot();
-  useEffect(() => storage.saveActive(active), [active, storage]);
+  const set = usePresetSet();
+  useEffect(
+    () => storage.saveActive(active == null ? null : { set, slot: active }),
+    [active, set, storage],
+  );
   return null;
 }
 
@@ -97,15 +108,24 @@ export function useControlsOpen(): boolean {
   return TerminalContext.useSelector((s) => s.context.controlsOpen);
 }
 
-/** Which preset slots hold a saved preset (length === PRESET_SLOTS). */
-export function usePresetSaved(): boolean[] {
-  return TerminalContext.useSelector((s) => s.context.presets.map((p) => p != null));
+/** The preset set showing (`plain` or `compare`). */
+export function usePresetSet(): PresetSet {
+  return TerminalContext.useSelector((s) => s.context.presetSet);
 }
 
-/** The active slot — the saved slot whose rows deep-equal the live rows — or
- *  null (a custom state). Derived, not stored. */
+/** Which slots of the showing set hold a saved preset (length === PRESET_SLOTS). */
+export function usePresetSaved(): boolean[] {
+  return TerminalContext.useSelector((s) =>
+    s.context.presets[s.context.presetSet].map((p) => p != null),
+  );
+}
+
+/** The active slot of the showing set — the saved slot whose rows deep-equal
+ *  the live rows — or null (a custom state). Derived, not stored. */
 export function useActiveSlot(): number | null {
-  return TerminalContext.useSelector((s) => activeSlot(s.context.presets, s.context.rows));
+  return TerminalContext.useSelector((s) =>
+    activeSlot(s.context.presets[s.context.presetSet], s.context.rows),
+  );
 }
 
 /** Per-axis range state, keyed by axis id (`configAxisId`). No entry = an
@@ -321,6 +341,12 @@ export function useSelectPreset(): (slot: number) => void {
 export function useSavePreset(): (slot: number) => void {
   const ref = TerminalContext.useActorRef();
   return useCallback((slot: number) => ref.send({ type: 'preset.save', slot }), [ref]);
+}
+
+/** Show a preset set: `compare` while a comparison is named, else `plain`. */
+export function useSetPresetSet(): (set: PresetSet) => void {
+  const ref = TerminalContext.useActorRef();
+  return useCallback((set: PresetSet) => ref.send({ type: 'preset.useSet', set }), [ref]);
 }
 
 export function useSetRowHeights(): (heights: Record<string, number>) => void {

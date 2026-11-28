@@ -154,17 +154,33 @@ export interface MetricEntry {
   derive?: DeriveSpec;
 }
 
+/**
+ * The two **preset sets**: `plain` (P1…) for a chart of one symbol, `compare`
+ * (C1…) for a chart with a comparison named. Both store the same shape; the
+ * host says which one is showing (`preset.useSet`), since only it knows whether
+ * a comparison is named.
+ */
+export type PresetSet = 'plain' | 'compare';
+export const PRESET_SETS: readonly PresetSet[] = ['plain', 'compare'];
+
+/** A slot in one set: what the active-preset pointer persists. */
+export interface PresetSlot {
+  set: PresetSet;
+  slot: number;
+}
+
 /** Injectable persistence for the preset slots (default: the app's localStorage
  *  keys). A host brings its own storage, or none. */
 export interface PresetStorage {
-  loadPresets(): (TerminalPreset | null)[];
-  savePresets(presets: (TerminalPreset | null)[]): void;
+  loadPresets(set: PresetSet): (TerminalPreset | null)[];
+  savePresets(set: PresetSet, presets: (TerminalPreset | null)[]): void;
   /** The persisted active-slot pointer — only used to seed `initialRows`. */
-  loadActive(): number | null;
-  saveActive(index: number | null): void;
+  loadActive(): PresetSlot | null;
+  saveActive(active: PresetSlot | null): void;
 }
 
-export const PRESET_SLOTS = 5;
+/** Slots in each preset set. */
+export const PRESET_SLOTS = 6;
 
 /** Max viewport rows (the control-panel spec: 1–3, capped at 3 for now). */
 export const MAX_ROWS = 3;
@@ -309,7 +325,11 @@ interface TerminalContext {
    *  on collapse or closing the panel, so emphasis falls back to `selected`. */
   expanded: string | null;
   controlsOpen: boolean;
-  presets: (TerminalPreset | null)[];
+  /** Each set's slots, {@link PRESET_SLOTS} long. */
+  presets: Record<PresetSet, (TerminalPreset | null)[]>;
+  /** The set the host is showing — `compare` while a comparison is named. The
+   *  slot events and the active slot read this one. */
+  presetSet: PresetSet;
   catalog: readonly MetricEntry[];
   storage: PresetStorage;
 }
@@ -394,6 +414,9 @@ export type TerminalEvent =
   | { type: 'controls.close' }
   | { type: 'preset.select'; slot: number }
   | { type: 'preset.save'; slot: number }
+  /** Show the other preset set: the host sends `compare` when a comparison is
+   *  named and `plain` when it is cleared. The rows are left alone. */
+  | { type: 'preset.useSet'; set: PresetSet }
   | { type: 'layout.setRowHeights'; heights: Record<string, number> }
   | { type: 'row.add' }
   | { type: 'row.remove'; id: string }
@@ -447,6 +470,9 @@ export interface TerminalInput {
   initialRows: RowState[];
   catalog: readonly MetricEntry[];
   storage: PresetStorage;
+  /** The preset set showing at start (the host's comparison, on a reload).
+   *  Default `plain`. */
+  presetSet?: PresetSet;
   /** The colour keys the host hands a new series, in order — see
    *  `TerminalProviderProps.palette`. Default: none (a leg keeps its pair's). */
   palette?: readonly string[];
@@ -3246,7 +3272,7 @@ export const terminalMachine = setup({
     applyPreset: assign({
       rows: ({ context, event }) => {
         if (event.type !== 'preset.select') return context.rows;
-        const p = context.presets[event.slot];
+        const p = context.presets[context.presetSet][event.slot];
         // A preset saved before the invariant existed can carry a stack with no
         // remainder row, which would reproduce the stuck-seam bug on apply.
         return p ? withRemainder(cloneRows(p.rows)) : context.rows;
@@ -3261,11 +3287,13 @@ export const terminalMachine = setup({
       // duplicate row ids collide in `setRowHeights`, in `configAxisId`, and in
       // every find-by-rowId.
       cfgSeq: ({ context, event }) => {
-        const p = event.type === 'preset.select' ? context.presets[event.slot] : null;
+        const p =
+          event.type === 'preset.select' ? context.presets[context.presetSet][event.slot] : null;
         return p ? Math.max(context.cfgSeq, cfgSeqAfter(p.rows)) : context.cfgSeq;
       },
       rowSeq: ({ context, event }) => {
-        const p = event.type === 'preset.select' ? context.presets[event.slot] : null;
+        const p =
+          event.type === 'preset.select' ? context.presets[context.presetSet][event.slot] : null;
         return p ? Math.max(context.rowSeq, rowSeqAfter(p.rows)) : context.rowSeq;
       },
       // Presets are COMPOSITION; per-axis ranges are ARRANGEMENT and aren't
@@ -3274,16 +3302,25 @@ export const terminalMachine = setup({
       // chart with no visible cause. Membership (`axisGroup`) DOES restore — it
       // lives on the configs.
       axisRanges: ({ context, event }) =>
-        event.type === 'preset.select' && context.presets[event.slot] ? {} : context.axisRanges,
+        event.type === 'preset.select' && context.presets[context.presetSet][event.slot]
+          ? {}
+          : context.axisRanges,
     }),
     savePreset: assign({
       presets: ({ context, event }) => {
         if (event.type !== 'preset.save') return context.presets;
-        const next = context.presets.slice();
+        const set = context.presetSet;
+        const next = context.presets[set].slice();
         next[event.slot] = { rows: cloneRows(context.rows) };
-        context.storage.savePresets(next);
-        return next;
+        context.storage.savePresets(set, next);
+        return { ...context.presets, [set]: next };
       },
+    }),
+    usePresetSet: assign({
+      presetSet: ({ context, event }) =>
+        event.type === 'preset.useSet' && PRESET_SETS.includes(event.set)
+          ? event.set
+          : context.presetSet,
     }),
     setRowHeights: assign({
       rows: ({ context, event }) =>
@@ -3558,7 +3595,11 @@ export const terminalMachine = setup({
     selected: null,
     expanded: null,
     controlsOpen: false,
-    presets: input.storage.loadPresets(),
+    presets: {
+      plain: input.storage.loadPresets('plain'),
+      compare: input.storage.loadPresets('compare'),
+    },
+    presetSet: input.presetSet ?? 'plain',
     catalog: input.catalog,
     storage: input.storage,
   }),
@@ -3604,6 +3645,7 @@ export const terminalMachine = setup({
     'controls.close': { actions: 'closeControls' },
     'preset.select': { actions: 'applyPreset' },
     'preset.save': { actions: 'savePreset' },
+    'preset.useSet': { actions: 'usePresetSet' },
     'layout.setRowHeights': { actions: 'setRowHeights' },
     'row.add': { guard: 'canAddRow', actions: 'addRow' },
     'row.remove': { actions: 'removeRow' },
