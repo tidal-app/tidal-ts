@@ -17,8 +17,15 @@ comparison named.
   `usePresetSet`: the host says which set is showing, since only it knows
   whether a comparison is named. `preset.select`, `preset.save`,
   `usePresetSaved` and `useActiveSlot` act on the showing set; switching sets
-  leaves the rows alone. `TerminalProvider` takes `presetSet` for the set to
-  start on.
+  leaves the rows alone. `TerminalProvider` takes `initialPresetSet` (and
+  `TerminalInput` the same field) for the set to start on; it is read once, at
+  mount.
+- Stored slots are read as exactly `PRESET_SLOTS`: a shorter list (an older
+  build's five) is padded with empty slots, a longer one is cut, and anything
+  that is not a list of presets reads as empty.
+- The provider writes the active pointer only when it changes, never at mount,
+  so a host whose set arrives a moment late does not overwrite the stored
+  pointer with null.
 
 ## 0.22.0 — 2026-11-27
 

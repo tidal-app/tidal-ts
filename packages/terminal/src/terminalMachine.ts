@@ -182,6 +182,18 @@ export interface PresetStorage {
 /** Slots in each preset set. */
 export const PRESET_SLOTS = 6;
 
+/** Whatever storage handed back, as exactly {@link PRESET_SLOTS} slots: a
+ *  shorter list (an older build kept fewer) is padded with empty slots, a
+ *  longer one is cut, and anything that isn't a list — or an entry that isn't
+ *  a preset — reads as empty. */
+function toSlots(raw: unknown): (TerminalPreset | null)[] {
+  const list = Array.isArray(raw) ? raw : [];
+  return Array.from({ length: PRESET_SLOTS }, (_, i) => {
+    const p = list[i] as TerminalPreset | null | undefined;
+    return p != null && typeof p === 'object' && Array.isArray(p.rows) ? p : null;
+  });
+}
+
 /** Max viewport rows (the control-panel spec: 1–3, capped at 3 for now). */
 export const MAX_ROWS = 3;
 
@@ -472,7 +484,7 @@ export interface TerminalInput {
   storage: PresetStorage;
   /** The preset set showing at start (the host's comparison, on a reload).
    *  Default `plain`. */
-  presetSet?: PresetSet;
+  initialPresetSet?: PresetSet;
   /** The colour keys the host hands a new series, in order — see
    *  `TerminalProviderProps.palette`. Default: none (a leg keeps its pair's). */
   palette?: readonly string[];
@@ -3596,10 +3608,10 @@ export const terminalMachine = setup({
     expanded: null,
     controlsOpen: false,
     presets: {
-      plain: input.storage.loadPresets('plain'),
-      compare: input.storage.loadPresets('compare'),
+      plain: toSlots(input.storage.loadPresets('plain')),
+      compare: toSlots(input.storage.loadPresets('compare')),
     },
-    presetSet: input.presetSet ?? 'plain',
+    presetSet: input.initialPresetSet ?? 'plain',
     catalog: input.catalog,
     storage: input.storage,
   }),

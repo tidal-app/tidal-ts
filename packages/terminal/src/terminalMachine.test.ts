@@ -362,7 +362,7 @@ describe('terminalMachine', () => {
   it('starts on the set the host names', () => {
     const { storage } = fakeStorage();
     const actor = createActor(terminalMachine, {
-      input: { initialRows: initialRows(), catalog: CATALOG, storage, presetSet: 'compare' },
+      input: { initialRows: initialRows(), catalog: CATALOG, storage, initialPresetSet: 'compare' },
     });
     actor.start();
     expect(actor.getSnapshot().context.presetSet).toBe('compare');
@@ -400,6 +400,59 @@ describe('terminalMachine', () => {
     expect(idOf('iv63')).not.toBe(first); // monotonic, like the row counter
     const ids = ctx().rows.flatMap((r) => r.configs.map((c) => c.id));
     expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it('reads stored presets as exactly PRESET_SLOTS slots, whatever storage holds', () => {
+    const kept: TerminalPreset = { rows: initialRows() };
+    const storage: PresetStorage = {
+      // An older build's five slots, a list that is too long, and junk.
+      loadPresets: (set) =>
+        (set === 'plain'
+          ? [kept, null, null, null, null]
+          : 'junk') as unknown as (TerminalPreset | null)[],
+      savePresets: () => {},
+      loadActive: () => null,
+      saveActive: () => {},
+    };
+    const actor = createActor(terminalMachine, {
+      input: { initialRows: initialRows(), catalog: CATALOG, storage },
+    });
+    actor.start();
+    const { presets } = actor.getSnapshot().context;
+    expect(presets.plain).toHaveLength(PRESET_SLOTS);
+    expect(presets.plain[0]).toBe(kept);
+    expect(presets.plain.slice(1).every((p) => p === null)).toBe(true);
+    expect(presets.compare).toEqual(Array.from({ length: PRESET_SLOTS }, () => null));
+
+    const long: PresetStorage = {
+      ...storage,
+      loadPresets: () =>
+        [...Array.from({ length: 9 }, () => kept), { nope: 1 }] as unknown as TerminalPreset[],
+    };
+    const a2 = createActor(terminalMachine, {
+      input: { initialRows: initialRows(), catalog: CATALOG, storage: long },
+    });
+    a2.start();
+    expect(a2.getSnapshot().context.presets.plain).toHaveLength(PRESET_SLOTS);
+  });
+
+  it('saving into a short stored list leaves no holes', () => {
+    const writes: (TerminalPreset | null)[][] = [];
+    const storage: PresetStorage = {
+      loadPresets: () => [],
+      savePresets: (_set, presets) => writes.push(presets),
+      loadActive: () => null,
+      saveActive: () => {},
+    };
+    const actor = createActor(terminalMachine, {
+      input: { initialRows: initialRows(), catalog: CATALOG, storage },
+    });
+    actor.start();
+    actor.send({ type: 'preset.save', slot: 4 });
+    const saved = writes.at(-1)!;
+    expect(saved).toHaveLength(PRESET_SLOTS);
+    expect(Object.keys(saved)).toHaveLength(PRESET_SLOTS); // no sparse holes
+    expect(saved[4]).toBeTruthy();
   });
 
   it('re-seeds the id counter above an applied preset (no collision with its configs)', () => {

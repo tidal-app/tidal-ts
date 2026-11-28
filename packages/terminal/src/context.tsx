@@ -1,4 +1,4 @@
-import { useCallback, useEffect, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, type ReactNode } from 'react';
 import { createActorContext } from '@xstate/react';
 import type { InspectionEvent, Observer } from 'xstate';
 import type { DeriveOp, PairOp } from '@tidal-ts/core';
@@ -33,10 +33,11 @@ export interface TerminalProviderProps {
   /** What a new SPREAD draws in, when the host reserves a colour for one —
    *  see {@link TerminalInput.spreadColor}. Absent ⇒ the first free palette key. */
   spreadColor?: string;
-  /** The preset set showing at start — `compare` when the host reloads with a
-   *  comparison named. Default `plain`; later changes go through
-   *  {@link useSetPresetSet}. */
-  presetSet?: PresetSet;
+  /** The preset set showing at mount — `compare` when the host reloads with a
+   *  comparison named. Default `plain`. Read once, at mount: changing it later
+   *  does nothing, so a host that switches sets as its comparison comes and
+   *  goes sends {@link useSetPresetSet} instead. */
+  initialPresetSet?: PresetSet;
   /** An XState inspector (`@statelyai/inspect`'s `inspect`, or any observer of
    *  inspection events). The host decides whether and when to attach one; the
    *  machine has no opinion and no build-time flag. */
@@ -50,7 +51,7 @@ export function TerminalProvider({
   storage,
   palette,
   spreadColor,
-  presetSet,
+  initialPresetSet,
   inspect,
   children,
 }: TerminalProviderProps) {
@@ -63,7 +64,7 @@ export function TerminalProvider({
           storage,
           ...(palette ? { palette } : {}),
           ...(spreadColor ? { spreadColor } : {}),
-          ...(presetSet ? { presetSet } : {}),
+          ...(initialPresetSet ? { initialPresetSet } : {}),
         },
         ...(inspect ? { inspect } : {}),
       }}
@@ -77,14 +78,26 @@ export function TerminalProvider({
 /** Persists the derived active-slot pointer so a fresh mount (a reload) can
  *  re-seed from the last applied preset (see `seedTerminalRows`). The machine
  *  owns preset *contents*; this is the only writer of the pointer. Renders
- *  nothing. */
+ *  nothing.
+ *
+ *  It writes on a change, never at mount: the state a mount starts in came
+ *  from what storage already holds, so there is nothing new to save — and a
+ *  host whose set arrives a moment after mount (a comparison that resolves
+ *  late) would otherwise overwrite the stored pointer with null first. */
 function PersistActive({ storage }: { storage: PresetStorage }) {
   const active = useActiveSlot();
   const set = usePresetSet();
-  useEffect(
-    () => storage.saveActive(active == null ? null : { set, slot: active }),
-    [active, set, storage],
-  );
+  const last = useRef<string | null>(null);
+  useEffect(() => {
+    const key = active == null ? 'none' : `${set}:${active}`;
+    if (last.current === null) {
+      last.current = key;
+      return;
+    }
+    if (last.current === key) return;
+    last.current = key;
+    storage.saveActive(active == null ? null : { set, slot: active });
+  }, [active, set, storage]);
   return null;
 }
 
