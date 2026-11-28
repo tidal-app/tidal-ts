@@ -37,6 +37,8 @@ export {
   useSetControlsOpen,
   useSelectPreset,
   useSavePreset,
+  useSetPresetSet,
+  usePresetSet,
   useSetRowHeights,
   useAddRow,
   useRemoveRow,
@@ -53,6 +55,9 @@ export {
 } from './context.js';
 export {
   PRESET_SLOTS,
+  PRESET_SETS,
+  type PresetSet,
+  type PresetSlot,
   MAX_ROWS,
   activeSlot,
   canonRows,

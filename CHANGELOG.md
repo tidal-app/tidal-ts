@@ -2,6 +2,31 @@
 
 All packages release together on one version.
 
+## 0.23.0 — 2026-11-28
+
+Two preset sets: one for a chart of one symbol, one for a chart with a
+comparison named.
+
+- **Breaking: `PresetStorage` takes a set** (terminal). `loadPresets(set)` and
+  `savePresets(set, presets)` read and write one set (`'plain'` or
+  `'compare'`), and the active pointer is a `PresetSlot` (`{ set, slot }`)
+  rather than an index. A host's stored slots are its own to migrate or wipe.
+- **`PRESET_SLOTS` is 6** per set (was 5). New `PresetSet`, `PRESET_SETS`,
+  `PresetSlot`.
+- **`preset.useSet`** (terminal), with the hooks `useSetPresetSet` and
+  `usePresetSet`: the host says which set is showing, since only it knows
+  whether a comparison is named. `preset.select`, `preset.save`,
+  `usePresetSaved` and `useActiveSlot` act on the showing set; switching sets
+  leaves the rows alone. `TerminalProvider` takes `initialPresetSet` (and
+  `TerminalInput` the same field) for the set to start on; it is read once, at
+  mount.
+- Stored slots are read as exactly `PRESET_SLOTS`: a shorter list (an older
+  build's five) is padded with empty slots, a longer one is cut, and anything
+  that is not a list of presets reads as empty.
+- The provider writes the active pointer only when it changes, never at mount,
+  so a host whose set arrives a moment late does not overwrite the stored
+  pointer with null.
+
 ## 0.22.0 — 2026-11-27
 
 A metric can carry the function its compare applies, so a comparison can read

@@ -29,6 +29,8 @@ import {
   studyOfferable,
   compareFnAllowed,
   MAX_ROWS,
+  PRESET_SLOTS,
+  type PresetSet,
 } from './terminalMachine.js';
 
 // Ids are the ENGINE's (`specId`, via deriveId) — computed, never hand-written,
@@ -153,8 +155,8 @@ const initialRows = (): RowState[] => [
 function fakeStorage() {
   const saved: (TerminalPreset | null)[][] = [];
   const storage: PresetStorage = {
-    loadPresets: () => Array.from({ length: 5 }, () => null),
-    savePresets: (p) => saved.push(p),
+    loadPresets: () => Array.from({ length: PRESET_SLOTS }, () => null),
+    savePresets: (_set, p) => saved.push(p),
     loadActive: () => null,
     saveActive: () => {},
   };
@@ -308,10 +310,10 @@ describe('terminalMachine', () => {
     actor.send({ type: 'series.add', catalogId: 'iv63' });
     actor.send({ type: 'preset.save', slot: 0 });
     expect(saved.at(-1)?.[0]).toBeTruthy(); // persisted via storage
-    expect(activeSlot(ctx().presets, ctx().rows)).toBe(0); // live === slot 0
+    expect(activeSlot(ctx().presets.plain, ctx().rows)).toBe(0); // live === slot 0
 
     actor.send({ type: 'series.remove', id: idOf('iv63') }); // diverge → custom
-    expect(activeSlot(ctx().presets, ctx().rows)).toBeNull();
+    expect(activeSlot(ctx().presets.plain, ctx().rows)).toBeNull();
 
     actor.send({ type: 'preset.select', slot: 0 }); // re-apply
     expect(ctx().rows.flatMap((r) => r.configs.map((c) => c.column))).toEqual([
@@ -319,7 +321,51 @@ describe('terminalMachine', () => {
       'iv21',
       'close',
     ]);
-    expect(activeSlot(ctx().presets, ctx().rows)).toBe(0);
+    expect(activeSlot(ctx().presets.plain, ctx().rows)).toBe(0);
+  });
+
+  it("keeps two preset sets: a slot saved under one is not the other set's", () => {
+    const writes: { set: PresetSet; presets: (TerminalPreset | null)[] }[] = [];
+    const storage: PresetStorage = {
+      loadPresets: () => Array.from({ length: PRESET_SLOTS }, () => null),
+      savePresets: (set, presets) => writes.push({ set, presets }),
+      loadActive: () => null,
+      saveActive: () => {},
+    };
+    const actor = createActor(terminalMachine, {
+      input: { initialRows: initialRows(), catalog: CATALOG, storage },
+    });
+    actor.start();
+    const ctx = () => actor.getSnapshot().context;
+    expect(ctx().presetSet).toBe('plain');
+    expect(ctx().presets.plain).toHaveLength(PRESET_SLOTS);
+    expect(ctx().presets.compare).toHaveLength(PRESET_SLOTS);
+
+    actor.send({ type: 'preset.useSet', set: 'compare' });
+    actor.send({ type: 'series.add', catalogId: 'iv63' });
+    actor.send({ type: 'preset.save', slot: 2 });
+    expect(writes.at(-1)!.set).toBe('compare');
+    expect(ctx().presets.compare[2]).toBeTruthy();
+    expect(ctx().presets.plain.every((p) => p == null)).toBe(true);
+    expect(activeSlot(ctx().presets.compare, ctx().rows)).toBe(2);
+
+    // Back on the plain set: C3 is not there to apply, and the rows stay put.
+    actor.send({ type: 'preset.useSet', set: 'plain' });
+    const rows = ctx().rows;
+    actor.send({ type: 'preset.select', slot: 2 });
+    expect(ctx().rows).toBe(rows);
+    // A set the machine does not know is refused.
+    actor.send({ type: 'preset.useSet', set: 'other' as PresetSet });
+    expect(ctx().presetSet).toBe('plain');
+  });
+
+  it('starts on the set the host names', () => {
+    const { storage } = fakeStorage();
+    const actor = createActor(terminalMachine, {
+      input: { initialRows: initialRows(), catalog: CATALOG, storage, initialPresetSet: 'compare' },
+    });
+    actor.start();
+    expect(actor.getSnapshot().context.presetSet).toBe('compare');
   });
 
   it('commits row heights on drag-end', () => {
@@ -356,6 +402,59 @@ describe('terminalMachine', () => {
     expect(new Set(ids).size).toBe(ids.length);
   });
 
+  it('reads stored presets as exactly PRESET_SLOTS slots, whatever storage holds', () => {
+    const kept: TerminalPreset = { rows: initialRows() };
+    const storage: PresetStorage = {
+      // An older build's five slots, a list that is too long, and junk.
+      loadPresets: (set) =>
+        (set === 'plain'
+          ? [kept, null, null, null, null]
+          : 'junk') as unknown as (TerminalPreset | null)[],
+      savePresets: () => {},
+      loadActive: () => null,
+      saveActive: () => {},
+    };
+    const actor = createActor(terminalMachine, {
+      input: { initialRows: initialRows(), catalog: CATALOG, storage },
+    });
+    actor.start();
+    const { presets } = actor.getSnapshot().context;
+    expect(presets.plain).toHaveLength(PRESET_SLOTS);
+    expect(presets.plain[0]).toBe(kept);
+    expect(presets.plain.slice(1).every((p) => p === null)).toBe(true);
+    expect(presets.compare).toEqual(Array.from({ length: PRESET_SLOTS }, () => null));
+
+    const long: PresetStorage = {
+      ...storage,
+      loadPresets: () =>
+        [...Array.from({ length: 9 }, () => kept), { nope: 1 }] as unknown as TerminalPreset[],
+    };
+    const a2 = createActor(terminalMachine, {
+      input: { initialRows: initialRows(), catalog: CATALOG, storage: long },
+    });
+    a2.start();
+    expect(a2.getSnapshot().context.presets.plain).toHaveLength(PRESET_SLOTS);
+  });
+
+  it('saving into a short stored list leaves no holes', () => {
+    const writes: (TerminalPreset | null)[][] = [];
+    const storage: PresetStorage = {
+      loadPresets: () => [],
+      savePresets: (_set, presets) => writes.push(presets),
+      loadActive: () => null,
+      saveActive: () => {},
+    };
+    const actor = createActor(terminalMachine, {
+      input: { initialRows: initialRows(), catalog: CATALOG, storage },
+    });
+    actor.start();
+    actor.send({ type: 'preset.save', slot: 4 });
+    const saved = writes.at(-1)!;
+    expect(saved).toHaveLength(PRESET_SLOTS);
+    expect(Object.keys(saved)).toHaveLength(PRESET_SLOTS); // no sparse holes
+    expect(saved[4]).toBeTruthy();
+  });
+
   it('re-seeds the id counter above an applied preset (no collision with its configs)', () => {
     // A STORED preset was minted in an earlier session, so its ids can sit well
     // above this actor's counter (seeded from two rows here). Applying it must
@@ -368,7 +467,7 @@ describe('terminalMachine', () => {
       ],
     };
     const storage: PresetStorage = {
-      loadPresets: () => [stored, null, null, null, null],
+      loadPresets: (set) => (set === 'plain' ? [stored, null, null, null, null, null] : []),
       savePresets: () => {},
       loadActive: () => null,
       saveActive: () => {},
@@ -522,13 +621,13 @@ describe('terminalMachine', () => {
     actor.send({ type: 'series.add', catalogId: RV });
     actor.send({ type: 'preset.save', slot: 0 });
     actor.send({ type: 'series.remove', id: idOf(RV) }); // diverge → custom
-    expect(activeSlot(ctx().presets, ctx().rows)).toBeNull();
+    expect(activeSlot(ctx().presets.plain, ctx().rows)).toBeNull();
     actor.send({ type: 'preset.select', slot: 0 }); // re-apply
     const rv = ctx()
       .rows.flatMap((r) => r.configs)
       .find((c) => c.column === RV);
     expect(rv?.derive).toEqual(RV_SPEC);
-    expect(activeSlot(ctx().presets, ctx().rows)).toBe(0); // identity restored
+    expect(activeSlot(ctx().presets.plain, ctx().rows)).toBe(0); // identity restored
   });
 
   it('rejects a period change that is invalid or unchanged — and allows one that coincides', () => {
@@ -677,15 +776,15 @@ describe('terminalMachine', () => {
   it('tracks split-color fields in preset identity (a rise-color patch reads custom)', () => {
     const { actor, ctx, idOf } = start();
     actor.send({ type: 'preset.save', slot: 0 });
-    expect(activeSlot(ctx().presets, ctx().rows)).toBe(0);
+    expect(activeSlot(ctx().presets.plain, ctx().rows)).toBe(0);
     // Patching a split-coloring field diverges from the saved preset — canonRows
     // must see colorMode / riseColor / fallColor.
     actor.send({ type: 'series.patch', id: idOf('close'), patch: { colorMode: 'split' } });
-    expect(activeSlot(ctx().presets, ctx().rows)).toBeNull();
+    expect(activeSlot(ctx().presets.plain, ctx().rows)).toBeNull();
     actor.send({ type: 'preset.select', slot: 0 }); // re-apply restores identity
-    expect(activeSlot(ctx().presets, ctx().rows)).toBe(0);
+    expect(activeSlot(ctx().presets.plain, ctx().rows)).toBe(0);
     actor.send({ type: 'series.patch', id: idOf('close'), patch: { riseColor: 'teal' } });
-    expect(activeSlot(ctx().presets, ctx().rows)).toBeNull();
+    expect(activeSlot(ctx().presets.plain, ctx().rows)).toBeNull();
   });
 
   it('orders a series within its row (front/up/down/back), clamped at the ends', () => {
@@ -728,9 +827,9 @@ describe('terminalMachine', () => {
     const { actor, ctx, idOf } = start();
     actor.send({ type: 'series.add', catalogId: 'iv63' });
     actor.send({ type: 'preset.save', slot: 0 });
-    expect(activeSlot(ctx().presets, ctx().rows)).toBe(0);
+    expect(activeSlot(ctx().presets.plain, ctx().rows)).toBe(0);
     actor.send({ type: 'series.order', id: idOf('iv63'), to: 'back' });
-    expect(activeSlot(ctx().presets, ctx().rows)).toBeNull(); // reads custom
+    expect(activeSlot(ctx().presets.plain, ctx().rows)).toBeNull(); // reads custom
     actor.send({ type: 'preset.select', slot: 0 });
     expect(ctx().rows[0]!.configs.map((c) => c.column)).toEqual(['iv63', 'iv21']);
   });
@@ -1870,13 +1969,13 @@ describe('axis ranges — AUTO | manual with memory', () => {
     const { actor, ctx, idOf } = start();
     actor.send({ type: 'series.add', catalogId: 'iv63' });
     actor.send({ type: 'preset.save', slot: 0 });
-    expect(activeSlot(ctx().presets, ctx().rows)).toBe(0);
+    expect(activeSlot(ctx().presets.plain, ctx().rows)).toBe(0);
     actor.send({ type: 'axis.toggleLink', id: idOf('iv63') });
-    expect(activeSlot(ctx().presets, ctx().rows)).toBeNull(); // custom now
+    expect(activeSlot(ctx().presets.plain, ctx().rows)).toBeNull(); // custom now
     // Re-linking DROPS `axisGroup` — which must read IDENTICAL to the saved
     // (fieldless) state, or a round-trip could never light its slot again.
     actor.send({ type: 'axis.toggleLink', id: idOf('iv63') });
-    expect(activeSlot(ctx().presets, ctx().rows)).toBe(0);
+    expect(activeSlot(ctx().presets.plain, ctx().rows)).toBe(0);
   });
 });
 
